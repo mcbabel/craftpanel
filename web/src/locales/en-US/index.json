@@ -1964,6 +1964,15 @@
   "craftpanel.access.audit-title": {
     "defaultMessage": "Audit log"
   },
+  "craftpanel.access.grant-help": {
+    "defaultMessage": "Only people with an account on this panel can be invited."
+  },
+  "craftpanel.access.grant-placeholder": {
+    "defaultMessage": "Search for a panel user"
+  },
+  "craftpanel.access.grant-target": {
+    "defaultMessage": "Username"
+  },
   "craftpanel.access.members-failed": {
     "defaultMessage": "Failed to load the members"
   },

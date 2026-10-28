@@ -92,6 +92,8 @@
 					:search-users="searchUsers"
 					:can-grant="canManageUsers"
 					:permission-denied-message="permissionDeniedMessage"
+					:texts="grantTexts"
+					:permissions-link="null"
 					@grant="grant"
 				/>
 				<RemoveAccessModal
@@ -164,6 +166,15 @@ const { canManageUsers, permissionDeniedMessage } = useServerPermissions()
 
 const messages = defineMessages({
 	membersTitle: { id: 'craftpanel.access.members-title', defaultMessage: 'Access' },
+	grantTarget: { id: 'craftpanel.access.grant-target', defaultMessage: 'Username' },
+	grantPlaceholder: {
+		id: 'craftpanel.access.grant-placeholder',
+		defaultMessage: 'Search for a panel user',
+	},
+	grantHelp: {
+		id: 'craftpanel.access.grant-help',
+		defaultMessage: 'Only people with an account on this panel can be invited.',
+	},
 	membersHelp: {
 		id: 'craftpanel.access.members-help',
 		defaultMessage: 'Who may see and change this server. An invite has to be accepted first.',
@@ -205,6 +216,17 @@ const membersLoading = ref(true)
 const membersError = ref<string | null>(null)
 const removalTarget = ref<ServerAccessMember | null>(null)
 const knownUserIds = ref<string[]>([])
+
+const grantTexts = computed(() => ({
+	header: formatMessage(messages.addUser),
+	targetLabel: formatMessage(messages.grantTarget),
+	targetPlaceholder: formatMessage(messages.grantPlaceholder),
+	targetHelp: formatMessage(messages.grantHelp),
+	editorRole: formatMessage(roleMessages.editorRole),
+	editorDescription: formatMessage(roleMessages.editorDescription),
+	viewerRole: formatMessage(roleMessages.viewerRole),
+	viewerDescription: formatMessage(roleMessages.viewerDescription),
+}))
 
 const grantModal = ref<InstanceType<typeof GrantAccessModal>>()
 const removeModal = ref<InstanceType<typeof RemoveAccessModal>>()

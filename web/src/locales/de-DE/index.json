@@ -1964,6 +1964,15 @@
   "craftpanel.access.audit-title": {
     "defaultMessage": "Aktivitätsprotokoll"
   },
+  "craftpanel.access.grant-help": {
+    "defaultMessage": "Einladen kannst du nur Leute mit einem Konto auf diesem Panel."
+  },
+  "craftpanel.access.grant-placeholder": {
+    "defaultMessage": "Nach Nutzern des Panels suchen"
+  },
+  "craftpanel.access.grant-target": {
+    "defaultMessage": "Nutzername"
+  },
   "craftpanel.access.members-failed": {
     "defaultMessage": "Die Mitglieder konnten nicht geladen werden"
   },

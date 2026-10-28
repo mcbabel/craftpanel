@@ -1,21 +1,21 @@
 <template>
 	<NewModal
 		ref="modal"
-		:header="formatMessage(messages.header)"
+		:header="props.texts.header ?? formatMessage(messages.header)"
 		width="min(34rem, calc(100vw - 2rem))"
 		max-width="34rem"
 	>
 		<div class="flex flex-col gap-6">
 			<div class="flex flex-col gap-2">
 				<label class="font-semibold text-contrast" for="grant-access-target">
-					{{ formatMessage(messages.targetLabel) }}
+					{{ props.texts.targetLabel ?? formatMessage(messages.targetLabel) }}
 				</label>
 				<Combobox
 					id="grant-access-target"
 					:model-value="undefined"
 					:options="suggestionOptions"
-					:search-placeholder="formatMessage(messages.targetPlaceholder)"
-					:placeholder="formatMessage(messages.targetPlaceholder)"
+					:search-placeholder="targetPlaceholder"
+					:placeholder="targetPlaceholder"
 					:no-options-message="targetLookupMessage"
 					:min-search-length-to-open="suggestionMinimumLength"
 					:disable-search-filter="usesRemoteLookup"
@@ -54,8 +54,8 @@
 						</div>
 					</template>
 				</Combobox>
-				<span class="m-0 text-base text-primary">
-					{{ formatMessage(messages.targetHelp) }}
+				<span v-if="props.texts.targetHelp !== ''" class="m-0 text-base text-primary">
+					{{ props.texts.targetHelp ?? formatMessage(messages.targetHelp) }}
 				</span>
 			</div>
 
@@ -92,12 +92,12 @@
 						</span>
 					</button>
 				</div>
-				<p class="m-0 text-base text-primary">
+				<p v-if="props.permissionsLink" class="m-0 text-base text-primary">
 					<IntlFormatted :message-id="messages.permissionsHelp">
 						<template #link="{ children }">
 							<a
 								class="font-medium text-blue hover:underline"
-								href="/news/article/server-access/"
+								:href="props.permissionsLink"
 								target="_blank"
 							>
 								<component :is="() => children" />
@@ -174,12 +174,30 @@ const props = withDefaults(
 		searchUsers?: (query: string) => Promise<ServerAccessInviteSuggestion[]>
 		canGrant?: boolean
 		permissionDeniedMessage?: string
+		// CraftPanel: replaces Modrinth's own wording where it does not fit; '' hides the help text.
+		texts?: Partial<
+			Record<
+				| 'header'
+				| 'targetLabel'
+				| 'targetPlaceholder'
+				| 'targetHelp'
+				| 'editorRole'
+				| 'editorDescription'
+				| 'viewerRole'
+				| 'viewerDescription',
+				string
+			>
+		>
+		// CraftPanel: where "the full list of permissions" points; null hides the line.
+		permissionsLink?: string | null
 	}>(),
 	{
 		members: () => [],
 		suggestions: () => [],
 		friendIds: () => [],
 		canGrant: true,
+		texts: () => ({}),
+		permissionsLink: '/news/article/server-access/',
 	},
 )
 
@@ -277,17 +295,21 @@ const messages = defineMessages({
 	},
 })
 
+const targetPlaceholder = computed(
+	() => props.texts.targetPlaceholder ?? formatMessage(messages.targetPlaceholder),
+)
+
 const grantableRoles = computed(() => [
 	{
 		value: 'editor' as const,
-		label: formatMessage(messages.editorRole),
-		description: formatMessage(messages.editorDescription),
+		label: props.texts.editorRole ?? formatMessage(messages.editorRole),
+		description: props.texts.editorDescription ?? formatMessage(messages.editorDescription),
 		icon: PencilIcon,
 	},
 	{
 		value: 'viewer' as const,
-		label: formatMessage(messages.viewerRole),
-		description: formatMessage(messages.viewerDescription),
+		label: props.texts.viewerRole ?? formatMessage(messages.viewerRole),
+		description: props.texts.viewerDescription ?? formatMessage(messages.viewerDescription),
 		icon: EyeIcon,
 	},
 ])
