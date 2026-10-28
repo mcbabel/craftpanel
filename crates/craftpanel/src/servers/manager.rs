@@ -202,6 +202,7 @@ pub struct Manager {
     builds: Arc<dyn Builds>,
     disks: Disks,
     runtimes: Arc<java::Runtimes>,
+    content: std::sync::OnceLock<Arc<crate::content::Content>>,
     gates: Mutex<HashMap<Id, Arc<tokio::sync::Mutex<()>>>>,
     wishes: Mutex<HashMap<Id, Wish>>,
     meters: Mutex<HashMap<Id, Meter>>,
@@ -228,6 +229,7 @@ impl Manager {
             builds,
             disks,
             runtimes,
+            content: std::sync::OnceLock::new(),
             gates: Mutex::default(),
             wishes: Mutex::default(),
             meters: Mutex::default(),
@@ -237,6 +239,11 @@ impl Manager {
 
     pub fn pool(&self) -> &SqlitePool {
         &self.pool
+    }
+
+    pub fn use_content(&self, content: Arc<crate::content::Content>) {
+        content.use_builds(Arc::clone(&self.builds));
+        let _ = self.content.set(content);
     }
 
     pub fn operations(&self) -> &Arc<Operations> {
@@ -400,7 +407,28 @@ impl Manager {
             CreateContent::Loader { loader, game_version, loader_version } => {
                 Some(self.resolve(*loader, game_version, loader_version.as_deref()).await?)
             }
-            _ => None,
+            CreateContent::ModpackProject { project_id, version_id } => {
+                let content = self.packs()?;
+                if !content.modrinth().allowed().await {
+                    return Err(Failure::conflict(
+                        "external_services_disabled",
+                        "an administrator has switched outgoing calls off",
+                    ));
+                }
+                content.check_pack_version(project_id, version_id).await?;
+                None
+            }
+            CreateContent::ModpackUpload { file_name, .. } => {
+                self.packs()?;
+                if !file_name.to_ascii_lowercase().ends_with(".mrpack") {
+                    return Err(Failure::new(
+                        axum::http::StatusCode::UNSUPPORTED_MEDIA_TYPE,
+                        "unsupported_file_type",
+                        "a modpack is a .mrpack",
+                    ));
+                }
+                None
+            }
         };
 
         let server = Id::new();
@@ -478,11 +506,24 @@ impl Manager {
         };
         let mut new = NewOperation::new(server, OperationKind::ServerCreate, Some(caller.id()));
         new.input = serde_json::to_value(&input).ok();
-        new.expects_payload = matches!(wish.content, CreateContent::ModpackUpload { .. });
+        if let CreateContent::ModpackUpload { file_name, .. } = &wish.content {
+            new.expects_payload = true;
+            new.src = Some(file_name.clone());
+        }
         let operation = self.operations.create(new).await.map_err(fault)?;
 
         let object = self.read(server, Permissions::of(Permission::ServerAdmin)).await?;
         Ok(Created { server: object, operation, warnings })
+    }
+
+    fn packs(&self) -> Result<&Arc<crate::content::Content>> {
+        self.content.get().ok_or_else(|| {
+            Failure::new(
+                axum::http::StatusCode::UNPROCESSABLE_ENTITY,
+                "modpack_install_failed",
+                "modpacks cannot be installed here",
+            )
+        })
     }
 
     async fn resolve(
@@ -608,6 +649,20 @@ impl Manager {
             (Some(CreateContent::Loader { loader, game_version, .. }), Some(build)) => {
                 (*loader, game_version.clone(), build)
             }
+            (Some(CreateContent::ModpackProject { project_id, version_id }), _) => {
+                let source = crate::content::PackSource::Modrinth {
+                    project_id: project_id.clone(),
+                    version_id: Some(version_id.clone()),
+                };
+                return self.install_pack(id, server, owner, &work, source, &input).await;
+            }
+            (Some(CreateContent::ModpackUpload { file_name, .. }), _) => {
+                let source = crate::content::PackSource::Upload {
+                    archive: work.join(crate::ops::api::PAYLOAD_FILE),
+                    file_name: file_name.clone(),
+                };
+                return self.install_pack(id, server, owner, &work, source, &input).await;
+            }
             (Some(CreateContent::Loader { .. }), None) => {
                 return Err(OperationError {
                     code: "invalid_version".to_owned(),
@@ -698,6 +753,67 @@ impl Manager {
         self.operations.finish(id).await.map_err(internal_error)?;
         if let Ok(object) = self.read(server, Permissions::NONE).await {
             self.announce(&object);
+        }
+        Ok(())
+    }
+
+    async fn install_pack(
+        &self,
+        id: Id,
+        server: Id,
+        owner: Id,
+        work: &Path,
+        source: crate::content::PackSource,
+        input: &Input,
+    ) -> std::result::Result<(), OperationError> {
+        let content = self.packs().map_err(|failure| OperationError {
+            code: "modpack_install_failed".to_owned(),
+            message: failure.to_string(),
+            step: OperationErrorStep::Modpack,
+        })?;
+        if self.called_off(id).await {
+            return self.give_up(id, work).await;
+        }
+        tokio::fs::create_dir_all(self.dir(owner, server)).await.map_err(disk)?;
+
+        let facts = content.facts(server).await.map_err(internal_error)?;
+        content.lay_out_fresh_pack(&facts, id, source, &input.properties).await?;
+        if self.called_off(id).await {
+            return self.give_up(id, work).await;
+        }
+
+        let game_version: Option<String> =
+            sqlx::query_scalar("SELECT game_version FROM servers WHERE id = ?")
+                .bind(server)
+                .fetch_one(&self.pool)
+                .await
+                .map_err(|err| internal_error(Failure::from(err)))?;
+        let wanted = game_version.as_deref().and_then(crate::settings::runtimes::default_major);
+        self.java_before_the_first_start(id, wanted).await;
+
+        self.step(id, OperationPhase::WritingConfig, 0.95, None, Some(false)).await;
+        self.helper
+            .chown_tree(&owner.to_string(), crate::helper::in_servers(server))
+            .await
+            .map_err(|err| internal_error(Failure::internal(err)))?;
+        sqlx::query(
+            "UPDATE servers SET status = 'available', restart_required = 0, updated_at = ?
+              WHERE id = ?",
+        )
+        .bind(Timestamp::now())
+        .bind(server)
+        .execute(&self.pool)
+        .await
+        .map_err(|err| internal_error(Failure::from(err)))?;
+        let _ = tokio::fs::remove_dir_all(work).await;
+
+        tracing::info!(%server, "a server was set up from a modpack");
+        self.operations.finish(id).await.map_err(internal_error)?;
+        if let Ok(object) = self.read(server, Permissions::NONE).await {
+            self.announce(&object);
+        }
+        if let Err(failure) = content.check_updates(server).await {
+            tracing::debug!("the first update check of {server} stopped: {failure}");
         }
         Ok(())
     }
@@ -2183,6 +2299,141 @@ mod tests {
                 })
                 .collect()
         }
+
+        async fn with_packs(&self) -> (Arc<crate::content::Content>, FakeModrinth) {
+            let upstream = crate::content::harness::fake_modrinth().await;
+            let content = crate::content::Content::with_modrinth(
+                self.pool.clone(),
+                self.dir.path(),
+                Helper::new(self.helper.socket()),
+                Arc::clone(&self.manager.operations),
+                Arc::new(crate::content::harness::client(&self.pool, &upstream)),
+                Disks::none(),
+            );
+            self.manager.use_content(Arc::clone(&content));
+            (content, upstream)
+        }
+
+        fn pack_wish(&self, owner: Id, content: CreateContent) -> NewServer {
+            let mut known = KnownProperties::default();
+            known.difficulty = Some("hard".to_owned());
+            NewServer {
+                name: "pack".to_owned(),
+                owner_id: owner,
+                memory_mib: 1024,
+                port: None,
+                content,
+                properties: PropertiesFields { known, custom: None },
+            }
+        }
+    }
+
+    use crate::content::harness::FakeModrinth;
+
+    fn a_pack_archive(path: &Path) {
+        use std::io::Write;
+        let index = serde_json::json!({
+            "formatVersion": 1,
+            "game": "minecraft",
+            "versionId": "3.1",
+            "name": "Sky Pack",
+            "files": [],
+            "dependencies": { "minecraft": "1.21.1", "fabric-loader": "0.16.9" }
+        });
+        let mut writer = zip::ZipWriter::new(std::fs::File::create(path).expect("a file"));
+        let options: zip::write::FileOptions<'_, ()> = zip::write::FileOptions::default();
+        writer.start_file("modrinth.index.json", options).expect("an entry");
+        writer.write_all(index.to_string().as_bytes()).expect("the index");
+        writer.start_file("overrides/server.properties", options).expect("an entry");
+        writer.write_all(b"level-type=minecraft\\:flat\nserver-port=1\n").expect("properties");
+        writer.finish().expect("a finished archive");
+    }
+
+    #[tokio::test]
+    async fn a_server_made_from_an_uploaded_pack_runs_the_loader_the_pack_names() {
+        let fixture = Fixture::new().await;
+        let (content, _upstream) = fixture.with_packs().await;
+        let max = a_user(&fixture.pool, "max").await;
+        let caller = fixture.caller(max).await;
+        let wish = fixture.pack_wish(
+            max,
+            CreateContent::ModpackUpload { file_name: "sky.mrpack".to_owned(), file_size: 1 },
+        );
+        let made = fixture.manager.create(&caller, wish).await.unwrap();
+        assert!(made.operation.state == OperationState::Queued);
+
+        let work = fixture.manager.operations.work_dir(made.operation.id).await.unwrap();
+        std::fs::create_dir_all(&work).unwrap();
+        a_pack_archive(&work.join(crate::ops::api::PAYLOAD_FILE));
+        sqlx::query("UPDATE operations SET payload = 'delivered' WHERE id = ?")
+            .bind(made.operation.id)
+            .execute(&fixture.pool)
+            .await
+            .unwrap();
+
+        assert!(fixture.manager.run(made.operation.id).await, "the run had its turn");
+        let operation = fixture.manager.operations.get(made.operation.id).await.unwrap();
+        assert_eq!(operation.state, OperationState::Done, "{:?}", operation.error);
+
+        let dir = fixture.manager.dir(max, made.server.id);
+        assert!(dir.join(JAR).is_file());
+        assert!(std::fs::read_to_string(dir.join("eula.txt")).unwrap().contains("eula=true"));
+        let properties = std::fs::read_to_string(dir.join("server.properties")).unwrap();
+        assert!(properties.contains("level-type=minecraft\\:flat"), "the pack's own settings stay");
+        assert!(properties.contains("difficulty=hard"), "{properties}");
+        assert!(properties.contains(&format!("server-port={}", made.server.net.port)));
+        assert!(!work.exists(), "the upload does not stay behind");
+
+        let after = fixture.manager.read(made.server.id, Permissions::NONE).await.unwrap();
+        assert_eq!(after.status, ServerStatus::Available);
+        assert_eq!(after.loader, Some(LoaderId::Fabric));
+        assert_eq!(after.game_version.as_deref(), Some("1.21.1"));
+        assert!(!after.flows.intro);
+
+        let access = crate::auth::access::Access {
+            server_id: made.server.id,
+            owner_id: max,
+            permissions: Permissions::of(Permission::ServerAdmin),
+        };
+        let listed = content.list(access, false).await.unwrap();
+        assert_eq!(listed.modpack.expect("a linked pack").title, "Sky Pack");
+    }
+
+    #[tokio::test]
+    async fn a_pack_whose_loader_the_panel_cannot_install_is_refused_before_a_server_exists() {
+        let fixture = Fixture::new().await;
+        let (_content, upstream) = fixture.with_packs().await;
+        let mut version = crate::content::harness::a_release(
+            "q1",
+            "QPACK",
+            "2026-01-01T00:00:00Z",
+            "https://cdn.invalid/q1.mrpack",
+            b"pack",
+        );
+        version.loaders = vec!["quilt".to_owned()];
+        upstream.set_versions("QPACK", vec![version]);
+        let max = a_user(&fixture.pool, "max").await;
+        let caller = fixture.caller(max).await;
+
+        let refused = fixture
+            .manager
+            .create(
+                &caller,
+                fixture.pack_wish(
+                    max,
+                    CreateContent::ModpackProject {
+                        project_id: "QPACK".to_owned(),
+                        version_id: "q1".to_owned(),
+                    },
+                ),
+            )
+            .await
+            .expect_err("a quilt pack");
+
+        assert_eq!(refused.code(), "modpack_loader_unsupported");
+        let count: i64 =
+            sqlx::query_scalar("SELECT COUNT(*) FROM servers").fetch_one(&fixture.pool).await.unwrap();
+        assert_eq!(count, 0);
     }
 
     #[tokio::test]

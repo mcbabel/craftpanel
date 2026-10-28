@@ -186,6 +186,10 @@ pub struct ModpackInstallRequest {
     pub source: ModpackSource,
     #[serde(default)]
     pub keep_extra_content: bool,
+    #[serde(default)]
+    pub reset: bool,
+    #[serde(default)]
+    pub properties: Option<crate::model::PropertiesFields>,
 }
 
 #[derive(Debug, Clone, Default, Deserialize)]

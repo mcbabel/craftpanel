@@ -7,6 +7,7 @@ use axum::response::{IntoResponse, Response};
 use axum::routing::{get, post};
 use axum::{Extension, Json, Router};
 
+use crate::audit::{self, Event, ModpackSpec};
 use crate::auth::access;
 use crate::auth::disk;
 use crate::auth::error::{Failure, Result};
@@ -224,17 +225,11 @@ async fn modpack_install(
     OfServer(server): OfServer,
     request: axum::extract::Request,
 ) -> Result<(StatusCode, Json<Accepted>)> {
-    access::require(&state.pool, &caller, server, Permission::Setup).await?;
-    if content.linked(server).await?.is_some() {
-        return Err(Failure::conflict(
-            "modpack_already_linked",
-            "unlink the modpack before installing another",
-        ));
-    }
+    let access = access::require(&state.pool, &caller, server, Permission::Setup).await?;
 
     let (parts, body) = request.into_parts();
     let headers = parts.headers;
-    let (source, keep_extra) = match content_type(&headers) {
+    let (source, wish) = match content_type(&headers) {
         Some(kind) if kind.starts_with("multipart/form-data") => {
             let facts = content.facts(server).await?;
             let announced = announced(&headers).unwrap_or(0);
@@ -244,7 +239,7 @@ async fn modpack_install(
             let parts = read_parts(&content, &headers, body, &staging).await?;
 
             let mut archive: Option<(PathBuf, String)> = None;
-            let mut keep_extra = false;
+            let mut wish = Wish::default();
             for part in parts {
                 match (part.file_name, part.body) {
                     (Some(file_name), PartBody::File { path, .. }) => {
@@ -260,7 +255,7 @@ async fn modpack_install(
                     (None, PartBody::Text(text)) if part.name == "meta" => {
                         let meta: ModpackInstallRequest = serde_json::from_str(&text)
                             .map_err(|err| Failure::invalid_request(err.to_string()))?;
-                        keep_extra = meta.keep_extra_content;
+                        wish = Wish::of(&meta);
                     }
                     _ => {}
                 }
@@ -268,7 +263,7 @@ async fn modpack_install(
 
             let (archive, file_name) =
                 archive.ok_or_else(|| Failure::invalid_request("no .mrpack was sent"))?;
-            (PackSource::Upload { archive, file_name }, keep_extra)
+            (PackSource::Upload { archive, file_name }, wish)
         }
         Some(kind) if kind.split(';').next().is_some_and(|kind| kind.trim() == "application/json") => {
             let bytes = axum::body::to_bytes(body, JSON_LIMIT)
@@ -277,11 +272,14 @@ async fn modpack_install(
             let request: ModpackInstallRequest = serde_json::from_slice(&bytes)
                 .map_err(|err| Failure::invalid_request(err.to_string()))?;
             outgoing(&content).await?;
+            let wish = Wish::of(&request);
             match request.source {
-                ModpackSource::Modrinth { project_id, version_id } => (
-                    PackSource::Modrinth { project_id, version_id },
-                    request.keep_extra_content,
-                ),
+                ModpackSource::Modrinth { project_id, version_id } => {
+                    if let Some(version_id) = &version_id {
+                        content.check_pack_version(&project_id, version_id).await?;
+                    }
+                    (PackSource::Modrinth { project_id, version_id }, wish)
+                }
                 ModpackSource::Upload => {
                     return Err(Failure::invalid_request(
                         "an uploaded pack arrives as multipart/form-data",
@@ -298,10 +296,86 @@ async fn modpack_install(
         }
     };
 
-    let running = live.among(&[server]).await.contains(&server);
-    let operation =
-        content.install_modpack(server, source, keep_extra, Some(caller.id()), running).await?;
+    let spec = spec_of(&source);
+    let upload = match &source {
+        PackSource::Upload { archive, .. } => Some(archive.clone()),
+        PackSource::Modrinth { .. } => None,
+    };
+    let reset = wish.reset.is_some();
+    let started = start_pack(&state, &content, &live, &caller, server, source, wish).await;
+    let operation = match started {
+        Ok(operation) => operation,
+        Err(failure) => {
+            if let Some(archive) = upload {
+                let _ = std::fs::remove_file(&archive);
+                if let Some(staging) = archive.parent() {
+                    let _ = std::fs::remove_dir_all(staging);
+                }
+            }
+            return Err(failure);
+        }
+    };
+    if reset {
+        audit::record(&state.pool, access, &caller, Event::ServerReset).await;
+    }
+    audit::record(&state.pool, access, &caller, Event::ModpackChanged { spec }).await;
     Ok((StatusCode::ACCEPTED, Json(Accepted { operation })))
+}
+
+async fn start_pack(
+    state: &AppState,
+    content: &Arc<Content>,
+    live: &LiveServers,
+    caller: &Caller,
+    server: Id,
+    source: PackSource,
+    wish: Wish,
+) -> Result<Operation> {
+    let running = live.among(&[server]).await.contains(&server);
+    match wish.reset {
+        Some(properties) => {
+            access::require(&state.pool, caller, server, Permission::ResetServer).await?;
+            content.reset_to_modpack(server, source, properties, Some(caller.id()), running).await
+        }
+        None => {
+            if content.linked(server).await?.is_some() {
+                return Err(Failure::conflict(
+                    "modpack_already_linked",
+                    "unlink the modpack before installing another",
+                ));
+            }
+            content.install_modpack(server, source, wish.keep_extra, Some(caller.id()), running).await
+        }
+    }
+}
+
+#[derive(Default)]
+struct Wish {
+    keep_extra: bool,
+    reset: Option<crate::model::PropertiesFields>,
+}
+
+impl Wish {
+    fn of(request: &ModpackInstallRequest) -> Self {
+        Self {
+            keep_extra: request.keep_extra_content,
+            reset: request
+                .reset
+                .then(|| request.properties.clone().unwrap_or_default()),
+        }
+    }
+}
+
+fn spec_of(source: &PackSource) -> ModpackSpec {
+    match source {
+        PackSource::Modrinth { project_id, version_id } => ModpackSpec::Modrinth {
+            project_id: project_id.clone(),
+            version_id: version_id.clone(),
+        },
+        PackSource::Upload { file_name, .. } => {
+            ModpackSpec::LocalFile { filename: file_name.clone(), name: None }
+        }
+    }
 }
 
 async fn modpack_update(
@@ -312,16 +386,21 @@ async fn modpack_update(
     OfServer(server): OfServer,
     JsonBody(body): JsonBody<ModpackUpdateRequest>,
 ) -> Result<(StatusCode, Json<Accepted>)> {
-    access::require(&state.pool, &caller, server, Permission::Setup).await?;
+    let access = access::require(&state.pool, &caller, server, Permission::Setup).await?;
     let Some(project_id) = content.linked(server).await?.flatten() else {
         return Err(Failure::conflict("modpack_not_linked", "no modpack on this server"));
     };
     outgoing(&content).await?;
 
     let running = live.among(&[server]).await.contains(&server);
+    if let Some(version_id) = &body.version_id {
+        content.check_pack_version(&project_id, version_id).await?;
+    }
     let source = PackSource::Modrinth { project_id, version_id: body.version_id };
+    let spec = spec_of(&source);
     let operation =
         content.install_modpack(server, source, true, Some(caller.id()), running).await?;
+    audit::record(&state.pool, access, &caller, Event::ModpackChanged { spec }).await;
     Ok((StatusCode::ACCEPTED, Json(Accepted { operation })))
 }
 
@@ -1070,6 +1149,65 @@ mod tests {
             answer.headers().get("x-content-type-options").and_then(|v| v.to_str().ok()),
             Some("nosniff")
         );
+    }
+
+    #[tokio::test]
+    async fn resetting_to_a_modpack_needs_the_right_to_reset_the_server() {
+        let panel = Panel::new().await;
+        let editor = panel.a_member(ServerRole::Editor).await;
+        let reset = serde_json::json!({
+            "source": { "kind": "modrinth", "project_id": "P1", "version_id": "v-new" },
+            "reset": true,
+            "properties": { "known": { "gamemode": "creative" } }
+        });
+        let uri = format!("/servers/{}/content/modpack/install", panel.server);
+
+        let session = sign_in(&panel.pool, editor).await;
+        let refused = panel.call(as_user(send("POST", &uri, reset.clone()), &session)).await;
+        assert_eq!(refused.status(), StatusCode::FORBIDDEN);
+        let runs: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM operations")
+            .fetch_one(&panel.pool)
+            .await
+            .expect("the operations");
+        assert_eq!(runs, 0, "a refused reset starts nothing");
+
+        let session = sign_in(&panel.pool, panel.owner).await;
+        let accepted = panel.call(as_user(send("POST", &uri, reset), &session)).await;
+        assert_eq!(accepted.status(), StatusCode::ACCEPTED);
+        assert_eq!(body_json(accepted).await["operation"]["kind"], "install_modpack");
+        let actions: Vec<String> =
+            sqlx::query_scalar("SELECT action FROM audit_log WHERE server_id = ? ORDER BY action")
+                .bind(panel.server)
+                .fetch_all(&panel.pool)
+                .await
+                .expect("the audit log");
+        assert_eq!(actions, ["modpack_changed", "server_reset"]);
+    }
+
+    #[tokio::test]
+    async fn a_modpack_version_for_a_loader_the_panel_cannot_install_is_refused() {
+        let panel = Panel::new().await;
+        let mut version =
+            harness::a_release("f1", "FPACK", "2026-01-01T00:00:00Z", "https://cdn.invalid/f", b"f");
+        version.loaders = vec!["forge".to_owned()];
+        panel.upstream.set_versions("FPACK", vec![version]);
+        let session = sign_in(&panel.pool, panel.owner).await;
+
+        let refused = panel
+            .call(as_user(
+                send(
+                    "POST",
+                    &format!("/servers/{}/content/modpack/install", panel.server),
+                    serde_json::json!({
+                        "source": { "kind": "modrinth", "project_id": "FPACK", "version_id": "f1" }
+                    }),
+                ),
+                &session,
+            ))
+            .await;
+
+        assert_eq!(refused.status(), StatusCode::UNPROCESSABLE_ENTITY);
+        assert_eq!(body_json(refused).await["error"], "modpack_loader_unsupported");
     }
 
     #[tokio::test]

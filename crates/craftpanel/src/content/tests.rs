@@ -1843,3 +1843,154 @@ async fn uploading_over_a_switched_off_file_takes_the_switched_off_one_away() {
     assert_eq!(listed.items.len(), 1);
     assert!(listed.items[0].enabled);
 }
+
+fn a_pack_for(dependencies: serde_json::Value) -> PathBuf {
+    let index = serde_json::json!({
+        "formatVersion": 1,
+        "game": "minecraft",
+        "versionId": "1.0",
+        "name": "Another Pack",
+        "files": [],
+        "dependencies": dependencies
+    });
+    a_pack(&[
+        ("modrinth.index.json", index.to_string().as_bytes()),
+        ("overrides/config/pack.toml", b"from the pack"),
+    ])
+}
+
+async fn loader_of(panel: &Panel) -> (String, Option<String>, String, String) {
+    sqlx::query_as(
+        "SELECT loader, loader_version, game_version, status FROM servers WHERE id = ?",
+    )
+    .bind(panel.server)
+    .fetch_one(&panel.pool)
+    .await
+    .expect("the server")
+}
+
+fn shelf_for(panel: &Panel) -> Arc<crate::servers::manager::fake::Shelf> {
+    let shelf = crate::servers::manager::fake::Shelf::new();
+    panel.content.use_builds(Arc::clone(&shelf) as Arc<dyn crate::servers::manager::Builds>);
+    shelf
+}
+
+async fn upload(panel: &Panel, archive: &std::path::Path, name: &str) -> crate::model::Operation {
+    let operation = panel
+        .content
+        .install_modpack(
+            panel.server,
+            PackSource::Upload { archive: archive.to_path_buf(), file_name: name.to_owned() },
+            false,
+            None,
+            false,
+        )
+        .await
+        .expect("an accepted install");
+    panel.settled(operation.id).await
+}
+
+#[tokio::test]
+async fn a_pack_for_another_loader_puts_that_loader_on_the_server() {
+    let panel = Panel::new("paper", "1.21.8").await;
+    let shelf = shelf_for(&panel);
+    let archive = a_pack(&[("modrinth.index.json", &index(serde_json::json!([])))]);
+
+    let run = upload(&panel, &archive, "pack.mrpack").await;
+
+    assert_eq!(run.state, OperationState::Done, "{:?}", run.error);
+    assert_eq!(shelf.fetched(), 1);
+    assert!(panel.exists("server.jar"), "the start command looks for the loader there");
+    let (loader, build, game_version, _) = loader_of(&panel).await;
+    assert_eq!(loader, "fabric");
+    assert_eq!(build.as_deref(), Some("45"));
+    assert_eq!(game_version, "1.21.1");
+    let _ = std::fs::remove_file(&archive);
+}
+
+#[tokio::test]
+async fn a_pack_for_the_loader_the_server_already_runs_leaves_its_jar_alone() {
+    let panel = Panel::new("fabric", "1.21.1").await;
+    let shelf = shelf_for(&panel);
+    panel.write("server.jar", b"the jar that was there");
+    let archive = a_pack(&[("modrinth.index.json", &index(serde_json::json!([])))]);
+
+    let run = upload(&panel, &archive, "pack.mrpack").await;
+
+    assert_eq!(run.state, OperationState::Done, "{:?}", run.error);
+    assert_eq!(shelf.fetched(), 0);
+    assert_eq!(
+        std::fs::read(panel.root.join("server.jar")).expect("the jar"),
+        b"the jar that was there"
+    );
+    let _ = std::fs::remove_file(&archive);
+}
+
+#[tokio::test]
+async fn a_pack_for_a_loader_the_panel_cannot_install_changes_nothing() {
+    let panel = Panel::new("paper", "1.21.8").await;
+    let shelf = shelf_for(&panel);
+    panel.write("plugins/keep.jar", b"a plugin");
+    let archive = a_pack_for(serde_json::json!({ "minecraft": "1.20.1", "forge": "47.3.0" }));
+
+    let run = upload(&panel, &archive, "forge.mrpack").await;
+
+    assert_eq!(run.state, OperationState::Failed);
+    assert_eq!(run.error.expect("an error").code, "modpack_loader_unsupported");
+    assert_eq!(shelf.fetched(), 0);
+    assert!(panel.exists("plugins/keep.jar"), "nothing is cleared for a pack that cannot run");
+    assert!(!panel.exists("config/pack.toml"));
+    assert_eq!(loader_of(&panel).await.0, "paper");
+    assert!(store::modpack(&panel.pool, panel.server).await.expect("a read").is_none());
+    let _ = std::fs::remove_file(&archive);
+}
+
+#[tokio::test]
+async fn a_reset_to_a_pack_clears_the_server_and_writes_the_world_settings() {
+    let panel = Panel::new("fabric", "1.21.1").await;
+    let shelf = shelf_for(&panel);
+    sqlx::query(
+        "INSERT INTO allocations (port, server_id, name, is_primary, created_at)
+         VALUES (25570, ?, 'primary', 1, ?)",
+    )
+    .bind(panel.server)
+    .bind(Timestamp::now())
+    .execute(&panel.pool)
+    .await
+    .expect("an allocation");
+    panel.write("world/level.dat", b"the old world");
+    panel.write("mods/old.jar", b"an old mod");
+    let archive =
+        a_pack_for(serde_json::json!({ "minecraft": "1.21.1", "fabric-loader": "0.16.9" }));
+
+    let mut properties = crate::model::PropertiesFields::default();
+    properties.known.gamemode = Some("creative".to_owned());
+    properties.known.level_seed = Some("42".to_owned());
+    let operation = panel
+        .content
+        .reset_to_modpack(
+            panel.server,
+            PackSource::Upload { archive: archive.clone(), file_name: "fresh.mrpack".to_owned() },
+            properties,
+            None,
+            false,
+        )
+        .await
+        .expect("an accepted reset");
+    let run = panel.settled(operation.id).await;
+
+    assert_eq!(run.state, OperationState::Done, "{:?}", run.error);
+    assert!(!panel.exists("world/level.dat"), "a reset starts from an empty server");
+    assert!(!panel.exists("mods/old.jar"));
+    assert!(panel.exists("config/pack.toml"));
+    assert_eq!(shelf.fetched(), 1, "an emptied server needs its loader again");
+    let eula = std::fs::read_to_string(panel.root.join("eula.txt")).expect("the eula");
+    assert!(eula.contains("eula=true"));
+    let written = std::fs::read_to_string(panel.root.join("server.properties")).expect("props");
+    assert!(written.contains("gamemode=creative"), "{written}");
+    assert!(written.contains("level-seed=42"), "{written}");
+    assert!(written.contains("server-port=25570"), "{written}");
+    assert_eq!(loader_of(&panel).await.3, "available");
+    assert!(panel.listed().await.items.is_empty());
+    let _ = std::fs::remove_file(&archive);
+}

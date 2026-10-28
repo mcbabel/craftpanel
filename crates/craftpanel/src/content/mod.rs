@@ -28,8 +28,10 @@ use crate::auth::error::{Failure, Result};
 use crate::helper::Helper;
 use crate::model::{
     AlwaysFalse, ApiContentItem, ContentModpack, ContentProject, ContentSourceKind, ContentVersion, Id, LoaderId, ModpackSourceKind, ModrinthOwner, Operation,
-    OperationError, OperationErrorStep, OperationKind, Permission, Timestamp, UpdateChannel,
+    OperationError, OperationErrorStep, OperationKind, Permission, PropertiesFields, Timestamp,
+    UpdateChannel, KNOWN_PROPERTY_KEYS,
 };
+use crate::servers::manager::Builds;
 use crate::ops::{ContentChangeReason, NewOperation, Operations, Step, WsMessage};
 
 pub use self::modrinth::{Modrinth, Upstream};
@@ -56,6 +58,7 @@ pub struct Content {
     modrinth: Arc<Modrinth>,
     checking: Arc<std::sync::Mutex<BTreeSet<Id>>>,
     disks: Disks,
+    builds: std::sync::OnceLock<Arc<dyn Builds>>,
 }
 
 impl Content {
@@ -86,7 +89,12 @@ impl Content {
             modrinth,
             checking: Arc::default(),
             disks,
+            builds: std::sync::OnceLock::new(),
         })
+    }
+
+    pub fn use_builds(&self, builds: Arc<dyn Builds>) {
+        let _ = self.builds.set(builds);
     }
 
     pub fn modrinth(&self) -> &Modrinth {
@@ -501,9 +509,62 @@ impl Content {
         let facts = self.facts(server).await?;
         disk::guard(&self.pool, &self.disks, facts.owner_id, 0).await?;
 
-        let operation = self.start(server, OperationKind::InstallModpack, started_by, 1).await?;
-        self.clone().drive(facts, operation.id, Job::Modpack { source, keep_extra_content });
+        let operation = self.start_pack(server, &source, started_by).await?;
+        self.clone().drive(
+            facts,
+            operation.id,
+            Job::Modpack { source, keep_extra_content, fresh: None },
+        );
         Ok(operation)
+    }
+
+    pub async fn reset_to_modpack(
+        self: &Arc<Self>,
+        server: Id,
+        source: PackSource,
+        properties: PropertiesFields,
+        started_by: Option<Id>,
+        running: bool,
+    ) -> Result<Operation> {
+        if running {
+            return Err(Failure::conflict("server_running", "stop the server first"));
+        }
+        self.operations.guard_write(server).await.map_err(fault_to_failure)?;
+        let facts = self.facts(server).await?;
+        disk::guard(&self.pool, &self.disks, facts.owner_id, 0).await?;
+
+        let operation = self.start_pack(server, &source, started_by).await?;
+        self.clone().drive(
+            facts,
+            operation.id,
+            Job::Modpack { source, keep_extra_content: false, fresh: Some(properties) },
+        );
+        Ok(operation)
+    }
+
+    pub async fn check_pack_version(&self, project_id: &str, version_id: &str) -> Result<()> {
+        let version = self.modrinth.version(version_id).await.map_err(upstream)?;
+        if version.project_id != project_id {
+            return Err(Failure::invalid_request("this version belongs to another project"));
+        }
+        if version.loaders.is_empty() || version.loaders.iter().any(|name| installable(name)) {
+            return Ok(());
+        }
+        Err(Failure::new(
+            StatusCode::UNPROCESSABLE_ENTITY,
+            "modpack_loader_unsupported",
+            format!("the panel cannot install {} yet", version.loaders.join(", ")),
+        ))
+    }
+
+    pub async fn lay_out_fresh_pack(
+        &self,
+        facts: &ServerFacts,
+        operation: Id,
+        source: PackSource,
+        properties: &PropertiesFields,
+    ) -> std::result::Result<(), OperationError> {
+        self.lay_out_pack(facts, operation, source, false, Some(properties)).await
     }
 
     pub async fn change_game_version(
@@ -867,6 +928,20 @@ impl Content {
         self.operations.create(new).await.map_err(fault_to_failure)
     }
 
+    async fn start_pack(
+        &self,
+        server: Id,
+        source: &PackSource,
+        started_by: Option<Id>,
+    ) -> Result<Operation> {
+        let mut new = NewOperation::new(server, OperationKind::InstallModpack, started_by);
+        new.input = Some(serde_json::json!({ "total": 1 }));
+        if let PackSource::Upload { file_name, .. } = source {
+            new.src = Some(file_name.clone());
+        }
+        self.operations.create(new).await.map_err(fault_to_failure)
+    }
+
     async fn item(&self, row: &ItemRow) -> Result<ApiContentItem> {
         let project = match &row.project_id {
             Some(project_id) => self.modrinth.cached_project(project_id).await.map_err(upstream)?,
@@ -1140,7 +1215,7 @@ fn fault_to_failure(fault: crate::ops::Fault) -> Failure {
 enum Job {
     Install { wanted: Vec<Wanted>, source: ContentSourceKind },
     Update { wanted: Vec<Wanted> },
-    Modpack { source: PackSource, keep_extra_content: bool },
+    Modpack { source: PackSource, keep_extra_content: bool, fresh: Option<PropertiesFields> },
     GameVersion { request: GameVersionChangeRequest },
 }
 
@@ -1169,6 +1244,7 @@ impl Content {
         tokio::spawn(async move {
             let touched = job.touched();
             let leftovers = job.leftovers();
+            let fresh = matches!(job, Job::Modpack { fresh: Some(_), .. });
             if !self.take_turn(operation).await {
                 clear_away(leftovers);
                 return;
@@ -1180,13 +1256,30 @@ impl Content {
                 Job::Update { wanted } => {
                     self.lay_out(&facts, operation, wanted, ContentSourceKind::ServerProject).await
                 }
-                Job::Modpack { source, keep_extra_content } => {
-                    self.lay_out_pack(&facts, operation, source, keep_extra_content).await
+                Job::Modpack { source, keep_extra_content, fresh } => {
+                    self.lay_out_pack(&facts, operation, source, keep_extra_content, fresh.as_ref())
+                        .await
                 }
                 Job::GameVersion { request } => {
                     self.move_game_version(&facts, operation, request).await
                 }
             };
+
+            if fresh {
+                let status = if outcome.is_ok() { "available" } else { "broken" };
+                if let Err(err) = sqlx::query(
+                    "UPDATE servers SET status = ?, flows_intro = 0, restart_required = 0, updated_at = ?
+                      WHERE id = ?",
+                )
+                .bind(status)
+                .bind(Timestamp::now())
+                .bind(facts.id)
+                .execute(&self.pool)
+                .await
+                {
+                    tracing::warn!("the state after {operation} was not written: {err}");
+                }
+            }
 
             match outcome {
                 Ok(()) => {
@@ -1288,6 +1381,7 @@ impl Content {
         operation: Id,
         source: PackSource,
         keep_extra_content: bool,
+        fresh: Option<&PropertiesFields>,
     ) -> std::result::Result<(), OperationError> {
         let root = self.server_dir(facts);
         let work = self.work_dir(operation).await?;
@@ -1318,7 +1412,27 @@ impl Content {
         let title = pack.index.name.clone();
         let version_number = pack.index.version_id.clone();
 
-        if !keep_extra_content {
+        let target = PackTarget::of(&pack.index)?;
+        let switch = match target {
+            Some(target) if fresh.is_some() || target.differs_from(facts) => Some(target),
+            Some(_) => None,
+            None if fresh.is_some() => {
+                return Err(OperationError {
+                    code: "modpack_install_failed".to_owned(),
+                    message: "the pack does not say which Minecraft version it is for".to_owned(),
+                    step: OperationErrorStep::Modpack,
+                })
+            }
+            None => None,
+        };
+        let loader_jar = match &switch {
+            Some(target) => Some(self.fetch_loader(operation, target, &work).await?),
+            None => None,
+        };
+
+        if fresh.is_some() {
+            self.wipe(facts, &root).await?;
+        } else if !keep_extra_content {
             self.clear_extra(facts, &root).await?;
         }
 
@@ -1361,11 +1475,163 @@ impl Content {
             install::place(&staged, &root, relative).map_err(filesystem)?;
         }
 
-        self.hand_back(facts).await?;
-        self.record_pack(facts, &files, &omitted, &card, &title, &version_number).await?;
-        self.drop_what_the_pack_no_longer_has(facts, &root, &kept).await?;
+        let facts = match (switch, loader_jar) {
+            (Some(target), Some((build, staged))) => {
+                self.put_loader(facts, &root, &target, &build, &staged).await?
+            }
+            _ => facts.clone(),
+        };
+        if let Some(properties) = fresh {
+            self.write_fresh_config(&facts, &root, &work, properties).await?;
+        }
+
+        self.hand_back(&facts).await?;
+        self.record_pack(&facts, &files, &omitted, &card, &title, &version_number).await?;
+        self.drop_what_the_pack_no_longer_has(&facts, &root, &kept).await?;
         let _ = std::fs::remove_dir_all(&work);
         Ok(())
+    }
+
+    async fn fetch_loader(
+        &self,
+        operation: Id,
+        target: &PackTarget,
+        work: &Path,
+    ) -> std::result::Result<(crate::loaders::Build, PathBuf), OperationError> {
+        let unsupported = || OperationError {
+            code: "modpack_loader_unsupported".to_owned(),
+            message: format!("the panel cannot install {} yet", target.loader.as_str()),
+            step: OperationErrorStep::Modpack,
+        };
+        let source = target.loader.source().ok_or_else(unsupported)?;
+        let builds = self.builds.get().ok_or_else(unsupported)?;
+
+        let wanted = match &target.loader_version {
+            Some(version) => crate::loaders::Wanted::Build(version.clone()),
+            None => crate::loaders::Wanted::LatestStable,
+        };
+        let build = builds.resolve(source, &target.game_version, wanted).await.map_err(|err| {
+            tracing::warn!("the loader of a pack could not be resolved: {err}");
+            OperationError {
+                code: "invalid_version".to_owned(),
+                message: "the specified version may be incorrect".to_owned(),
+                step: OperationErrorStep::Modloader,
+            }
+        })?;
+
+        let _ = self
+            .operations
+            .advance(
+                operation,
+                Step {
+                    phase: Some(crate::model::OperationPhase::InstallingLoader),
+                    current_file: Some(build.filename.clone()),
+                    ..Step::default()
+                },
+            )
+            .await;
+        let staged = work.join(format!("loader-{}", Id::new()));
+        builds.fetch(source, &build, &staged).await.map_err(|err| OperationError {
+            code: "loader_install_failed".to_owned(),
+            message: err.to_string(),
+            step: OperationErrorStep::Download,
+        })?;
+        let _ = self
+            .operations
+            .advance(
+                operation,
+                Step {
+                    phase: Some(crate::model::OperationPhase::InstallingPack),
+                    ..Step::default()
+                },
+            )
+            .await;
+        Ok((build, staged))
+    }
+
+    async fn put_loader(
+        &self,
+        facts: &ServerFacts,
+        root: &Path,
+        target: &PackTarget,
+        build: &crate::loaders::Build,
+        staged: &Path,
+    ) -> std::result::Result<ServerFacts, OperationError> {
+        let jar = crate::settings::startup::launch_of(Some(target.loader)).jar;
+        install::place(staged, root, jar).map_err(filesystem)?;
+
+        let loader_version = (target.loader != LoaderId::Vanilla).then(|| build.id.clone());
+        sqlx::query(
+            "UPDATE servers SET loader = ?, loader_version = ?, game_version = ?,
+                    java_major = COALESCE(?, java_major), restart_required = 1, updated_at = ?
+              WHERE id = ?",
+        )
+        .bind(target.loader)
+        .bind(&loader_version)
+        .bind(&target.game_version)
+        .bind(build.java_major)
+        .bind(Timestamp::now())
+        .bind(facts.id)
+        .execute(&self.pool)
+        .await
+        .map_err(internal)?;
+
+        Ok(ServerFacts {
+            loader: target.loader,
+            loader_version,
+            game_version: target.game_version.clone(),
+            ..facts.clone()
+        })
+    }
+
+    async fn wipe(&self, facts: &ServerFacts, root: &Path) -> std::result::Result<(), OperationError> {
+        let steps = crate::helper::in_servers(facts.id);
+        if let Err(err) = self.helper.chown_tree(&facts.owner_id.to_string(), steps).await {
+            tracing::warn!(server = %facts.id, "the reset did not open the tree: {err:#}");
+        }
+        for entry in std::fs::read_dir(root).map_err(filesystem)? {
+            let entry = entry.map_err(filesystem)?;
+            if entry.file_name() == crate::ops::WORK_DIR {
+                continue;
+            }
+            let path = entry.path();
+            let removed = if entry.file_type().map_err(filesystem)?.is_dir() {
+                std::fs::remove_dir_all(&path)
+            } else {
+                std::fs::remove_file(&path)
+            };
+            removed.map_err(filesystem)?;
+        }
+        for row in store::list(&self.pool, facts.id).await.map_err(internal)? {
+            store::remove(&self.pool, row.id).await.map_err(internal)?;
+        }
+        Ok(())
+    }
+
+    async fn write_fresh_config(
+        &self,
+        facts: &ServerFacts,
+        root: &Path,
+        work: &Path,
+        properties: &PropertiesFields,
+    ) -> std::result::Result<(), OperationError> {
+        let eula = work.join("eula.txt");
+        std::fs::write(&eula, EULA).map_err(filesystem)?;
+        install::place(&eula, root, "eula.txt").map_err(filesystem)?;
+
+        if !facts.loader.supports_properties() {
+            return Ok(());
+        }
+        let port = crate::settings::allocations::primary(&self.pool, facts.id)
+            .await
+            .map_err(internal)?;
+        let existing = paths::resolve_leaf(root, "server.properties")
+            .ok()
+            .and_then(|path| std::fs::read_to_string(path).ok());
+        let staged = work.join("server.properties");
+        std::fs::write(&staged, fresh_properties(existing.as_deref(), properties, port))
+            .map_err(filesystem)?;
+        install::place(&staged, root, "server.properties").map_err(filesystem)
     }
 
     async fn drop_what_the_pack_no_longer_has(
@@ -1774,6 +2040,59 @@ fn clear_away(staging: Option<PathBuf>) {
     if let Some(parent) = archive.parent() {
         let _ = std::fs::remove_dir(parent);
     }
+}
+
+const EULA: &str = "# Mojang's EULA was accepted in the panel.\neula=true\n";
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct PackTarget {
+    loader: LoaderId,
+    loader_version: Option<String>,
+    game_version: String,
+}
+
+impl PackTarget {
+    fn of(index: &mrpack::Index) -> std::result::Result<Option<Self>, OperationError> {
+        let Some(game_version) = index.game_version() else { return Ok(None) };
+        let (loader, loader_version) = match index.loader() {
+            Some((loader, version)) => (loader, Some(version)),
+            None => (LoaderId::Vanilla, None),
+        };
+        if loader.source().is_none() {
+            return Err(OperationError {
+                code: "modpack_loader_unsupported".to_owned(),
+                message: format!("the panel cannot install {} yet", loader.as_str()),
+                step: OperationErrorStep::Modpack,
+            });
+        }
+        Ok(Some(Self { loader, loader_version, game_version: game_version.to_owned() }))
+    }
+
+    fn differs_from(&self, facts: &ServerFacts) -> bool {
+        facts.loader != self.loader
+            || facts.game_version != self.game_version
+            || (self.loader_version.is_some()
+                && facts.loader_version.is_some()
+                && facts.loader_version != self.loader_version)
+    }
+}
+
+fn installable(loader: &str) -> bool {
+    loader.parse::<LoaderId>().is_ok_and(|loader| loader.source().is_some())
+}
+
+fn fresh_properties(existing: Option<&str>, fields: &PropertiesFields, port: Option<u16>) -> String {
+    let mut properties = crate::settings::properties::Properties::parse(existing.unwrap_or(""));
+    for key in KNOWN_PROPERTY_KEYS {
+        if let Some(value) = fields.known.get(key) {
+            let value: String = value.chars().filter(|letter| !letter.is_control()).collect();
+            properties.set(&key.replace('_', "-"), &value);
+        }
+    }
+    if let Some(port) = port {
+        crate::settings::store::set_ports(&mut properties, port);
+    }
+    properties.render()
 }
 
 fn internal(err: sqlx::Error) -> OperationError {

@@ -184,6 +184,7 @@ async fn serve() -> Result<()> {
         disks.clone(),
     )
     .context("setting up the content service")?;
+    manager.use_content(Arc::clone(&content));
     let backups = backups::Backups::new(
         pool.clone(),
         config.data_dir.clone(),
