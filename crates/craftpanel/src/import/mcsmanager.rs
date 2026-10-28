@@ -1,3 +1,4 @@
+use std::os::unix::fs::OpenOptionsExt;
 use std::path::{Path, PathBuf};
 
 use anyhow::{bail, Context, Result};
@@ -71,7 +72,8 @@ pub async fn run(args: McsmanagerArgs) -> Result<()> {
 
     let (mut imported, mut skipped) = (0, 0);
     for instance in &chosen {
-        let planned = match plan(instance) {
+        let checked = check_folder(instance, &args.from, &config.data_dir, args.allow_outside);
+        let planned = match checked.and_then(|()| plan(instance)) {
             Ok(planned) => planned,
             Err(why) => {
                 skipped += 1;
@@ -169,6 +171,36 @@ fn select(found: Vec<Instance>, only: &[String]) -> Result<Vec<Instance>> {
         chosen.push(hit.clone());
     }
     Ok(chosen)
+}
+
+pub fn check_folder(
+    instance: &Instance,
+    daemon: &Path,
+    data_dir: &Path,
+    allow_outside: bool,
+) -> Result<(), String> {
+    let meta = std::fs::symlink_metadata(&instance.dir)
+        .map_err(|_| format!("its folder {} does not exist", instance.dir.display()))?;
+    if !meta.is_dir() {
+        return Err(format!("{} is a link or not a folder", instance.dir.display()));
+    }
+    let folder = instance.dir.canonicalize().map_err(|err| err.to_string())?;
+    if folder.components().count() < 3 {
+        return Err(format!("{} is too close to the root of the disk", folder.display()));
+    }
+    if let Ok(data) = data_dir.canonicalize() {
+        if folder.starts_with(&data) || data.starts_with(&folder) {
+            return Err(format!("{} overlaps the panel's own data", folder.display()));
+        }
+    }
+    let instances = daemon.join("data").join("InstanceData").canonicalize().ok();
+    if !allow_outside && !instances.is_some_and(|inside| folder.starts_with(inside)) {
+        return Err(format!(
+            "{} lies outside MCSManager's InstanceData; pass --allow-outside if it should move",
+            folder.display()
+        ));
+    }
+    Ok(())
 }
 
 pub fn plan(instance: &Instance) -> Result<Planned, String> {
@@ -309,13 +341,21 @@ async fn settle(
 
     if found.jar != JAR {
         let existing = dir.join(JAR);
-        if existing.exists() {
+        if std::fs::symlink_metadata(&existing).is_ok() {
             std::fs::rename(&existing, dir.join("server.jar.before-import"))?;
         }
         std::fs::rename(dir.join(&found.jar), &existing)?;
     }
-    if found.loader != LoaderId::Velocity && !dir.join("eula.txt").exists() {
-        std::fs::write(dir.join("eula.txt"), "eula=true\n")?;
+    if found.loader != LoaderId::Velocity {
+        let created = std::fs::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .mode(0o660)
+            .custom_flags(libc::O_NOFOLLOW)
+            .open(dir.join("eula.txt"));
+        if let Ok(mut file) = created {
+            std::io::Write::write_all(&mut file, b"eula=true\n")?;
+        }
     }
 
     Ok(Imported { server, port, port_changed: found.port.is_some_and(|wanted| wanted != port) })
@@ -361,11 +401,31 @@ fn copy_tree(source: &Path, target: &Path) -> Result<()> {
             std::fs::create_dir_all(&destination)?;
         } else if kind.is_symlink() {
             std::os::unix::fs::symlink(std::fs::read_link(entry.path())?, &destination)?;
-        } else {
-            std::fs::copy(entry.path(), &destination)
+        } else if kind.is_file() {
+            copy_plain(entry.path(), &destination)
                 .with_context(|| format!("copying {}", entry.path().display()))?;
+        } else {
+            bail!("{} is neither a file, a folder nor a link", entry.path().display());
         }
     }
+    Ok(())
+}
+
+fn copy_plain(source: &Path, destination: &Path) -> std::io::Result<()> {
+    let mut from = std::fs::OpenOptions::new()
+        .read(true)
+        .custom_flags(libc::O_NOFOLLOW)
+        .open(source)?;
+    if !from.metadata()?.is_file() {
+        return Err(std::io::Error::other("not a plain file"));
+    }
+    let mut to = std::fs::OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .mode(0o660)
+        .custom_flags(libc::O_NOFOLLOW)
+        .open(destination)?;
+    std::io::copy(&mut from, &mut to)?;
     Ok(())
 }
 
@@ -437,6 +497,36 @@ mod tests {
         assert_eq!(lobby.dir, setup.daemon.join("data/InstanceData/lobby"));
         let unnamed = found.iter().find(|one| one.uuid == "bbb").unwrap();
         assert_eq!((unnamed.name.as_str(), unnamed.dir.as_path()), ("bbb", Path::new("/srv/elsewhere")));
+    }
+
+    #[test]
+    fn folders_outside_instance_data_need_permission_and_system_paths_never_pass() {
+        let setup = setup();
+        let data = setup.config().data_dir;
+        std::fs::create_dir_all(&data).unwrap();
+        let at = |dir: PathBuf| Instance {
+            uuid: "x".to_owned(),
+            name: "x".to_owned(),
+            dir,
+            start_command: String::new(),
+            kind: String::new(),
+        };
+
+        let inside = setup.folder("fine");
+        assert!(check_folder(&at(inside.clone()), &setup.daemon, &data, false).is_ok());
+
+        let outside = setup.daemon.parent().unwrap().join("elsewhere");
+        std::fs::create_dir_all(&outside).unwrap();
+        assert!(check_folder(&at(outside.clone()), &setup.daemon, &data, false).unwrap_err().contains("--allow-outside"));
+        assert!(check_folder(&at(outside), &setup.daemon, &data, true).is_ok());
+
+        assert!(check_folder(&at(PathBuf::from("/")), &setup.daemon, &data, true).is_err());
+        assert!(check_folder(&at(PathBuf::from("/etc")), &setup.daemon, &data, true).is_err());
+        assert!(check_folder(&at(data.clone()), &setup.daemon, &data, true).is_err());
+
+        let link = setup.daemon.join("data/InstanceData/link");
+        std::os::unix::fs::symlink(&inside, &link).unwrap();
+        assert!(check_folder(&at(link), &setup.daemon, &data, false).unwrap_err().contains("link"));
     }
 
     #[tokio::test]

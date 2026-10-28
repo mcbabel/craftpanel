@@ -222,7 +222,10 @@ sudo craftpanel import mcsmanager --owner admin
 sudo craftpanel import mcsmanager --owner admin --only Lobby --only "Survival 1.21"
 ```
 
-`--from` points at another daemon folder than `/opt/mcsmanager/daemon`.
+`--from` points at another daemon folder than `/opt/mcsmanager/daemon`. Only folders inside
+MCSManager's `data/InstanceData` are taken; an instance kept somewhere else needs
+`--allow-outside`. Linked folders, system paths and the panel's own data directory are always
+refused, and files inside a server folder are never written through a link.
 
 ### What happens
 

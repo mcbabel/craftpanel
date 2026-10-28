@@ -24,6 +24,8 @@ pub struct McsmanagerArgs {
     pub copy: bool,
     #[arg(long, help = "Show what would be imported and change nothing")]
     pub dry_run: bool,
+    #[arg(long, help = "Also take instances whose folder lies outside MCSManager's InstanceData")]
+    pub allow_outside: bool,
 }
 
 pub async fn run(command: ImportCommand) -> Result<()> {

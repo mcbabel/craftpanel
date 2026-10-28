@@ -1,4 +1,6 @@
-use std::io::Read;
+use std::fs::{File, OpenOptions};
+use std::io::{Read, Write};
+use std::os::unix::fs::OpenOptionsExt;
 use std::path::Path;
 
 use crate::model::LoaderId;
@@ -72,7 +74,8 @@ fn jar_of(dir: &Path, start_command: &str) -> Result<String, String> {
         if let Some(named) = tokens.get(at + 1) {
             let named = named.trim_matches(|c| c == '"' || c == '\'');
             let file = Path::new(named).file_name().and_then(|name| name.to_str());
-            if let Some(file) = file.filter(|file| dir.join(file).is_file()) {
+            let plain = |file: &&str| std::fs::symlink_metadata(dir.join(file)).is_ok_and(|meta| meta.is_file());
+            if let Some(file) = file.filter(plain) {
                 return Ok(file.to_owned());
             }
         }
@@ -81,7 +84,7 @@ fn jar_of(dir: &Path, start_command: &str) -> Result<String, String> {
     let jars: Vec<String> = std::fs::read_dir(dir)
         .map_err(|err| format!("its folder cannot be read: {err}"))?
         .filter_map(|entry| entry.ok())
-        .filter(|entry| entry.path().is_file())
+        .filter(|entry| entry.file_type().is_ok_and(|kind| kind.is_file()))
         .filter_map(|entry| entry.file_name().into_string().ok())
         .filter(|name| name.to_ascii_lowercase().ends_with(".jar"))
         .collect();
@@ -125,7 +128,7 @@ fn loader_of(dir: &Path, jar: &str) -> LoaderId {
 }
 
 fn history(dir: &Path) -> Option<String> {
-    let text = std::fs::read_to_string(dir.join("version_history.json")).ok()?;
+    let text = read_plain(&dir.join("version_history.json")).ok()??;
     let value: serde_json::Value = serde_json::from_str(&text).ok()?;
     value.get("currentVersion")?.as_str().map(str::to_owned)
 }
@@ -243,23 +246,56 @@ fn between<'a>(text: &'a str, start: &str, end: &str) -> Option<&'a str> {
 
 pub fn port_of(dir: &Path, loader: LoaderId) -> Option<u16> {
     if loader == LoaderId::Velocity {
-        let text = std::fs::read_to_string(dir.join("velocity.toml")).ok()?;
+        let text = read_plain(&dir.join("velocity.toml")).ok()??;
         let bind = text.lines().find_map(|line| {
             let (key, value) = line.split_once('=')?;
             (key.trim() == "bind").then(|| value.trim().trim_matches('"').to_owned())
         })?;
         return bind.rsplit(':').next()?.parse().ok();
     }
-    let text = std::fs::read_to_string(dir.join("server.properties")).ok()?;
+    let text = read_plain(&dir.join("server.properties")).ok()??;
     text.lines()
         .find_map(|line| line.strip_prefix("server-port="))
         .and_then(|port| port.trim().parse().ok())
 }
 
+pub fn read_plain(path: &Path) -> std::io::Result<Option<String>> {
+    let mut file = match OpenOptions::new().read(true).custom_flags(libc::O_NOFOLLOW).open(path) {
+        Ok(file) => file,
+        Err(err) if err.kind() == std::io::ErrorKind::NotFound => return Ok(None),
+        Err(err) => return Err(err),
+    };
+    plain(&file)?;
+    let mut text = String::new();
+    file.read_to_string(&mut text)?;
+    Ok(Some(text))
+}
+
+pub fn write_plain(path: &Path, text: &str) -> std::io::Result<()> {
+    let mut file = OpenOptions::new()
+        .write(true)
+        .create(true)
+        .truncate(false)
+        .mode(0o660)
+        .custom_flags(libc::O_NOFOLLOW)
+        .open(path)?;
+    plain(&file)?;
+    file.set_len(0)?;
+    file.write_all(text.as_bytes())
+}
+
+fn plain(file: &File) -> std::io::Result<()> {
+    let meta = file.metadata()?;
+    if !meta.is_file() || std::os::unix::fs::MetadataExt::nlink(&meta) != 1 {
+        return Err(std::io::Error::other("not a plain file with a single link"));
+    }
+    Ok(())
+}
+
 pub fn set_port(dir: &Path, loader: LoaderId, port: u16) -> std::io::Result<()> {
     if loader == LoaderId::Velocity {
         let path = dir.join("velocity.toml");
-        let Ok(text) = std::fs::read_to_string(&path) else { return Ok(()) };
+        let Some(text) = read_plain(&path)? else { return Ok(()) };
         let rewritten: Vec<String> = text
             .lines()
             .map(|line| match line.split_once('=') {
@@ -270,11 +306,11 @@ pub fn set_port(dir: &Path, loader: LoaderId, port: u16) -> std::io::Result<()> 
                 _ => line.to_owned(),
             })
             .collect();
-        return std::fs::write(path, rewritten.join("\n") + "\n");
+        return write_plain(&path, &(rewritten.join("\n") + "\n"));
     }
 
     let path = dir.join("server.properties");
-    let text = std::fs::read_to_string(&path).unwrap_or_default();
+    let text = read_plain(&path)?.unwrap_or_default();
     let mut lines: Vec<String> = text
         .lines()
         .filter(|line| !line.starts_with("server-port=") && !line.starts_with("query.port="))
@@ -282,7 +318,7 @@ pub fn set_port(dir: &Path, loader: LoaderId, port: u16) -> std::io::Result<()> 
         .collect();
     lines.push(format!("server-port={port}"));
     lines.push(format!("query.port={port}"));
-    std::fs::write(path, lines.join("\n") + "\n")
+    write_plain(&path, &(lines.join("\n") + "\n"))
 }
 
 #[cfg(test)]
@@ -364,6 +400,22 @@ mod tests {
 
         let empty = folder();
         assert!(detect(&empty, "java -jar server.jar").unwrap_err().contains("no server jar"));
+    }
+
+    #[test]
+    fn a_planted_link_is_never_written_through() {
+        let dir = folder();
+        let elsewhere = folder().join("target.txt");
+        std::fs::write(&elsewhere, "untouched\n").unwrap();
+        std::os::unix::fs::symlink(&elsewhere, dir.join("server.properties")).unwrap();
+
+        assert!(set_port(&dir, LoaderId::Paper, 25601).is_err());
+        assert_eq!(std::fs::read_to_string(&elsewhere).unwrap(), "untouched\n");
+
+        let hard = folder();
+        std::fs::hard_link(&elsewhere, hard.join("server.properties")).unwrap();
+        assert!(set_port(&hard, LoaderId::Paper, 25601).is_err());
+        assert_eq!(std::fs::read_to_string(&elsewhere).unwrap(), "untouched\n");
     }
 
     #[test]
