@@ -1707,3 +1707,16 @@ fn noise(bytes: usize) -> Vec<u8> {
     out.truncate(bytes);
     out
 }
+
+#[tokio::test]
+async fn a_backup_whose_archive_vanished_says_so_instead_of_failing_inside() {
+    let game = FakeServer::stopped().await;
+    game.file("world/level.dat", b"a world");
+    let backup = game.a_finished_backup("gone").await;
+    assert_eq!(game.await_backup(backup).await, BackupStatus::Done);
+    std::fs::remove_file(game.backups.archive_of(game.server, backup)).unwrap();
+
+    let refused = game.backups.download(game.server, backup).await.unwrap_err();
+    assert_eq!(refused.code(), "backup_archive_missing");
+    assert_eq!(refused.status(), axum::http::StatusCode::NOT_FOUND);
+}

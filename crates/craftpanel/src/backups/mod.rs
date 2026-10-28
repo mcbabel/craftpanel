@@ -207,10 +207,16 @@ impl Backups {
             ));
         }
         let path = self.archive_of(row.server_id, row.id);
-        let size_bytes = tokio::fs::metadata(&path)
-            .await
-            .map_err(|err| Failure::internal(anyhow::Error::from(err)))?
-            .len();
+        let size_bytes = match tokio::fs::metadata(&path).await {
+            Ok(meta) => meta.len(),
+            Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
+                return Err(Failure::not_found(
+                    "backup_archive_missing",
+                    "the archive of this backup is no longer on disk",
+                ));
+            }
+            Err(err) => return Err(Failure::internal(anyhow::Error::from(err))),
+        };
         Ok(Download { path, name: row.name, created_at: row.created_at, size_bytes })
     }
 
