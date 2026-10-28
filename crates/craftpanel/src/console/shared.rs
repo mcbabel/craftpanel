@@ -13,7 +13,6 @@ pub struct Sharer {
     pub username: String,
 }
 
-/// One log this server has on mclo.gs, as the browser sees it: without the token.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct SharedLogEntry {
     pub id: Id,

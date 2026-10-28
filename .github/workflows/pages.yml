@@ -1,8 +1,5 @@
 name: Pages
 
-# Builds the website in website/ — the landing page and the docs from docs/ — and publishes it
-# to GitHub Pages. Actions are pinned to full commit SHAs, as in ci.yml.
-
 on:
   push:
     branches: [main]

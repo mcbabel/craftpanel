@@ -1261,8 +1261,6 @@ pub struct SystemUser {
     pub name: String,
     pub uid: Option<u32>,
     pub error_message: Option<String>,
-    /// `helper_unavailable` when the helper could not be reached at all, so the interface can
-    /// say what to check in the reader's language. Derived, never stored.
     #[serde(default)]
     pub error_code: Option<String>,
 }

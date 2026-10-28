@@ -153,9 +153,6 @@ function buildModules(serverId: Ulid) {
 	return { backups_queue_v1, backups_v1, properties_v1 }
 }
 
-// The console shares what is on screen straight from the browser upstream. Here it goes
-// through the panel instead, which honours the switch for outgoing calls and keeps the
-// token that takes the log down again.
 function buildLogSharing(serverId: Ulid, real: AbstractModrinthClient) {
 	return Object.assign(Object.create(real.mclogs.logs_v1), {
 		create: async (content: string) => {

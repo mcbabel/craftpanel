@@ -174,7 +174,6 @@ const props = withDefaults(
 		searchUsers?: (query: string) => Promise<ServerAccessInviteSuggestion[]>
 		canGrant?: boolean
 		permissionDeniedMessage?: string
-		// CraftPanel: replaces Modrinth's own wording where it does not fit; '' hides the help text.
 		texts?: Partial<
 			Record<
 				| 'header'
@@ -188,7 +187,6 @@ const props = withDefaults(
 				string
 			>
 		>
-		// CraftPanel: where "the full list of permissions" points; null hides the line.
 		permissionsLink?: string | null
 	}>(),
 	{

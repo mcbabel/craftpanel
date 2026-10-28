@@ -64,7 +64,6 @@ export default defineConfig({
 		socialLinks: [{ icon: 'github', link: repository }],
 		search: { provider: 'local' },
 		editLink: {
-			// Serialised into the client bundle, so it cannot close over anything in this file.
 			pattern: ({ filePath }) =>
 				`https://github.com/MCbabel/craftpanel/edit/main/${filePath.replace(/^docs\/index\.md$/, 'docs/README.md')}`,
 			text: 'Edit this page on GitHub',

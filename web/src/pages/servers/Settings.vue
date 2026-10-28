@@ -56,7 +56,6 @@ const router = useRouter()
 const { user, isAdmin } = useSession()
 const { serverId, server } = injectModrinthServerContext()
 
-// The panel's own sections sit beside the ones the vendored settings layout defines.
 type SectionId = ServerSettingsTabId | 'shared-logs'
 
 const SECTIONS: SectionId[] = [

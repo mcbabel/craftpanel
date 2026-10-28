@@ -5,14 +5,11 @@ use craftpanel_proto::{HelperOk, HelperRequest, HelperResponse, ResourceLimits, 
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tokio::net::UnixStream;
 
-/// The helper's socket could not be reached at all — it is not running, or the panel was
-/// pointed at the wrong socket. Callers look for it to say so instead of failing inside.
 #[derive(Debug)]
 pub struct Unreachable(pub PathBuf);
 
 const UNREACHABLE: &str = "the privileged helper is not answering";
 
-/// The stable code for a stored message that says the helper was not there.
 pub fn code_of(message: &str) -> Option<String> {
     message.starts_with(UNREACHABLE).then(|| "helper_unavailable".to_owned())
 }

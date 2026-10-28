@@ -268,7 +268,6 @@ type ViewportRect = {
 
 const DROPDOWN_VIEWPORT_MARGIN = 8
 const DROPDOWN_GAP = 8
-// CraftPanel: the list never shrinks below this to fit the window; past it the page has to scroll.
 const MIN_LIST_HEIGHT = 120
 const DEFAULT_MAX_HEIGHT = 300
 const OPTIONS_OVERLAY_SCROLLBARS_OPTIONS = Object.freeze<PartialOptions>({
@@ -651,7 +650,6 @@ function determineOpenDirection(
 
 	if (hasSpaceBelow) return 'down'
 	if (hasSpaceAbove) return 'up'
-	// CraftPanel: room on neither side; open toward the larger one, and the list shrinks to fit.
 	return viewportBottom - triggerBottom >= triggerTop - viewportTop ? 'down' : 'up'
 }
 

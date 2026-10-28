@@ -247,7 +247,6 @@ const messages = defineMessages({
 const base = computed(() => `/servers/${encodeURIComponent(server.value.id)}`)
 const setupPending = computed(() => server.value.flows.intro)
 
-// Browsing has its own address next to the tabs; it belongs to whichever tab sent you there.
 const browsePages = computed(() => [`${base.value}/browse`])
 const browsingModpacks = computed(() => route.name === 'server-browse' && route.query.type === 'modpack')
 

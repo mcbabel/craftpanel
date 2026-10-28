@@ -717,8 +717,6 @@ function report(cause: unknown): void {
 	})
 }
 
-// The download leaves the page, so a refusal would show up as a bare error document. Ask first
-// and keep a refusal inside the panel.
 async function download(backup: QueueBackup): Promise<void> {
 	try {
 		await api.backups.checkDownload(serverId, backup.id)

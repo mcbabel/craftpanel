@@ -241,8 +241,6 @@ async fn share_log(
     Ok(Json(uploaded.link()))
 }
 
-// What the console shows is text the browser already has; it still goes out through the panel,
-// so the switch for outgoing calls holds and the log can be taken down again later.
 async fn share_text(
     State(state): State<AppState>,
     Extension(service): Extension<Arc<Console>>,
@@ -282,8 +280,6 @@ async fn list_shared(
     Ok(Json(shared::list(&state.pool, server).await?))
 }
 
-// Whoever shared a log may take it down, and so may the server's owner. A log mclo.gs gave
-// no token for can only leave the list; it expires there on its own.
 async fn delete_shared(
     State(state): State<AppState>,
     Extension(service): Extension<Arc<Console>>,

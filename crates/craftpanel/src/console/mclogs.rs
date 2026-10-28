@@ -87,8 +87,6 @@ pub struct SharedLog {
     pub raw: String,
 }
 
-/// What mclo.gs answers to an upload. The token deletes the log later and is shown only this
-/// once, so it is kept apart from [`SharedLog`], which is what the browser gets to see.
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
 pub struct Uploaded {
     pub id: String,
@@ -155,8 +153,6 @@ impl Mclogs {
         Ok(uploaded)
     }
 
-    /// Takes a log down. One that mclo.gs no longer has counts as gone: logs expire there on
-    /// their own, 90 days after they were last looked at.
     pub async fn delete(&self, id: &str, token: &str) -> Result<()> {
         if !is_log_id(id) {
             return Err(unavailable(format!("{id:?} is not a log of mclo.gs")));
@@ -257,7 +253,6 @@ fn read<T: serde::de::DeserializeOwned>(body: &[u8]) -> Result<T> {
         .map_err(|err| unavailable(format!("mclo.gs answered something unreadable: {err}")))
 }
 
-// The id ends up in a path; mclo.gs only ever hands out letters and digits.
 fn is_log_id(id: &str) -> bool {
     !id.is_empty() && id.len() <= 64 && id.bytes().all(|byte| byte.is_ascii_alphanumeric())
 }

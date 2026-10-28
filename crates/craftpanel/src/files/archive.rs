@@ -158,7 +158,6 @@ pub(super) fn failed(code: &str, step: OperationErrorStep, message: impl Into<St
     Halt::Failed(OperationError { code: code.to_owned(), message: message.into(), step })
 }
 
-// A missing helper is worth naming: it is a broken installation, not a fault in the archive.
 pub(super) fn not_handed_back(failure: &Failure) -> Halt {
     let code = match failure.code() {
         "helper_unavailable" => "helper_unavailable",

@@ -35,8 +35,6 @@ export type SetupChoice =
 	  }
 	| { kind: 'upload'; file: File; properties: PropertiesFields }
 
-// A picked pack travels in the navigation's history state rather than the address, so only a
-// click inside the panel can open the setup with it — never a link from elsewhere.
 const STATE_KEY = 'modpack'
 
 function text(value: unknown): string | null {
@@ -62,8 +60,6 @@ export function modpackFromState(state: unknown): ModpackPick | null {
 	}
 }
 
-// Takes the pick out of the current history entry, so a reload or a step back does not open
-// the setup a second time.
 export function takeModpackPick(): ModpackPick | null {
 	const state: unknown = window.history.state
 	const pick = modpackFromState(state)
