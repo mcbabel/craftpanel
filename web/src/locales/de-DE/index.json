@@ -2006,8 +2006,20 @@
   "craftpanel.backups.action-failed": {
     "defaultMessage": "Die Aktion wurde abgelehnt"
   },
-  "craftpanel.backups.at-hour": {
-    "defaultMessage": "Um (Stunde UTC)"
+  "craftpanel.backups.auto.configure": {
+    "defaultMessage": "Einstellen"
+  },
+  "craftpanel.backups.auto.next": {
+    "defaultMessage": "{frequency}, behält die neuesten {slots}. Nächste {time}"
+  },
+  "craftpanel.backups.auto.off": {
+    "defaultMessage": "Aus. Du kannst sie in den Sicherungseinstellungen einschalten."
+  },
+  "craftpanel.backups.auto.on": {
+    "defaultMessage": "{frequency}, behält die neuesten {slots}"
+  },
+  "craftpanel.backups.auto.title": {
+    "defaultMessage": "Automatische Sicherungen"
   },
   "craftpanel.backups.busy": {
     "defaultMessage": "Es läuft bereits eine Sicherung."
@@ -2060,9 +2072,6 @@
   "craftpanel.backups.empty-heading": {
     "defaultMessage": "Noch keine Sicherungen"
   },
-  "craftpanel.backups.every": {
-    "defaultMessage": "Alle (Stunden)"
-  },
   "craftpanel.backups.failed": {
     "defaultMessage": "Der letzte Versuch ist fehlgeschlagen"
   },
@@ -2075,23 +2084,17 @@
   "craftpanel.backups.filter-manual": {
     "defaultMessage": "Manuell"
   },
-  "craftpanel.backups.keep-last": {
-    "defaultMessage": "Letzte behalten"
-  },
   "craftpanel.backups.load-failed": {
     "defaultMessage": "Die Sicherungen konnten nicht geladen werden"
   },
-  "craftpanel.backups.next-run": {
-    "defaultMessage": "Nächster Lauf {time}"
+  "craftpanel.backups.manual-slots": {
+    "defaultMessage": "{used} von {total} Plätzen für manuelle Sicherungen belegt"
   },
   "craftpanel.backups.open-in-drive": {
     "defaultMessage": "In Google Drive öffnen"
   },
-  "craftpanel.backups.quota": {
-    "defaultMessage": "{used} von {total} belegt"
-  },
   "craftpanel.backups.quota-full": {
-    "defaultMessage": "Keine Sicherungsplätze mehr frei."
+    "defaultMessage": "Alle Plätze für manuelle Sicherungen sind belegt. Lösche eine oder ändere die Aufteilung in den Sicherungseinstellungen."
   },
   "craftpanel.backups.restore": {
     "defaultMessage": "Wiederherstellen"
@@ -2107,12 +2110,6 @@
   },
   "craftpanel.backups.retry-impossible": {
     "defaultMessage": "Ein neuer Versuch führt zu nichts, solange es kein Google Drive gibt, in das die Sicherung gehen kann."
-  },
-  "craftpanel.backups.schedule": {
-    "defaultMessage": "Sicherungszeitplan"
-  },
-  "craftpanel.backups.schedule-help": {
-    "defaultMessage": "Automatische Sicherungen laufen im Hintergrund und räumen hinter sich auf."
   },
   "craftpanel.backups.schedule-impossible": {
     "defaultMessage": "Eine automatische Sicherung lässt sich nicht einschalten, solange dieser Server kein Google Drive hat, in das er sichern kann — sie würde jedes Mal fehlschlagen."
@@ -3103,6 +3100,9 @@
   },
   "server.settings.tabs.advanced": {
     "defaultMessage": "Erweitert"
+  },
+  "server.settings.tabs.backups": {
+    "defaultMessage": "Sicherungen"
   },
   "server.settings.tabs.general": {
     "defaultMessage": "Allgemein"

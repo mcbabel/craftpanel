@@ -1,7 +1,18 @@
 import type { AbstractModrinthClient, Archon } from '@modrinth/api-client'
 import { injectModrinthClient, provideModrinthClient } from '@modrinth/ui'
 
-import { api, type Backup, type BackupOperation, isApiRequestError, type Ulid } from '@/api'
+import {
+	api,
+	type Backup,
+	type BackupOperation,
+	type BackupSchedule,
+	isApiRequestError,
+	type Ulid,
+} from '@/api'
+
+// Modrinth's backups settings tab offers at most this many slots. A larger quota is shown as
+// this window, and whatever lies beyond it stays with the manual backups.
+const SETTINGS_SLOT_WINDOW = 15
 
 function rethrow(cause: unknown): never {
 	if (isApiRequestError(cause)) throw new Error(`${cause.status} ${cause.code}: ${cause.message}`)
@@ -14,6 +25,17 @@ function toQueueOperation(operation: BackupOperation): Archon.BackupsQueue.v1.Ba
 
 function toQueueBackup(backup: Backup): Archon.BackupsQueue.v1.BackupQueueBackup {
 	return { ...backup, history: backup.history.map(toQueueOperation) }
+}
+
+export function toOptions(schedule: BackupSchedule): Archon.BackupsQueue.v1.WorldBackupOptions {
+	const window = Math.min(schedule.limit, SETTINGS_SLOT_WINDOW)
+	const automatic = Math.min(schedule.automatic_slots, window)
+	return {
+		limit: window,
+		split_automatic: automatic,
+		split_manual: window - automatic,
+		interval: schedule.interval_hours,
+	}
 }
 
 function buildModules(serverId: Ulid) {
@@ -33,19 +55,28 @@ function buildModules(serverId: Ulid) {
 		listWithOptions: async (): Promise<Archon.BackupsQueue.v1.BackupsQueueWithOptionsResponse> => {
 			const [queue, schedule] = await Promise.all([
 				listQueue(),
-				api.backups.schedule(serverId).catch(() => null),
+				api.backups.schedule(serverId).catch(rethrow),
 			])
-			const enabled = schedule?.enabled === true
 			return {
 				...queue,
-				options: {
-					split_automatic: enabled ? schedule.keep_last : 0,
-					split_manual: 0,
-					limit: 0,
-					interval: enabled ? schedule.interval_hours : 0,
-				},
-				next_auto_backup_at: enabled ? schedule.next_run_at : null,
+				options: toOptions(schedule),
+				next_auto_backup_at: schedule.automatic_slots > 0 ? schedule.next_run_at : null,
 			}
+		},
+		patchOptions: async (
+			_serverId: string,
+			_worldId: string,
+			patch: Archon.BackupsQueue.v1.PatchWorldBackupOptions,
+			acknowledgeRotation = false,
+		): Promise<Archon.BackupsQueue.v1.PatchWorldBackupOptionsResponse> => {
+			const update = await api.backups
+				.setSchedule(
+					serverId,
+					{ automatic_slots: patch.split_automatic, interval_hours: patch.interval },
+					acknowledgeRotation ? { acknowledge_rotation: true } : {},
+				)
+				.catch(rethrow)
+			return { applied: update.applied, backup_ids: update.backup_ids }
 		},
 		create: (_serverId: string, _worldId: string, request: { name: string }) =>
 			api.backups.create(serverId, request).catch(rethrow),

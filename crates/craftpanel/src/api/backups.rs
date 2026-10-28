@@ -14,8 +14,8 @@ use crate::audit::{self, Event};
 use crate::auth::error::{Failure, Result};
 use crate::auth::{access, extract, Caller, JsonBody};
 use crate::backups::{
-    BackupListResponse, Backups, BulkFailure, Download, RestoreAccepted, RetryAccepted,
-    UpdateBackupScheduleRequest,
+    BackupListResponse, BackupScheduleUpdate, Backups, BulkFailure, Download, RestoreAccepted,
+    RetryAccepted, UpdateBackupScheduleRequest,
 };
 use crate::model::{
     Backup, BackupSchedule, BackupTarget, Id, Permission, UpdateBackupTargetRequest,
@@ -45,6 +45,11 @@ struct RetryQuery {
 }
 
 #[derive(Deserialize)]
+struct ScheduleQuery {
+    acknowledge_rotation: Option<String>,
+}
+
+#[derive(Deserialize)]
 struct BulkDeleteBackupsRequest {
     backup_ids: Vec<Id>,
 }
@@ -58,7 +63,7 @@ struct BulkDeleteBackupsResponse {
 pub fn router(backups: Arc<Backups>) -> Router<AppState> {
     Router::new()
         .route("/servers/{server}/backups", get(list).post(create))
-        .route("/servers/{server}/backups/schedule", get(read_schedule).put(write_schedule))
+        .route("/servers/{server}/backups/schedule", get(read_schedule).patch(write_schedule))
         .route("/servers/{server}/backups/bulk-delete", post(bulk_delete))
         .route("/servers/{server}/backups/target", get(read_target).put(write_target))
         .route("/servers/{server}/backups/{backup}", patch(rename).delete(remove))
@@ -185,18 +190,18 @@ async fn retry(
     extract::Params(query): extract::Params<RetryQuery>,
 ) -> Result<(StatusCode, Json<RetryAccepted>)> {
     access::require(&state.pool, &caller, server, Permission::Backups).await?;
-    let warned = acknowledgement(query.acknowledge_abuse.as_deref())?;
+    let warned = yes_or_no("acknowledge_abuse", query.acknowledge_abuse.as_deref())?;
     let accepted = backups.retry(server, backup, caller.id(), warned).await?;
     Ok((StatusCode::ACCEPTED, Json(accepted)))
 }
 
-fn acknowledgement(said: Option<&str>) -> Result<bool> {
+fn yes_or_no(name: &str, said: Option<&str>) -> Result<bool> {
     match said {
         None | Some("false") => Ok(false),
         Some("true") => Ok(true),
         Some(_) => Err(Failure::bad_request(
             "invalid_request",
-            "acknowledge_abuse is either true or false",
+            format!("{name} is either true or false"),
         )),
     }
 }
@@ -237,10 +242,18 @@ async fn write_schedule(
     Extension(backups): Extension<Arc<Backups>>,
     caller: Caller,
     Route(server): Route<Id>,
+    extract::Params(query): extract::Params<ScheduleQuery>,
     JsonBody(body): JsonBody<UpdateBackupScheduleRequest>,
-) -> Result<Json<BackupSchedule>> {
-    access::require(&state.pool, &caller, server, Permission::Backups).await?;
-    Ok(Json(backups.write_schedule(server, body).await?))
+) -> Result<Json<BackupScheduleUpdate>> {
+    let access = access::require(&state.pool, &caller, server, Permission::Backups).await?;
+    let acknowledged = yes_or_no("acknowledge_rotation", query.acknowledge_rotation.as_deref())?;
+    let update = backups.update_schedule(server, body, acknowledged).await?;
+    if update.applied {
+        for backup in update.backup_ids.iter().copied() {
+            audit::record(&state.pool, access, &caller, Event::BackupDeleted { backup }).await;
+        }
+    }
+    Ok(Json(update))
 }
 
 async fn read_target(
@@ -473,9 +486,7 @@ mod tests {
         let viewer = panel.a_member("vera", ServerRole::Viewer).await;
         let body_for = |path: &str, backup: Id| {
             if path.ends_with("/schedule") {
-                serde_json::json!({
-                    "enabled": false, "interval_hours": 24, "hour_utc": 4, "keep_last": 5
-                })
+                serde_json::json!({ "automatic_slots": 0, "interval_hours": 24 })
             } else if path.ends_with("/bulk-delete") {
                 serde_json::json!({ "backup_ids": [backup.to_string()] })
             } else {
@@ -487,7 +498,7 @@ mod tests {
             ("GET", panel.path(""), StatusCode::OK),
             ("GET", panel.path("/schedule"), StatusCode::OK),
             ("POST", panel.path(""), StatusCode::FORBIDDEN),
-            ("PUT", panel.path("/schedule"), StatusCode::FORBIDDEN),
+            ("PATCH", panel.path("/schedule"), StatusCode::FORBIDDEN),
             ("POST", panel.path("/bulk-delete"), StatusCode::FORBIDDEN),
             ("PATCH", panel.path(&format!("/{backup}")), StatusCode::FORBIDDEN),
             ("DELETE", panel.path(&format!("/{backup}")), StatusCode::FORBIDDEN),
@@ -568,7 +579,8 @@ mod tests {
         assert_eq!(answer.status(), StatusCode::OK, "1.3: a static segment wins over a ULID");
 
         let body = body_json(answer).await;
-        assert_eq!(body["enabled"], false, "the default is off");
+        assert_eq!(body["automatic_slots"], 0, "the default is off");
+        assert_eq!(body["manual_slots"], body["limit"], "so every slot is a manual one");
         assert_eq!(body["interval_hours"], 24);
         assert!(body["next_run_at"].is_null());
     }
@@ -576,23 +588,67 @@ mod tests {
     #[tokio::test]
     async fn the_schedule_is_written_back_with_the_next_time_worked_out() {
         let panel = panel().await;
-        let wanted = serde_json::json!({
-            "enabled": true, "interval_hours": 24, "hour_utc": 4, "keep_last": 3
-        });
-        let answer = panel.call(send("PUT", &panel.path("/schedule"), wanted)).await;
+        let wanted = serde_json::json!({ "automatic_slots": 3, "interval_hours": 24 });
+        let answer = panel.call(send("PATCH", &panel.path("/schedule"), wanted)).await;
         assert_eq!(answer.status(), StatusCode::OK);
         let body = body_json(answer).await;
-        assert_eq!(body["keep_last"], 3);
-        assert!(body["next_run_at"].as_str().expect("a time").ends_with("04:00:00Z"));
+        assert_eq!(body["applied"], true);
+        assert_eq!(body["schedule"]["automatic_slots"], 3);
+        assert_eq!(body["schedule"]["manual_slots"], 7, "the other seven of the ten");
+        let next = body["schedule"]["next_run_at"].as_str().expect("a time");
+        assert!(next.ends_with("04:00:00Z"), "{next}");
 
-        let over = serde_json::json!({
-            "enabled": true, "interval_hours": 500, "hour_utc": 4, "keep_last": 3
-        });
-        let refused = panel.call(send("PUT", &panel.path("/schedule"), over)).await;
+        let over = serde_json::json!({ "interval_hours": 500 });
+        let refused = panel.call(send("PATCH", &panel.path("/schedule"), over)).await;
         assert_eq!(refused.status(), StatusCode::BAD_REQUEST);
         let body = body_json(refused).await;
         assert_eq!(body["error"], "invalid_schedule");
         assert!(body["message"].as_str().expect("a text").contains("interval_hours"));
+
+        let unknown = serde_json::json!({ "keep_last": 3 });
+        let refused = panel.call(send("PATCH", &panel.path("/schedule"), unknown)).await;
+        assert_eq!(refused.status(), StatusCode::BAD_REQUEST);
+    }
+
+    #[tokio::test]
+    async fn fewer_automatic_slots_name_what_would_go_and_take_it_only_when_told() {
+        let panel = panel().await;
+        panel.file("world/level.dat", b"a world");
+        let wanted = serde_json::json!({ "automatic_slots": 3 });
+        panel.call(send("PATCH", &panel.path("/schedule"), wanted)).await;
+        let mut automatic = Vec::new();
+        for index in 0..2 {
+            let queued = panel
+                .backups
+                .create(panel.server, &format!("auto {index}"), None, true)
+                .await
+                .expect("an automatic backup");
+            panel.backups.run(queued.operation).await;
+            automatic.push(queued.backup);
+        }
+
+        let fewer = serde_json::json!({ "automatic_slots": 1 });
+        let asked = panel.call(send("PATCH", &panel.path("/schedule"), fewer.clone())).await;
+        assert_eq!(asked.status(), StatusCode::OK);
+        let body = body_json(asked).await;
+        assert_eq!(body["applied"], false);
+        assert_eq!(body["backup_ids"], serde_json::json!([automatic[0].to_string()]));
+        assert_eq!(body["schedule"]["automatic_slots"], 3, "nothing was saved yet");
+
+        let path = format!("{}?acknowledge_rotation=true", panel.path("/schedule"));
+        let told = panel.call(send("PATCH", &path, fewer)).await;
+        let body = body_json(told).await;
+        assert_eq!(body["applied"], true);
+        assert_eq!(body["schedule"]["automatic_slots"], 1);
+        assert_eq!(body["schedule"]["automatic_used"], 1);
+
+        let deleted: Vec<String> = sqlx::query_scalar(
+            "SELECT json_extract(metadata, '$.id') FROM audit_log WHERE action = 'backup_deleted'",
+        )
+        .fetch_all(&panel.pool)
+        .await
+        .expect("the log");
+        assert_eq!(deleted, vec![automatic[0].to_string()]);
     }
 
     #[tokio::test]

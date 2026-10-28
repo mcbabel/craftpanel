@@ -4,7 +4,7 @@ use std::time::Duration;
 use crate::auth::error::{Failure, Result};
 use crate::model::{BackupSchedule, BackupScheduleStatus, Id, Timestamp};
 
-use super::store;
+use super::store::{self, Schedule};
 use super::Backups;
 
 const TICK: Duration = Duration::from_secs(60);
@@ -12,52 +12,69 @@ const TICK: Duration = Duration::from_secs(60);
 pub const MIN_INTERVAL: u32 = 1;
 pub const MAX_INTERVAL: u32 = 168;
 
-#[derive(Debug, Clone, serde::Deserialize)]
+#[derive(Debug, Clone, Default, serde::Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct UpdateBackupScheduleRequest {
-    pub enabled: bool,
-    pub interval_hours: u32,
-    pub hour_utc: u8,
-    pub keep_last: u32,
+    pub automatic_slots: Option<u32>,
+    pub interval_hours: Option<u32>,
+    pub hour_utc: Option<u8>,
+}
+
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct BackupScheduleUpdate {
+    pub applied: bool,
+    pub backup_ids: Vec<Id>,
+    pub schedule: BackupSchedule,
 }
 
 impl UpdateBackupScheduleRequest {
-    pub fn check(&self, max_backups: u32) -> Result<()> {
+    pub fn check(&self, quota: u32) -> Result<()> {
         let refuse = |message: String| Err(Failure::bad_request("invalid_schedule", message));
-        if !(MIN_INTERVAL..=MAX_INTERVAL).contains(&self.interval_hours) {
-            return refuse(format!(
-                "interval_hours is {} and has to be between {MIN_INTERVAL} and {MAX_INTERVAL}",
-                self.interval_hours
-            ));
+        if let Some(hours) = self.interval_hours {
+            if !(MIN_INTERVAL..=MAX_INTERVAL).contains(&hours) {
+                return refuse(format!(
+                    "interval_hours is {hours} and has to be between {MIN_INTERVAL} and \
+                     {MAX_INTERVAL}"
+                ));
+            }
         }
-        if self.hour_utc > 23 {
-            return refuse(format!("hour_utc is {} and has to be between 0 and 23", self.hour_utc));
+        if let Some(hour) = self.hour_utc {
+            if hour > 23 {
+                return refuse(format!("hour_utc is {hour} and has to be between 0 and 23"));
+            }
         }
-        if self.keep_last < 1 || self.keep_last > store::MAX_QUOTA {
-            return refuse(format!(
-                "keep_last is {} and has to be between 1 and {}",
-                self.keep_last,
-                store::MAX_QUOTA
-            ));
-        }
-        if self.keep_last > max_backups {
-            return refuse(format!(
-                "keep_last is {} and cannot be more than the quota of {max_backups}",
-                self.keep_last
-            ));
+        if let Some(slots) = self.automatic_slots {
+            if slots > quota {
+                return refuse(format!(
+                    "automatic_slots is {slots} and cannot be more than the quota of {quota}"
+                ));
+            }
         }
         Ok(())
     }
 
-    pub fn into_schedule(self, next_run_at: Option<Timestamp>) -> BackupSchedule {
-        BackupSchedule {
-            enabled: self.enabled,
-            interval_hours: self.interval_hours,
-            hour_utc: self.hour_utc,
-            keep_last: self.keep_last,
+    fn apply_to(&self, current: &Schedule, now: Timestamp) -> Schedule {
+        let slots = self
+            .automatic_slots
+            .unwrap_or(if current.enabled { current.keep_last } else { 0 });
+        let enabled = slots > 0;
+        let interval_hours = self.interval_hours.unwrap_or(current.interval_hours);
+        let hour_utc = self.hour_utc.unwrap_or(current.hour_utc);
+        let timing_kept = current.enabled
+            && interval_hours == current.interval_hours
+            && hour_utc == current.hour_utc;
+        let next_run_at = match (enabled, timing_kept, current.next_run_at) {
+            (false, _, _) => None,
+            (true, true, Some(next)) => Some(next),
+            (true, _, _) => Some(next_after(now, interval_hours, hour_utc)),
+        };
+        Schedule {
+            enabled,
+            interval_hours,
+            hour_utc,
+            keep_last: if enabled { slots } else { current.keep_last },
             next_run_at,
-            last_run_at: None,
-            last_status: None,
-            last_error: None,
+            ..current.clone()
         }
     }
 }
@@ -78,6 +95,70 @@ pub fn next_after(from: Timestamp, interval_hours: u32, hour_utc: u8) -> Timesta
 }
 
 impl Backups {
+    pub async fn schedule(&self, server: Id) -> Result<BackupSchedule> {
+        let stored = store::schedule(self.pool(), server).await?;
+        self.describe(server, stored).await
+    }
+
+    async fn describe(&self, server: Id, stored: Schedule) -> Result<BackupSchedule> {
+        let limit = store::quota(self.pool()).await?;
+        let automatic_slots = stored.automatic_slots(limit);
+        Ok(BackupSchedule {
+            limit,
+            automatic_slots,
+            manual_slots: limit - automatic_slots,
+            automatic_used: store::count_of_kind(self.pool(), server, true).await?,
+            manual_used: store::count_of_kind(self.pool(), server, false).await?,
+            interval_hours: stored.interval_hours,
+            hour_utc: stored.hour_utc,
+            next_run_at: stored.next_run_at,
+            last_run_at: stored.last_run_at,
+            last_status: stored.last_status,
+            last_error: stored.last_error,
+        })
+    }
+
+    pub async fn manual_slots(&self, server: Id) -> Result<u32> {
+        let quota = store::quota(self.pool()).await?;
+        let stored = store::schedule(self.pool(), server).await?;
+        Ok(quota - stored.automatic_slots(quota))
+    }
+
+    /// Fewer automatic slots than there are automatic backups rotates the oldest ones away,
+    /// which is only done once the caller has seen which ones and said yes.
+    pub async fn update_schedule(
+        self: &Arc<Self>,
+        server: Id,
+        wanted: UpdateBackupScheduleRequest,
+        acknowledge_rotation: bool,
+    ) -> Result<BackupScheduleUpdate> {
+        let quota = store::quota(self.pool()).await?;
+        wanted.check(quota)?;
+        let current = store::schedule(self.pool(), server).await?;
+        let next = wanted.apply_to(&current, Timestamp::now());
+        let slots = next.automatic_slots(quota);
+        if next.enabled && !current.enabled {
+            self.drive().guard_reachable(server).await?;
+        }
+
+        let doomed = store::automatic_over(self.pool(), server, slots).await?;
+        if !doomed.is_empty() && !acknowledge_rotation {
+            return Ok(BackupScheduleUpdate {
+                applied: false,
+                backup_ids: doomed,
+                schedule: self.describe(server, current).await?,
+            });
+        }
+
+        let saved = store::save_schedule(self.pool(), server, &next).await?;
+        let rotated = self.prune(server, slots).await?;
+        Ok(BackupScheduleUpdate {
+            applied: true,
+            backup_ids: rotated,
+            schedule: self.describe(server, saved).await?,
+        })
+    }
+
     pub async fn tick(self: &Arc<Self>, now: Timestamp) -> Vec<(Id, BackupScheduleStatus)> {
         let due = match store::due(self.pool(), now).await {
             Ok(due) => due,
@@ -114,7 +195,10 @@ impl Backups {
             }
         };
 
-        if store::count(self.pool(), server).await? >= store::quota(self.pool()).await? {
+        let quota = store::quota(self.pool()).await?;
+        let manual = store::count_of_kind(self.pool(), server, false).await?;
+        let room = schedule.automatic_slots(quota).min(quota.saturating_sub(manual));
+        if room == 0 {
             settle(BackupScheduleStatus::SkippedLimit, None).await?;
             return Ok(BackupScheduleStatus::SkippedLimit);
         }
@@ -141,7 +225,7 @@ impl Backups {
         settle(status, error).await?;
 
         if status == BackupScheduleStatus::Completed {
-            self.prune(server, schedule.keep_last).await?;
+            self.prune(server, room).await?;
         }
         Ok(status)
     }
@@ -161,17 +245,17 @@ impl Backups {
         Ok(Timestamp::at(newest.into()) > finished)
     }
 
-    pub async fn prune(self: &Arc<Self>, server: Id, keep_last: u32) -> Result<usize> {
-        let doomed = store::automatic_over(self.pool(), server, keep_last).await?;
-        let mut gone = 0;
+    pub async fn prune(self: &Arc<Self>, server: Id, keep: u32) -> Result<Vec<Id>> {
+        let doomed = store::automatic_over(self.pool(), server, keep).await?;
+        let mut gone = Vec::new();
         for backup in doomed {
             if store::is_busy(self.pool(), backup).await? {
                 continue;
             }
             self.forget(server, backup).await?;
-            gone += 1;
+            gone.push(backup);
         }
-        if gone > 0 {
+        if !gone.is_empty() {
             self.announce(server).await;
         }
         Ok(gone)
@@ -225,28 +309,57 @@ mod tests {
 
     #[test]
     fn the_three_limits_of_10_10_name_the_field_they_are_about() {
-        let good = |interval, hour, keep| UpdateBackupScheduleRequest {
-            enabled: true,
-            interval_hours: interval,
-            hour_utc: hour,
-            keep_last: keep,
+        let good = |interval, hour, slots| UpdateBackupScheduleRequest {
+            automatic_slots: Some(slots),
+            interval_hours: Some(interval),
+            hour_utc: Some(hour),
         };
         assert!(good(24, 4, 5).check(10).is_ok());
+        assert!(good(24, 4, 0).check(10).is_ok(), "no automatic slots is how it is switched off");
+        assert!(UpdateBackupScheduleRequest::default().check(10).is_ok(), "nothing to change");
 
         for (request, field) in [
             (good(0, 4, 5), "interval_hours"),
             (good(169, 4, 5), "interval_hours"),
             (good(24, 24, 5), "hour_utc"),
-            (good(24, 4, 0), "keep_last"),
-            (good(24, 4, 51), "keep_last"),
+            (good(24, 4, 11), "automatic_slots"),
         ] {
-            let refused = request.check(50).expect_err("out of bounds");
+            let refused = request.check(10).expect_err("out of bounds");
             assert_eq!(refused.code(), "invalid_schedule");
             assert!(format!("{refused}").contains(field), "{refused} should name {field}");
         }
+    }
 
-        let over_quota = good(24, 4, 20).check(10).expect_err("keep_last above the quota");
-        assert!(format!("{over_quota}").contains("quota"));
+    #[test]
+    fn the_next_run_moves_only_when_the_timing_does() {
+        let now = at("2026-08-12T02:00:00Z");
+        let running = Schedule {
+            enabled: true,
+            interval_hours: 24,
+            hour_utc: 4,
+            keep_last: 5,
+            next_run_at: Some(at("2026-08-12T04:00:00Z")),
+            last_run_at: None,
+            last_status: None,
+            last_error: None,
+        };
+
+        let more_slots =
+            UpdateBackupScheduleRequest { automatic_slots: Some(8), ..Default::default() };
+        let kept = more_slots.apply_to(&running, at("2026-08-12T03:59:00Z"));
+        assert_eq!(kept.keep_last, 8);
+        assert_eq!(kept.next_run_at, running.next_run_at);
+
+        let shorter = UpdateBackupScheduleRequest { interval_hours: Some(6), ..Default::default() };
+        let moved = shorter.apply_to(&running, now);
+        assert_eq!(moved.next_run_at, Some(at("2026-08-12T08:00:00Z")));
+
+        let off = UpdateBackupScheduleRequest { automatic_slots: Some(0), ..Default::default() };
+        let stopped = off.apply_to(&running, now);
+        assert!(!stopped.enabled);
+        assert_eq!(stopped.next_run_at, None);
+        assert_eq!(stopped.keep_last, 5, "the column keeps a number it may hold");
+        assert_eq!(stopped.automatic_slots(10), 0);
     }
 
     #[tokio::test]
@@ -320,7 +433,7 @@ mod tests {
         assert_eq!(game.backup_rows().await, 4, "one by hand and three automatic ones");
 
         let gone = game.backups.prune(game.server, 1).await.expect("a prune");
-        assert_eq!(gone, 2);
+        assert_eq!(gone.len(), 2);
 
         let left = game.backups.list(game.server).await.expect("a list");
         assert_eq!(left.backups.len(), 2);
@@ -387,14 +500,125 @@ mod tests {
         assert_eq!(game.backup_rows().await, 1);
     }
 
-    async fn enable(game: &FakeServer, interval_hours: u32, keep_last: u32) {
+    #[tokio::test]
+    async fn manual_backups_only_get_the_slots_the_automatic_ones_leave() {
+        let game = FakeServer::stopped().await;
+        game.file("world/level.dat", b"a world");
+        game.set_quota(3).await;
+        enable(&game, 24, 2).await;
+
+        let schedule = game.backups.schedule(game.server).await.expect("a schedule");
+        assert_eq!((schedule.automatic_slots, schedule.manual_slots), (2, 1));
+
+        let made = game.backups.request(game.server, "mine", game.owner).await.expect("one fits");
+        game.await_backup(made.id).await;
+        let refused = game
+            .backups
+            .request(game.server, "and another", game.owner)
+            .await
+            .expect_err("the one manual slot is taken");
+        assert_eq!(refused.code(), "backup_limit_reached");
+        assert!(format!("{refused}").contains("manual"), "{refused}");
+    }
+
+    #[tokio::test]
+    async fn full_automatic_slots_rotate_the_oldest_away_instead_of_stopping() {
+        let game = FakeServer::stopped().await;
+        game.file("world/level.dat", b"a world");
+        game.set_quota(3).await;
+        let by_hand = game.a_finished_backup("mine").await;
+        enable(&game, 1, 2).await;
+
+        let mut made = Vec::new();
+        for round in 0..3 {
+            if round > 0 {
+                tokio::time::sleep(std::time::Duration::from_millis(1100)).await;
+                game.file(&format!("world/region/r.{round}.0.mca"), b"new chunks");
+                due_now(&game).await;
+            }
+            assert_eq!(
+                game.backups.tick(Timestamp::now()).await,
+                vec![(game.server, BackupScheduleStatus::Completed)],
+                "round {round}"
+            );
+            let list = game.backups.list(game.server).await.expect("a list");
+            made.push(list.backups.iter().find(|backup| backup.automated).expect("one").id);
+        }
+
+        let left = game.backups.list(game.server).await.expect("a list");
+        let ids: Vec<Id> = left.backups.iter().map(|backup| backup.id).collect();
+        assert_eq!(ids.len(), 3, "two automatic ones and the one by hand");
+        assert!(ids.contains(&by_hand));
+        assert!(!ids.contains(&made[0]), "the oldest automatic one made room");
+        assert!(ids.contains(&made[1]) && ids.contains(&made[2]));
+    }
+
+    #[tokio::test]
+    async fn fewer_automatic_slots_ask_before_anything_is_deleted() {
+        let game = FakeServer::stopped().await;
+        game.file("world/level.dat", b"a world");
+        enable(&game, 24, 3).await;
+        let mut automatic = Vec::new();
+        for index in 0..3 {
+            let queued = game
+                .backups
+                .create(game.server, &format!("auto {index}"), None, true)
+                .await
+                .expect("an automatic backup");
+            game.backups.run(queued.operation).await;
+            automatic.push(queued.backup);
+        }
+
+        let off = UpdateBackupScheduleRequest { automatic_slots: Some(1), ..Default::default() };
+        let asked =
+            game.backups.update_schedule(game.server, off.clone(), false).await.expect("an answer");
+        assert!(!asked.applied);
+        assert_eq!(asked.backup_ids, vec![automatic[1], automatic[0]]);
+        assert_eq!(game.backup_rows().await, 3);
+        assert_eq!(asked.schedule.automatic_slots, 3);
+
+        let told = game.backups.update_schedule(game.server, off, true).await.expect("an answer");
+        assert!(told.applied);
+        assert_eq!(told.backup_ids, vec![automatic[1], automatic[0]]);
+        assert_eq!(game.backup_rows().await, 1);
+        assert_eq!(told.schedule.automatic_slots, 1);
+    }
+
+    #[tokio::test]
+    async fn automatic_backups_are_not_switched_on_while_there_is_no_drive_to_put_them_in() {
+        let game = FakeServer::stopped().await;
+        crate::drive::harness::with_credentials(&game.drive).await;
+        game.drive
+            .save(
+                Some("1234.apps.googleusercontent.com".to_owned()),
+                crate::drive::SecretChange::Keep,
+                crate::model::BackupTargetPolicy::DriveOnly,
+                "craftpanel-backups".to_owned(),
+                Timestamp::now(),
+            )
+            .await
+            .expect("drive only");
+
+        let on = UpdateBackupScheduleRequest { automatic_slots: Some(3), ..Default::default() };
+        let refused = game
+            .backups
+            .update_schedule(game.server, on, true)
+            .await
+            .expect_err("every run would fail");
+        assert_eq!(refused.code(), "drive_not_connected");
+        let schedule = game.backups.schedule(game.server).await.expect("a schedule");
+        assert_eq!(schedule.automatic_slots, 0);
+    }
+
+    async fn enable(game: &FakeServer, interval_hours: u32, automatic_slots: u32) {
         let wanted = UpdateBackupScheduleRequest {
-            enabled: true,
-            interval_hours,
-            hour_utc: 4,
-            keep_last: keep_last.max(1),
+            automatic_slots: Some(automatic_slots.max(1)),
+            interval_hours: Some(interval_hours),
+            hour_utc: Some(4),
         };
-        game.backups.write_schedule(game.server, wanted).await.expect("a schedule");
+        let update =
+            game.backups.update_schedule(game.server, wanted, true).await.expect("a schedule");
+        assert!(update.applied);
         due_now(game).await;
     }
 

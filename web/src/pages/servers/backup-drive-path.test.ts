@@ -57,10 +57,6 @@ const TRIGGERS: { what: string; lock: string }[] = [
 		what: 'Retry a failed one',
 		lock: 'const retryDisabled = computed(() => !canManageBackups.value || cannotBackUp.value)',
 	},
-	{
-		what: 'Switch the schedule on — switching it off stays possible',
-		lock: '(cannotBackUp.value && !schedule.value.enabled)',
-	},
 ]
 
 function collapsed(source: string): string {

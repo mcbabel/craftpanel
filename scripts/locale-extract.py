@@ -29,6 +29,7 @@ EXTRA = {
     "server.settings.tabs.general": "General",
     "server.settings.tabs.installation": "Installation",
     "server.settings.tabs.network": "Network",
+    "server.settings.tabs.backups": "Backups",
     "server.settings.tabs.properties": "Properties",
     "server.settings.tabs.advanced": "Advanced",
 }

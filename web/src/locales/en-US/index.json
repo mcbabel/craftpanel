@@ -2006,8 +2006,20 @@
   "craftpanel.backups.action-failed": {
     "defaultMessage": "The action was refused"
   },
-  "craftpanel.backups.at-hour": {
-    "defaultMessage": "At (hour UTC)"
+  "craftpanel.backups.auto.configure": {
+    "defaultMessage": "Configure"
+  },
+  "craftpanel.backups.auto.next": {
+    "defaultMessage": "{frequency}, keeps the newest {slots}. Next one {time}"
+  },
+  "craftpanel.backups.auto.off": {
+    "defaultMessage": "Off. Turn them on in the backup settings."
+  },
+  "craftpanel.backups.auto.on": {
+    "defaultMessage": "{frequency}, keeps the newest {slots}"
+  },
+  "craftpanel.backups.auto.title": {
+    "defaultMessage": "Auto backups"
   },
   "craftpanel.backups.busy": {
     "defaultMessage": "A backup is already running."
@@ -2060,9 +2072,6 @@
   "craftpanel.backups.empty-heading": {
     "defaultMessage": "No backups yet"
   },
-  "craftpanel.backups.every": {
-    "defaultMessage": "Every (hours)"
-  },
   "craftpanel.backups.failed": {
     "defaultMessage": "The last attempt failed"
   },
@@ -2075,23 +2084,17 @@
   "craftpanel.backups.filter-manual": {
     "defaultMessage": "Manual"
   },
-  "craftpanel.backups.keep-last": {
-    "defaultMessage": "Keep last"
-  },
   "craftpanel.backups.load-failed": {
     "defaultMessage": "Failed to load the backups"
   },
-  "craftpanel.backups.next-run": {
-    "defaultMessage": "Next run {time}"
+  "craftpanel.backups.manual-slots": {
+    "defaultMessage": "{used} of {total} manual backup slots used"
   },
   "craftpanel.backups.open-in-drive": {
     "defaultMessage": "Open in Google Drive"
   },
-  "craftpanel.backups.quota": {
-    "defaultMessage": "{used} of {total} used"
-  },
   "craftpanel.backups.quota-full": {
-    "defaultMessage": "No backup slots left."
+    "defaultMessage": "All manual backup slots are taken. Delete one or change the split in the backup settings."
   },
   "craftpanel.backups.restore": {
     "defaultMessage": "Restore"
@@ -2107,12 +2110,6 @@
   },
   "craftpanel.backups.retry-impossible": {
     "defaultMessage": "A new attempt cannot get anywhere until there is a Google Drive to put it in."
-  },
-  "craftpanel.backups.schedule": {
-    "defaultMessage": "Backup schedule"
-  },
-  "craftpanel.backups.schedule-help": {
-    "defaultMessage": "Automatic backups run in the background and clean up after themselves."
   },
   "craftpanel.backups.schedule-impossible": {
     "defaultMessage": "An automatic backup cannot be switched on while this server has no Google Drive to back up into — it would fail every time."
@@ -3103,6 +3100,9 @@
   },
   "server.settings.tabs.advanced": {
     "defaultMessage": "Advanced"
+  },
+  "server.settings.tabs.backups": {
+    "defaultMessage": "Backups"
   },
   "server.settings.tabs.general": {
     "defaultMessage": "General"

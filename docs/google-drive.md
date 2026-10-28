@@ -95,8 +95,8 @@ before connecting.
 | Backups per server | The panel setting counts Drive backups as well. |
 | Disk space limit | Drive backups do not count. The archive is built locally first, so the space is needed briefly. |
 
-Automatic backup schedules work the same for both targets; old automatic Drive backups are deleted
-from Drive.
+Automatic backups work the same for both targets; when their slots are full, the oldest automatic
+Drive backup is deleted from Drive.
 
 ## Troubleshooting
 

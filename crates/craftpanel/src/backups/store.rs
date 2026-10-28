@@ -3,7 +3,7 @@ use sqlx::SqlitePool;
 use crate::auth::error::{Failure, Result};
 use crate::model::{
     AlwaysFalse, Backup, BackupActiveOperation, BackupLocation, BackupOperation,
-    BackupOperationState, BackupOperationType, BackupSchedule, BackupScheduleStatus, BackupStatus,
+    BackupOperationState, BackupOperationType, BackupScheduleStatus, BackupStatus,
     DriveFileState, Id, OperationKind, OperationState, Timestamp, UserRef,
 };
 
@@ -248,6 +248,16 @@ pub async fn count(pool: &SqlitePool, server: Id) -> Result<u32> {
     Ok(count as u32)
 }
 
+pub async fn count_of_kind(pool: &SqlitePool, server: Id, automated: bool) -> Result<u32> {
+    let count: i64 =
+        sqlx::query_scalar("SELECT count(*) FROM backups WHERE server_id = ? AND automated = ?")
+            .bind(server)
+            .bind(automated)
+            .fetch_one(pool)
+            .await?;
+    Ok(count as u32)
+}
+
 pub async fn quota(pool: &SqlitePool) -> Result<u32> {
     let quota: i64 =
         sqlx::query_scalar("SELECT max_backups_per_server FROM panel_settings WHERE id = 1")
@@ -374,6 +384,28 @@ pub async fn newest_manual_request(pool: &SqlitePool, server: Id) -> Result<Opti
     .flatten())
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Schedule {
+    pub enabled: bool,
+    pub interval_hours: u32,
+    pub hour_utc: u8,
+    pub keep_last: u32,
+    pub next_run_at: Option<Timestamp>,
+    pub last_run_at: Option<Timestamp>,
+    pub last_status: Option<BackupScheduleStatus>,
+    pub last_error: Option<String>,
+}
+
+impl Schedule {
+    pub fn automatic_slots(&self, quota: u32) -> u32 {
+        if self.enabled {
+            self.keep_last.min(quota)
+        } else {
+            0
+        }
+    }
+}
+
 #[derive(Debug, Clone, sqlx::FromRow)]
 struct ScheduleRow {
     enabled: bool,
@@ -386,7 +418,7 @@ struct ScheduleRow {
     last_error: Option<String>,
 }
 
-impl From<ScheduleRow> for BackupSchedule {
+impl From<ScheduleRow> for Schedule {
     fn from(row: ScheduleRow) -> Self {
         Self {
             enabled: row.enabled,
@@ -401,7 +433,7 @@ impl From<ScheduleRow> for BackupSchedule {
     }
 }
 
-pub async fn schedule(pool: &SqlitePool, server: Id) -> Result<BackupSchedule> {
+pub async fn schedule(pool: &SqlitePool, server: Id) -> Result<Schedule> {
     let row: Option<ScheduleRow> = sqlx::query_as(
         "SELECT enabled, interval_hours, hour_utc, keep_last, next_run_at, last_run_at, \
                 last_status, last_error FROM backup_schedules WHERE server_id = ?",
@@ -410,7 +442,7 @@ pub async fn schedule(pool: &SqlitePool, server: Id) -> Result<BackupSchedule> {
     .fetch_optional(pool)
     .await?;
 
-    Ok(row.map(BackupSchedule::from).unwrap_or(BackupSchedule {
+    Ok(row.map(Schedule::from).unwrap_or(Schedule {
         enabled: false,
         interval_hours: 24,
         hour_utc: 4,
@@ -422,11 +454,7 @@ pub async fn schedule(pool: &SqlitePool, server: Id) -> Result<BackupSchedule> {
     }))
 }
 
-pub async fn save_schedule(
-    pool: &SqlitePool,
-    server: Id,
-    wanted: &BackupSchedule,
-) -> Result<BackupSchedule> {
+pub async fn save_schedule(pool: &SqlitePool, server: Id, wanted: &Schedule) -> Result<Schedule> {
     sqlx::query(
         "INSERT INTO backup_schedules \
              (server_id, enabled, interval_hours, hour_utc, keep_last, next_run_at) \

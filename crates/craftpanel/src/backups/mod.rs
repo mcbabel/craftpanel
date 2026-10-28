@@ -18,14 +18,14 @@ use crate::auth::error::{Failure, Result};
 use crate::drive::Drive;
 use crate::helper::Helper;
 use crate::model::{
-    Backup, BackupLocation, BackupOperationState, BackupOperationType, BackupSchedule,
-    BackupStatus, DriveFileState, Id, LoaderId, OperationError, OperationErrorStep, OperationKind,
+    Backup, BackupLocation, BackupOperationState, BackupOperationType, BackupStatus,
+    DriveFileState, Id, LoaderId, OperationError, OperationErrorStep, OperationKind,
     OperationState, Timestamp,
 };
 use crate::ops::{Fault, NewOperation, Operations, Step, WsMessage};
 use crate::servers::Hub;
 
-pub use schedule::UpdateBackupScheduleRequest;
+pub use schedule::{BackupScheduleUpdate, UpdateBackupScheduleRequest};
 pub use store::BackupListResponse;
 
 pub const MAX_NAME: usize = 128;
@@ -222,23 +222,6 @@ impl Backups {
         store::count(&self.pool, server).await
     }
 
-    pub async fn schedule(&self, server: Id) -> Result<BackupSchedule> {
-        store::schedule(&self.pool, server).await
-    }
-
-    pub async fn write_schedule(
-        &self,
-        server: Id,
-        wanted: UpdateBackupScheduleRequest,
-    ) -> Result<BackupSchedule> {
-        let quota = store::quota(&self.pool).await?;
-        wanted.check(quota)?;
-        let next = wanted
-            .enabled
-            .then(|| schedule::next_after(Timestamp::now(), wanted.interval_hours, wanted.hour_utc));
-        store::save_schedule(&self.pool, server, &wanted.into_schedule(next)).await
-    }
-
     pub async fn cooldown(&self, server: Id) -> Result<Option<u64>> {
         let Some(last) = store::newest_manual_request(&self.pool, server).await? else {
             return Ok(None);
@@ -252,7 +235,7 @@ impl Backups {
         let name = check_name(name)?;
         self.operations.guard_write(server).await.map_err(relay)?;
         self.drive.guard_backup(server).await?;
-        self.check_quota(server, 1).await?;
+        self.check_manual_slots(server).await?;
         self.check_space(server).await?;
 
         let queued = self.create(server, &name, Some(by), false).await?;
@@ -301,6 +284,19 @@ impl Backups {
             return Err(Failure::conflict(
                 "backup_limit_reached",
                 format!("this server may keep {quota} backups"),
+            ));
+        }
+        Ok(())
+    }
+
+    async fn check_manual_slots(&self, server: Id) -> Result<()> {
+        let slots = self.manual_slots(server).await?;
+        if store::count_of_kind(&self.pool, server, false).await? >= slots {
+            return Err(Failure::conflict(
+                "backup_limit_reached",
+                format!(
+                    "this server has {slots} slots for manual backups and all of them are taken"
+                ),
             ));
         }
         Ok(())

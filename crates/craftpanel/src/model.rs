@@ -1128,10 +1128,13 @@ wire_enum! {
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct BackupSchedule {
-    pub enabled: bool,
+    pub limit: u32,
+    pub automatic_slots: u32,
+    pub manual_slots: u32,
+    pub automatic_used: u32,
+    pub manual_used: u32,
     pub interval_hours: u32,
     pub hour_utc: u8,
-    pub keep_last: u32,
     pub next_run_at: Option<Timestamp>,
     pub last_run_at: Option<Timestamp>,
     pub last_status: Option<BackupScheduleStatus>,
@@ -2116,10 +2119,13 @@ mod tests {
             user_info: Some(user_ref()),
         });
         assert_round_trip(&BackupSchedule {
-            enabled: true,
+            limit: 10,
+            automatic_slots: 7,
+            manual_slots: 3,
+            automatic_used: 2,
+            manual_used: 1,
             interval_hours: 24,
             hour_utc: 4,
-            keep_last: 7,
             next_run_at: Some(stamp("2026-08-13T04:00:00Z")),
             last_run_at: None,
             last_status: Some(BackupScheduleStatus::SkippedUnchanged),

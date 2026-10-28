@@ -10,6 +10,7 @@ import type {
 	Backup,
 	BackupListResponse,
 	BackupSchedule,
+	BackupScheduleUpdate,
 	BulkDeleteBackupsRequest,
 	BulkDeleteBackupsResponse,
 	ChangePasswordRequest,
@@ -88,6 +89,7 @@ import type {
 	StartupOptions,
 	StartupOptionsPatch,
 	Ulid,
+	UpdateBackupScheduleQuery,
 	UpdateBackupScheduleRequest,
 	UpdateMemberRequest,
 	UpdateServerRequest,
@@ -955,10 +957,16 @@ const backups = {
 			signal: options.signal,
 		}),
 
-	setSchedule: (serverId: Ulid, body: UpdateBackupScheduleRequest, options: Cancellable = {}) =>
-		requestJson<BackupSchedule>(serverPath(serverId, '/backups/schedule'), {
-			method: 'PUT',
+	setSchedule: (
+		serverId: Ulid,
+		body: UpdateBackupScheduleRequest,
+		query: UpdateBackupScheduleQuery = {},
+		options: Cancellable = {},
+	) =>
+		requestJson<BackupScheduleUpdate>(serverPath(serverId, '/backups/schedule'), {
+			method: 'PATCH',
 			json: body,
+			query,
 			signal: options.signal,
 		}),
 }

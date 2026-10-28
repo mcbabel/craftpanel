@@ -17,6 +17,7 @@
 		<GeneralSection v-if="section === 'general'" />
 		<InstallationSection v-else-if="section === 'installation'" />
 		<NetworkSection v-else-if="section === 'network'" />
+		<ServerSettingsBackupsPage v-else-if="section === 'backups'" />
 		<ServerSettingsPropertiesPage v-else-if="section === 'properties'" />
 		<AdvancedSection v-else />
 	</div>
@@ -30,6 +31,7 @@ import {
 	NavTabs,
 	useVIntl,
 	provideServerSettings,
+	ServerSettingsBackupsPage,
 	ServerSettingsPropertiesPage,
 	type ServerSettingsTabId,
 	serverSettingsTabDefinitions,
@@ -54,6 +56,7 @@ const SECTIONS: ServerSettingsTabId[] = [
 	'general',
 	'installation',
 	'network',
+	'backups',
 	'properties',
 	'advanced',
 ]

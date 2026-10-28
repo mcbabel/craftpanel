@@ -6,7 +6,7 @@
 					{{ formatMessage(messages.title) }}
 				</h1>
 				<span class="text-secondary">
-					{{ formatMessage(messages.quota, { used: usedQuota, total: quota }) }}
+					{{ formatMessage(messages.manualSlots, { used: manualUsed, total: manualSlots }) }}
 				</span>
 			</div>
 			<Button
@@ -42,6 +42,22 @@
 				</Button>
 			</template>
 		</Admonition>
+
+		<div class="flex flex-wrap items-center justify-between gap-3 rounded-xl bg-surface-2 p-3">
+			<div class="flex min-w-0 flex-col">
+				<span class="text-sm font-semibold text-contrast">
+					{{ formatMessage(messages.autoTitle) }}
+				</span>
+				<span class="text-sm text-secondary">{{ autoSummary }}</span>
+				<span v-if="autoEnabled && cannotBackUp" class="text-sm text-orange">
+					{{ formatMessage(messages.scheduleImpossible) }}
+				</span>
+			</div>
+			<Button @click="openBackupSettings">
+				<SettingsIcon aria-hidden="true" />
+				{{ formatMessage(messages.autoConfigure) }}
+			</Button>
+		</div>
 
 		<div
 			v-if="target && target.policy !== 'local_only'"
@@ -222,76 +238,6 @@
 			</div>
 		</div>
 
-		<div class="mt-2 flex flex-col gap-3 rounded-2xl bg-surface-2 p-4">
-			<div class="flex items-center justify-between gap-4">
-				<div class="flex flex-col gap-1">
-					<span class="text-lg font-semibold text-contrast">
-						{{ formatMessage(messages.schedule) }}
-					</span>
-					<span>{{ formatMessage(messages.scheduleHelp) }}</span>
-					<span v-if="cannotBackUp" class="text-sm text-orange">
-						{{ formatMessage(messages.scheduleImpossible) }}
-					</span>
-				</div>
-				<Toggle
-					id="backup-schedule-enabled"
-					:model-value="schedule?.enabled ?? false"
-					:disabled="scheduleLocked"
-					@update:model-value="(value?: boolean) => saveSchedule({ enabled: value === true })"
-				/>
-			</div>
-
-			<div v-if="schedule?.enabled" class="flex flex-wrap items-end gap-4">
-				<label class="flex flex-col gap-1.5">
-					<span class="font-semibold text-contrast">{{ formatMessage(messages.every) }}</span>
-					<Input
-						:model-value="String(schedule.interval_hours)"
-						type="number"
-						:min="1"
-						:max="168"
-						wrapper-class="w-[8rem]"
-						:disabled="!canManageBackups"
-						@update:model-value="
-								(value?: string | number) =>
-								within(value, 1, 168, (hours) => ({ interval_hours: hours }))
-						"
-					/>
-				</label>
-				<label v-if="schedule.interval_hours % 24 === 0" class="flex flex-col gap-1.5">
-					<span class="font-semibold text-contrast">{{ formatMessage(messages.atHour) }}</span>
-					<Input
-						:model-value="String(schedule.hour_utc)"
-						type="number"
-						:min="0"
-						:max="23"
-						wrapper-class="w-[8rem]"
-						:disabled="!canManageBackups"
-						@update:model-value="
-							(value?: string | number) => within(value, 0, 23, (hour) => ({ hour_utc: hour }))
-						"
-					/>
-				</label>
-				<label class="flex flex-col gap-1.5">
-					<span class="font-semibold text-contrast">{{ formatMessage(messages.keepLast) }}</span>
-					<Input
-						:model-value="String(schedule.keep_last)"
-						type="number"
-						:min="1"
-						:max="keepLastMax"
-						wrapper-class="w-[8rem]"
-						:disabled="!canManageBackups"
-						@update:model-value="
-								(value?: string | number) =>
-								within(value, 1, keepLastMax, (keep) => ({ keep_last: keep }))
-						"
-					/>
-				</label>
-				<span v-if="schedule.next_run_at" class="pb-2 text-secondary">
-					{{ formatMessage(messages.nextRun, { time: formatDateTime(schedule.next_run_at) }) }}
-				</span>
-			</div>
-		</div>
-
 		<Teleport to="body">
 			<div class="relative z-[100]">
 				<BackupCreateModal
@@ -356,7 +302,6 @@ import {
 	IconButton,
 	injectModrinthServerContext,
 	injectNotificationManager,
-	Input,
 	LoadingIndicator,
 	ProgressBar,
 	TeleportOverflowMenu,
@@ -366,15 +311,11 @@ import {
 	useServerPermissions,
 	useVIntl,
 } from '@modrinth/ui'
+import { useBackupIntervalFormat } from '@modrinth/ui/src/composables/hosting/backup-interval.ts'
 import { computed, reactive, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 
-import {
-	api,
-	type BackupSchedule,
-	type OperationKind,
-	type UpdateBackupScheduleRequest,
-} from '@/api'
+import { api, type BackupSchedule, type OperationKind } from '@/api'
 import { type BackupTarget, drive } from '@/api/drive'
 import { useServerPage } from '@/composables/server-page'
 import { useSession } from '@/composables/session'
@@ -392,12 +333,11 @@ import {
 
 type QueueBackup = Archon.BackupsQueue.v1.BackupQueueBackup
 
-const MAX_BACKUP_QUOTA = 50
-
 const BACKUP_KINDS = new Set<OperationKind>(['backup_create', 'backup_restore'])
 
 const { formatMessage } = useVIntl()
 const formatDateTime = useFormatDateTime({ dateStyle: 'medium', timeStyle: 'short' })
+const { formatFrequency } = useBackupIntervalFormat()
 const router = useRouter()
 const { serverId, server, worldId } = injectModrinthServerContext()
 const { addNotification } = injectNotificationManager()
@@ -407,10 +347,30 @@ const { operations } = useServerPage()
 
 const messages = defineMessages({
 	title: { id: 'craftpanel.backups.title', defaultMessage: 'Backups' },
-	quota: { id: 'craftpanel.backups.quota', defaultMessage: '{used} of {total} used' },
+	manualSlots: {
+		id: 'craftpanel.backups.manual-slots',
+		defaultMessage: '{used} of {total} manual backup slots used',
+	},
+	autoTitle: { id: 'craftpanel.backups.auto.title', defaultMessage: 'Auto backups' },
+	autoOff: {
+		id: 'craftpanel.backups.auto.off',
+		defaultMessage: 'Off. Turn them on in the backup settings.',
+	},
+	autoOn: {
+		id: 'craftpanel.backups.auto.on',
+		defaultMessage: '{frequency}, keeps the newest {slots}',
+	},
+	autoNext: {
+		id: 'craftpanel.backups.auto.next',
+		defaultMessage: '{frequency}, keeps the newest {slots}. Next one {time}',
+	},
+	autoConfigure: { id: 'craftpanel.backups.auto.configure', defaultMessage: 'Configure' },
 	create: { id: 'craftpanel.backups.create', defaultMessage: 'Create backup' },
 	restore: { id: 'craftpanel.backups.restore', defaultMessage: 'Restore' },
-	quotaFull: { id: 'craftpanel.backups.quota-full', defaultMessage: 'No backup slots left.' },
+	quotaFull: {
+		id: 'craftpanel.backups.quota-full',
+		defaultMessage: 'All manual backup slots are taken. Delete one or change the split in the backup settings.',
+	},
 	busy: { id: 'craftpanel.backups.busy', defaultMessage: 'A backup is already running.' },
 	all: { id: 'craftpanel.backups.filter-all', defaultMessage: 'All' },
 	manual: { id: 'craftpanel.backups.filter-manual', defaultMessage: 'Manual' },
@@ -444,15 +404,6 @@ const messages = defineMessages({
 	},
 	actionFailed: { id: 'craftpanel.backups.action-failed', defaultMessage: 'The action was refused' },
 	deleted: { id: 'craftpanel.backups.deleted', defaultMessage: 'Backup deleted' },
-	schedule: { id: 'craftpanel.backups.schedule', defaultMessage: 'Backup schedule' },
-	scheduleHelp: {
-		id: 'craftpanel.backups.schedule-help',
-		defaultMessage: 'Automatic backups run in the background and clean up after themselves.',
-	},
-	every: { id: 'craftpanel.backups.every', defaultMessage: 'Every (hours)' },
-	atHour: { id: 'craftpanel.backups.at-hour', defaultMessage: 'At (hour UTC)' },
-	keepLast: { id: 'craftpanel.backups.keep-last', defaultMessage: 'Keep last' },
-	nextRun: { id: 'craftpanel.backups.next-run', defaultMessage: 'Next run {time}' },
 	restoreRunning: {
 		id: 'craftpanel.backups.restore-running',
 		defaultMessage: 'Wait until the running backup operation is done.',
@@ -589,9 +540,22 @@ const renameModal = ref<InstanceType<typeof BackupRenameModal>>()
 const restoreModal = ref<InstanceType<typeof BackupRestoreModal>>()
 const deleteModal = ref<InstanceType<typeof BackupDeleteModal>>()
 
-const quota = computed(() => server.value?.backup_quota ?? 0)
-const usedQuota = computed(() => server.value?.used_backup_quota ?? backups.value.length)
-const keepLastMax = computed(() => Math.min(quota.value || MAX_BACKUP_QUOTA, MAX_BACKUP_QUOTA))
+const manualSlots = computed(
+	() => schedule.value?.manual_slots ?? server.value?.backup_quota ?? 0,
+)
+const manualUsed = computed(() => backups.value.filter((backup) => !backup.automated).length)
+const autoEnabled = computed(() => (schedule.value?.automatic_slots ?? 0) > 0)
+const autoSummary = computed(() => {
+	const current = schedule.value
+	if (current === null) return ''
+	if (current.automatic_slots === 0) return formatMessage(messages.autoOff)
+	const facts = {
+		frequency: formatFrequency(current.interval_hours),
+		slots: current.automatic_slots,
+	}
+	if (current.next_run_at === null) return formatMessage(messages.autoOn, facts)
+	return formatMessage(messages.autoNext, { ...facts, time: formatDateTime(current.next_run_at) })
+})
 const errorText = computed(() =>
 	query.error.value instanceof Error ? query.error.value.message : '',
 )
@@ -617,13 +581,13 @@ const createDisabled = computed(
 	() =>
 		!canManageBackups.value ||
 		cannotBackUp.value ||
-		usedQuota.value >= quota.value ||
+		manualUsed.value >= manualSlots.value ||
 		queue.hasActiveCreate.value,
 )
 const createTooltip = computed(() => {
 	if (!canManageBackups.value) return permissionDeniedMessage.value
 	if (cannotBackUp.value) return formatMessage(driveBrokenBody.value)
-	if (usedQuota.value >= quota.value) return formatMessage(messages.quotaFull)
+	if (manualUsed.value >= manualSlots.value) return formatMessage(messages.quotaFull)
 	if (queue.hasActiveCreate.value) return formatMessage(messages.busy)
 	return undefined
 })
@@ -633,13 +597,6 @@ const retryTooltip = computed(() => {
 	if (!canManageBackups.value) return permissionDeniedMessage.value
 	return cannotBackUp.value ? formatMessage(driveBrokenBody.value) : undefined
 })
-
-const scheduleLocked = computed(
-	() =>
-		!canManageBackups.value ||
-		schedule.value === null ||
-		(cannotBackUp.value && !schedule.value.enabled),
-)
 
 const visibleBackups = computed(() =>
 	backups.value.filter((backup) => {
@@ -826,34 +783,8 @@ function openInDrive(backup: QueueBackup): void {
 	if (link !== null) window.open(link, '_blank', 'noopener,noreferrer')
 }
 
-function within(
-	value: string | number | undefined,
-	min: number,
-	max: number,
-	patch: (parsed: number) => Partial<UpdateBackupScheduleRequest>,
-): void {
-	if (value === undefined || String(value).trim() === '') return
-	const parsed = Number(value)
-	if (!Number.isInteger(parsed) || parsed < min || parsed > max) return
-	void saveSchedule(patch(parsed))
-}
-
-async function saveSchedule(patch: Partial<UpdateBackupScheduleRequest>): Promise<void> {
-	const current = schedule.value
-	if (current === null || !canManageBackups.value) return
-	const next: UpdateBackupScheduleRequest = {
-		enabled: current.enabled,
-		interval_hours: current.interval_hours,
-		hour_utc: current.hour_utc,
-		keep_last: current.keep_last,
-		...patch,
-	}
-	try {
-		schedule.value = await api.backups.setSchedule(serverId, next)
-	} catch (cause) {
-		report(cause)
-		await loadSchedule()
-	}
+function openBackupSettings(): void {
+	void router.push({ name: 'server-settings', params: { id: serverId, section: 'backups' } })
 }
 
 watch(
@@ -863,6 +794,10 @@ watch(
 	},
 )
 
-void loadSchedule()
+watch(
+	() => backups.value.map((backup) => backup.id).join(),
+	() => void loadSchedule(),
+	{ immediate: true },
+)
 void loadTarget()
 </script>

@@ -924,20 +924,30 @@ export type BackupScheduleStatus =
 	| 'skipped_limit'
 
 export interface BackupSchedule {
-	enabled: boolean
+	limit: number
+	automatic_slots: number
+	manual_slots: number
+	automatic_used: number
+	manual_used: number
 	interval_hours: number
 	hour_utc: number
-	keep_last: number
 	next_run_at: Rfc3339 | null
 	last_run_at: Rfc3339 | null
 	last_status: BackupScheduleStatus | null
 	last_error: string | null
 }
 
-export type UpdateBackupScheduleRequest = Pick<
-	BackupSchedule,
-	'enabled' | 'interval_hours' | 'hour_utc' | 'keep_last'
+export type UpdateBackupScheduleRequest = Partial<
+	Pick<BackupSchedule, 'automatic_slots' | 'interval_hours' | 'hour_utc'>
 >
+
+export type UpdateBackupScheduleQuery = { acknowledge_rotation?: boolean }
+
+export interface BackupScheduleUpdate {
+	applied: boolean
+	backup_ids: Ulid[]
+	schedule: BackupSchedule
+}
 
 export interface ServerMember {
 	id: Ulid

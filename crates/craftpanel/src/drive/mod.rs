@@ -503,6 +503,17 @@ impl Drive {
         if self.effective_target(server).await? != BackupLocation::Drive {
             return Ok(());
         }
+        self.guard_reachable(server).await?;
+        let owner = self.owner_of(server).await?;
+        self.day_has_room(owner).await
+    }
+
+    /// Whether a Drive backup of this server could get anywhere at all, regardless of today's
+    /// upload allowance.
+    pub async fn guard_reachable(&self, server: Id) -> Result<()> {
+        if self.effective_target(server).await? != BackupLocation::Drive {
+            return Ok(());
+        }
         if !self.panel_configured().await {
             return Err(not_configured());
         }
@@ -510,7 +521,7 @@ impl Drive {
         if !self.usable(owner).await {
             return Err(not_connected());
         }
-        self.day_has_room(owner).await
+        Ok(())
     }
 
     async fn day_has_room(&self, owner: Id) -> Result<()> {
