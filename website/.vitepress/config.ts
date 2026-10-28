@@ -70,7 +70,7 @@ export default defineConfig({
 		},
 		outline: { level: [2, 3] },
 		footer: {
-			message: `Released under the <a href="${repository}/blob/main/LICENSE">AGPL-3.0</a>.`,
+			message: `Released under the <a href="${repository}/blob/main/LICENSE">AGPL-3.0</a>. <a href="/craftpanel/privacy">Privacy</a> · <a href="/craftpanel/terms">Terms</a>`,
 			copyright:
 				'Not affiliated with Mojang Studios, Microsoft or Rinth, Inc. Minecraft is a trademark of Mojang Studios.',
 		},
