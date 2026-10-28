@@ -214,7 +214,7 @@ async fn withdraw(
 async fn settle_now(
     state: &AppState,
     live: &LiveServers,
-    playit: &Playit,
+    playit: &Arc<Playit>,
     server: &ServerFacts,
     receiver: &UserRow,
 ) -> Result<()> {
@@ -235,13 +235,24 @@ async fn settle_now(
     if !locked {
         return Err(Failure::conflict("server_running", "stop the server before it changes hands"));
     }
-    let outcome = while_locked(state, live, playit, server, receiver).await;
-    sqlx::query("UPDATE servers SET status = 'available', updated_at = ? WHERE id = ? AND status = 'installing'")
+
+    let (state, live, playit, server, receiver) =
+        (state.clone(), live.clone(), Arc::clone(playit), server.clone(), receiver.clone());
+    let work = tokio::spawn(async move {
+        let outcome = while_locked(&state, &live, &playit, &server, &receiver).await;
+        let released = sqlx::query(
+            "UPDATE servers SET status = 'available', updated_at = ? WHERE id = ? AND status = 'installing'",
+        )
         .bind(Timestamp::now())
         .bind(server.id)
         .execute(&state.pool)
-        .await?;
-    outcome
+        .await;
+        if let Err(err) = released {
+            tracing::error!("{} stays locked after its transfer: {err}", server.id);
+        }
+        outcome
+    });
+    work.await.map_err(|err| Failure::internal(anyhow::anyhow!("the transfer stopped: {err}")))?
 }
 
 async fn while_locked(

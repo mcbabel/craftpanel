@@ -1083,17 +1083,23 @@ impl Manager {
         let program = self.java(actor, row).await?;
 
         let token = hex::encode(rand::random::<[u8; 32]>());
-        sqlx::query(
+        let claimed = sqlx::query(
             "UPDATE servers SET supervisor_token = ?, power_state = 'starting',
                                 running_since = NULL, exit_code = NULL, oom_killed = 0,
-                                last_started_at = ?, updated_at = ? WHERE id = ?",
+                                last_started_at = ?, updated_at = ?
+              WHERE id = ? AND owner_id = ? AND status = 'available'",
         )
         .bind(&token)
         .bind(Timestamp::now())
         .bind(Timestamp::now())
         .bind(row.id)
+        .bind(row.owner_id)
         .execute(&self.pool)
-        .await?;
+        .await?
+        .rows_affected();
+        if claimed == 0 {
+            return Err(Failure::conflict("server_busy", "the server is not ready yet"));
+        }
         self.hub.set_token(row.id.to_string(), token.clone()).await;
 
         let request = SpawnRequest {
