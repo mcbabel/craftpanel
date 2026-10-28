@@ -2006,6 +2006,9 @@
   "craftpanel.backups.action-failed": {
     "defaultMessage": "Die Aktion wurde abgelehnt"
   },
+  "craftpanel.backups.archive-missing": {
+    "defaultMessage": "Sein Archiv liegt nicht mehr auf dem Server."
+  },
   "craftpanel.backups.auto.configure": {
     "defaultMessage": "Einstellen"
   },
@@ -2041,6 +2044,9 @@
   },
   "craftpanel.backups.deleted": {
     "defaultMessage": "Sicherung gelöscht"
+  },
+  "craftpanel.backups.download-failed": {
+    "defaultMessage": "Das Backup kann nicht heruntergeladen werden"
   },
   "craftpanel.backups.drive-broken": {
     "defaultMessage": "Von diesem Server lassen sich gerade keine Sicherungen erstellen"

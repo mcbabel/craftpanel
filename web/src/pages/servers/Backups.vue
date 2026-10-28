@@ -315,7 +315,7 @@ import { useBackupIntervalFormat } from '@modrinth/ui/src/composables/hosting/ba
 import { computed, reactive, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 
-import { api, type BackupSchedule, type OperationKind } from '@/api'
+import { api, type BackupSchedule, isApiRequestError, type OperationKind } from '@/api'
 import { type BackupTarget, drive } from '@/api/drive'
 import { useServerPage } from '@/composables/server-page'
 import { useSession } from '@/composables/session'
@@ -403,6 +403,14 @@ const messages = defineMessages({
 		defaultMessage: 'Failed to load the backups',
 	},
 	actionFailed: { id: 'craftpanel.backups.action-failed', defaultMessage: 'The action was refused' },
+	downloadFailed: {
+		id: 'craftpanel.backups.download-failed',
+		defaultMessage: 'The backup cannot be downloaded',
+	},
+	archiveMissing: {
+		id: 'craftpanel.backups.archive-missing',
+		defaultMessage: 'Its archive is no longer on the server.',
+	},
 	deleted: { id: 'craftpanel.backups.deleted', defaultMessage: 'Backup deleted' },
 	restoreRunning: {
 		id: 'craftpanel.backups.restore-running',
@@ -709,7 +717,24 @@ function report(cause: unknown): void {
 	})
 }
 
-function download(backup: QueueBackup): void {
+// The download leaves the page, so a refusal would show up as a bare error document. Ask first
+// and keep a refusal inside the panel.
+async function download(backup: QueueBackup): Promise<void> {
+	try {
+		await api.backups.checkDownload(serverId, backup.id)
+	} catch (cause) {
+		addNotification({
+			type: 'error',
+			title: formatMessage(messages.downloadFailed),
+			text:
+				isApiRequestError(cause) && cause.status === 404
+					? formatMessage(messages.archiveMissing)
+					: cause instanceof Error
+						? cause.message
+						: undefined,
+		})
+		return
+	}
 	window.location.assign(api.backups.downloadUrl(serverId, backup.id))
 }
 

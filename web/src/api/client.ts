@@ -982,6 +982,9 @@ const backups = {
 			signal: options.signal,
 		}),
 
+	checkDownload: (serverId: Ulid, backupId: Ulid) =>
+		requestVoid(serverPath(serverId, `/backups/${segment(backupId)}/download`), { method: 'HEAD' }),
+
 	downloadUrl: (serverId: Ulid, backupId: Ulid) =>
 		buildUrl(serverPath(serverId, `/backups/${segment(backupId)}/download`)),
 
