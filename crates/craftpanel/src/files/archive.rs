@@ -148,13 +148,13 @@ pub struct Job {
 }
 
 #[derive(Debug)]
-enum Halt {
+pub(super) enum Halt {
     Cancelled,
     Ended,
     Failed(OperationError),
 }
 
-fn failed(code: &str, step: OperationErrorStep, message: impl Into<String>) -> Halt {
+pub(super) fn failed(code: &str, step: OperationErrorStep, message: impl Into<String>) -> Halt {
     Halt::Failed(OperationError { code: code.to_owned(), message: message.into(), step })
 }
 
@@ -236,7 +236,7 @@ async fn run(job: Job) -> std::result::Result<(), Halt> {
     Ok(())
 }
 
-async fn wait_for_a_turn(operations: &Operations, id: Id) -> std::result::Result<(), Halt> {
+pub(super) async fn wait_for_a_turn(operations: &Operations, id: Id) -> std::result::Result<(), Halt> {
     loop {
         if operations.cancel_requested(id).await.unwrap_or(false) {
             return Err(Halt::Cancelled);
@@ -264,7 +264,7 @@ async fn wait_for_a_turn(operations: &Operations, id: Id) -> std::result::Result
     }
 }
 
-async fn drive<T, F>(
+pub(super) async fn drive<T, F>(
     operations: &Operations,
     id: Id,
     cancel: &AtomicBool,
@@ -297,7 +297,7 @@ where
         Err(err) => Err(failed(
             "interrupted_while_applying",
             OperationErrorStep::Filesystem,
-            format!("the unpacking task died: {err}"),
+            format!("the worker task died: {err}"),
         )),
     }
 }
@@ -314,7 +314,7 @@ fn handover(root: &Root, target: &RelPath) -> RelPath {
     target.clone()
 }
 
-fn clone_root(workspace: &Workspace) -> std::result::Result<Root, Halt> {
+pub(super) fn clone_root(workspace: &Workspace) -> std::result::Result<Root, Halt> {
     workspace.root().try_clone().map_err(|err| {
         failed("interrupted_while_applying", OperationErrorStep::Filesystem, err.to_string())
     })
@@ -549,7 +549,7 @@ fn lay_out(
     Ok(())
 }
 
-fn trouble(err: &std::io::Error, doing: &str) -> Halt {
+pub(super) fn trouble(err: &std::io::Error, doing: &str) -> Halt {
     let code = match err.raw_os_error() {
         Some(libc::ENOSPC) | Some(libc::EDQUOT) | Some(libc::EFBIG) => "no_space",
         Some(libc::EXDEV) | Some(libc::ELOOP) => "invalid_path",
@@ -558,7 +558,7 @@ fn trouble(err: &std::io::Error, doing: &str) -> Halt {
     failed(code, OperationErrorStep::Filesystem, format!("{doing}: {err}"))
 }
 
-fn share(done: u64, total: u64) -> f64 {
+pub(super) fn share(done: u64, total: u64) -> f64 {
     if total == 0 {
         return 1.0;
     }

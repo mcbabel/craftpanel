@@ -49,6 +49,23 @@
 			</div>
 		</div>
 
+		<div class="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+			<div class="flex flex-col gap-1">
+				<span class="text-lg font-semibold text-contrast">
+					{{ formatMessage(messages.downloadAll) }}
+				</span>
+				<span>{{ formatMessage(messages.downloadAllDescription) }}</span>
+			</div>
+			<Button
+				v-tooltip="downloadTooltip"
+				:disabled="downloadDisabled"
+				@click="downloadEverything"
+			>
+				<DownloadIcon class="size-5" />
+				{{ formatMessage(packing ? messages.downloadPreparing : messages.downloadAllButton) }}
+			</Button>
+		</div>
+
 		<div class="flex flex-col gap-4 rounded-2xl border-2 border-solid border-red p-4">
 			<div class="flex flex-col gap-1">
 				<span class="text-lg font-semibold text-red">{{ formatMessage(messages.danger) }}</span>
@@ -127,7 +144,7 @@
 </template>
 
 <script setup lang="ts">
-import { RotateCounterClockwiseIcon, TrashIcon } from '@modrinth/assets'
+import { DownloadIcon, RotateCounterClockwiseIcon, TrashIcon } from '@modrinth/assets'
 import {
 	BackupWarning,
 	Button,
@@ -149,6 +166,7 @@ import { useRouter } from 'vue-router'
 import { api, type LoaderId, type UpdateChannel } from '@/api'
 import { useServerPage } from '@/composables/server-page'
 import { useSession } from '@/composables/session'
+import { startDownload } from '@/providers/file-manager'
 
 const LOADERS: LoaderId[] = [
 	'vanilla',
@@ -170,8 +188,9 @@ const router = useRouter()
 const { isAdmin, user } = useSession()
 const { addNotification } = injectNotificationManager()
 const { server, serverId, busyReasons, powerState } = injectModrinthServerContext()
-const { server: panelServer } = useServerPage()
-const { canUseAdvancedSettings, canResetServer, permissionDeniedMessage } = useServerPermissions()
+const { server: panelServer, operations } = useServerPage()
+const { canUseAdvancedSettings, canResetServer, canWriteFiles, permissionDeniedMessage } =
+	useServerPermissions()
 
 const messages = defineMessages({
 	nameLabel: { id: 'craftpanel.settings.general.name', defaultMessage: 'Server name' },
@@ -256,6 +275,35 @@ const messages = defineMessages({
 		defaultMessage: 'Only the owner of the server can do this.',
 	},
 	unknown: { id: 'craftpanel.settings.general.unknown', defaultMessage: 'Unknown' },
+	downloadAll: {
+		id: 'craftpanel.settings.general.download-all',
+		defaultMessage: 'Download server files',
+	},
+	downloadAllDescription: {
+		id: 'craftpanel.settings.general.download-all-description',
+		defaultMessage:
+			'Packs the world and every other file of this server into a ZIP in its main folder and downloads it once it is ready. The ZIP stays there until you delete it.',
+	},
+	downloadAllButton: {
+		id: 'craftpanel.settings.general.download-all-button',
+		defaultMessage: 'Download as ZIP',
+	},
+	downloadPreparing: {
+		id: 'craftpanel.settings.general.download-preparing',
+		defaultMessage: 'Creating ZIP…',
+	},
+	downloadStarted: {
+		id: 'craftpanel.settings.general.download-started',
+		defaultMessage: 'Creating the ZIP. The download starts when it is ready.',
+	},
+	downloadFailed: {
+		id: 'craftpanel.settings.general.download-failed',
+		defaultMessage: 'Could not create the ZIP',
+	},
+	downloadEmpty: {
+		id: 'craftpanel.settings.general.download-empty',
+		defaultMessage: 'This server has no files yet.',
+	},
 })
 
 const CHANNEL_DESCRIPTIONS: Record<UpdateChannel, (typeof messages)[keyof typeof messages]> = {
@@ -322,6 +370,61 @@ const resetTooltip = computed(() => {
 const removeTooltip = computed(() =>
 	isOwner.value || isAdmin.value ? guardTooltip(true) : formatMessage(messages.notOwner),
 )
+
+const packing = ref<string | null>(null)
+const downloadDisabled = computed(() => !canWriteFiles.value || packing.value !== null || busy.value)
+const downloadTooltip = computed(() => {
+	if (!canWriteFiles.value) return permissionDeniedMessage.value
+	if (busy.value) return formatMessage(messages.busy)
+	return undefined
+})
+
+function archiveStem(): string {
+	const plain = serverName.value.replace(/[^A-Za-z0-9 ._-]/g, '_').trim().slice(0, 100)
+	return plain.replace(/^\.+/, '') || 'server'
+}
+
+async function downloadEverything(): Promise<void> {
+	if (downloadDisabled.value) return
+	packing.value = ''
+	try {
+		const stem = archiveStem()
+		const quoted = stem.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+		const earlier = new RegExp(`^${quoted}( \\(\\d+\\))?\\.zip$`, 'i')
+		const { items } = await api.files.listAll(serverId, '/')
+		const include = items.map((item) => item.name).filter((name) => !earlier.test(name))
+		if (include.length === 0) {
+			packing.value = null
+			addNotification({ type: 'info', title: formatMessage(messages.downloadEmpty) })
+			return
+		}
+		const { operation } = await api.files.zip(serverId, {
+			parent: '/',
+			include,
+			target: `${stem}.zip`,
+			on_conflict: 'rename',
+		})
+		packing.value = operation.id
+		addNotification({ type: 'info', title: formatMessage(messages.downloadStarted) })
+		checkPacking()
+	} catch (error) {
+		packing.value = null
+		report(messages.downloadFailed, error)
+	}
+}
+
+function checkPacking(): void {
+	const id = packing.value
+	if (!id) return
+	const operation = operations.value.find((candidate) => candidate.id === id)
+	if (!operation || !['done', 'failed', 'cancelled'].includes(operation.state)) return
+	packing.value = null
+	if (operation.state !== 'done' || !operation.src) return
+	const name = operation.src.split('/').pop() ?? 'server.zip'
+	startDownload(api.files.contentUrl(serverId, { path: operation.src, download: 1 }), name)
+}
+
+watch(operations, checkPacking)
 
 const info = computed(() => {
 	const net = server.value?.net

@@ -118,7 +118,7 @@ writes the limits of every account again.
 
 Long-running work is an **operation**: creating, resetting or deleting a server, installing a
 loader, content or a modpack, changing the game version, downloading Java, creating or restoring a
-backup, and unpacking an archive.
+backup, and packing or unpacking a ZIP archive.
 
 - Operations are stored in the database with a state (`queued`, `ongoing`, `done`, `failed`,
   `cancelled`), a progress value and, on failure, an error code and message.

@@ -1,4 +1,4 @@
-import type { UploadState } from '@modrinth/api-client'
+import { type Kyros, ModrinthApiError, type UploadState } from '@modrinth/api-client'
 import {
 	defineMessages,
 	type MessageDescriptor,
@@ -32,7 +32,10 @@ import type {
 	ServerEventSource,
 	Ulid,
 	UploadHandle,
+	ZipRequest,
 } from '@/api'
+
+import { FILE_OPERATION_KINDS, toFileOperation } from './server-context'
 
 const FILES_KEY = 'server-files'
 const DIRECTORY_STALE_MS = 30_000
@@ -70,6 +73,20 @@ const messages = defineMessages({
 	cancelFailed: {
 		id: 'craftpanel.files.cancel-failed',
 		defaultMessage: 'Could not cancel the extraction',
+	},
+	zipFailed: { id: 'craftpanel.files.zip-failed', defaultMessage: 'Could not create the ZIP' },
+	zipReady: { id: 'craftpanel.files.zip-ready', defaultMessage: 'ZIP ready' },
+	zipReadyText: {
+		id: 'craftpanel.files.zip-ready-text',
+		defaultMessage: '{file} has been created.',
+	},
+	zipTooLarge: {
+		id: 'craftpanel.files.zip-too-large',
+		defaultMessage: 'This is more than the panel packs into one ZIP (20 GiB or 200,000 files).',
+	},
+	zipNoRoom: {
+		id: 'craftpanel.files.zip-no-room',
+		defaultMessage: 'There is not enough room left in your disk budget for this ZIP.',
 	},
 })
 
@@ -114,6 +131,16 @@ function parentOf(path: string): string {
 	return normalizePath(path.split('/').slice(0, -1).join('/'))
 }
 
+function nameOf(path: string): string {
+	return normalizePath(path).split('/').pop() ?? ''
+}
+
+function statType(type: FileItem['type']): Kyros.Files.v1.DescendantType {
+	if (type === 'directory') return 'directory'
+	if (type === 'symlink') return 'symlink'
+	return 'regular'
+}
+
 function idleUpload(): UploadState {
 	return {
 		isUploading: false,
@@ -124,6 +151,15 @@ function idleUpload(): UploadState {
 		completedFiles: 0,
 		totalFiles: 0,
 	}
+}
+
+export function startDownload(url: string, fileName: string): void {
+	const link = document.createElement('a')
+	link.href = url
+	link.download = fileName
+	document.body.append(link)
+	link.click()
+	link.remove()
 }
 
 function isAborted(error: unknown): boolean {
@@ -146,6 +182,7 @@ export function provideServerFileManager(options: FileManagerOptions): ServerFil
 
 	let running: UploadHandle<void> | null = null
 	let uploadCancelled = false
+	const zipsStartedHere = new Set<Ulid>()
 
 	function notifyFailure(title: MessageDescriptor, error: unknown): void {
 		addNotification({
@@ -290,13 +327,53 @@ export function provideServerFileManager(options: FileManagerOptions): ServerFil
 		await refresh()
 	}
 
+	async function statFile(path: string): Promise<Kyros.Files.v1.FileStatResponse> {
+		const normalized = normalizePath(path)
+		const listing = await queryClient.fetchQuery(directoryOptions(parentOf(normalized)))
+		const item = listing.items.find((entry) => entry.name === nameOf(normalized))
+		if (!item) throw new ModrinthApiError('no such file', { statusCode: 404 })
+		return {
+			name: item.name,
+			full_path: item.path,
+			size_bytes: item.size ?? 0,
+			type: statType(item.type),
+			mtime: new Date(item.modified * 1000).toISOString(),
+			ctime: new Date(item.created * 1000).toISOString(),
+		}
+	}
+
+	async function startZip(request: ZipRequest): Promise<void> {
+		try {
+			const { operation } = await files.zip(serverId, request)
+			zipsStartedHere.add(operation.id)
+			const known = operations.value.find((candidate) => candidate.id === operation.id)
+			if (known && TERMINAL_STATES.has(known.state)) settleZip(known)
+		} catch (failure) {
+			addNotification({
+				title: formatMessage(messages.zipFailed),
+				text: hasErrorCode(failure, 'archive_too_large')
+					? formatMessage(messages.zipTooLarge)
+					: hasErrorCode(failure, 'disk_limit_reached')
+						? formatMessage(messages.zipNoRoom)
+						: failure instanceof Error
+							? failure.message
+							: undefined,
+				type: 'error',
+				errorCode: isApiRequestError(failure) ? failure.code : undefined,
+			})
+		}
+	}
+
+	function zipFolder(path: string): Promise<void> {
+		return startZip({ parent: parentOf(path), include: [nameOf(path)], on_conflict: 'rename' })
+	}
+
+	function zipPaths(parent: string, include: string[], target: string): Promise<void> {
+		return startZip({ parent: normalizePath(parent), include, target, on_conflict: 'fail' })
+	}
+
 	async function downloadFile(path: string, fileName: string): Promise<void> {
-		const link = document.createElement('a')
-		link.href = files.contentUrl(serverId, { path: normalizePath(path), download: 1 })
-		link.download = fileName
-		document.body.append(link)
-		link.click()
-		link.remove()
+		startDownload(files.contentUrl(serverId, { path: normalizePath(path), download: 1 }), fileName)
 	}
 
 	async function uploadFiles(input: File[]): Promise<void> {
@@ -410,20 +487,11 @@ export function provideServerFileManager(options: FileManagerOptions): ServerFil
 		operations.value
 			.filter(
 				(operation) =>
-					operation.kind === 'unarchive' &&
+					FILE_OPERATION_KINDS.has(operation.kind) &&
 					operation.state !== 'cancelled' &&
 					!dismissed.value.has(operation.id),
 			)
-			.map((operation) => ({
-				id: operation.id,
-				op: operation.kind,
-				src: operation.src ?? '',
-				state: operation.state,
-				progress: operation.progress,
-				bytes_processed: operation.bytes_processed ?? undefined,
-				files_processed: operation.files_processed ?? undefined,
-				current_file: operation.current_file ?? undefined,
-			})),
+			.map(toFileOperation),
 	)
 
 	async function dismissOperation(id: string, action: 'dismiss' | 'cancel'): Promise<void> {
@@ -463,16 +531,38 @@ export function provideServerFileManager(options: FileManagerOptions): ServerFil
 		}),
 	)
 
+	function offerDownload(path: string): void {
+		const name = nameOf(path)
+		addNotification({
+			title: formatMessage(messages.zipReady),
+			text: formatMessage(messages.zipReadyText, { file: name }),
+			type: 'success',
+			buttons: [
+				{
+					label: formatMessage(commonMessages.downloadButton),
+					action: () => downloadFile(path, name),
+				},
+			],
+		})
+	}
+
+	function settleZip(operation: Operation): void {
+		if (!zipsStartedHere.delete(operation.id)) return
+		if (operation.state === 'done' && operation.src) offerDownload(operation.src)
+	}
+
 	watch(operations, (next, before) => {
 		const previous = new Map(before.map((operation) => [operation.id, operation.state]))
-		const settled = next.some(
+		const settled = next.filter(
 			(operation) =>
-				operation.kind === 'unarchive' &&
+				FILE_OPERATION_KINDS.has(operation.kind) &&
 				TERMINAL_STATES.has(operation.state) &&
-				previous.has(operation.id) &&
-				previous.get(operation.id) !== operation.state,
+				(zipsStartedHere.has(operation.id) ||
+					(previous.has(operation.id) && previous.get(operation.id) !== operation.state)),
 		)
-		if (settled) void refresh()
+		if (settled.length === 0) return
+		void refresh()
+		for (const operation of settled) settleZip(operation)
 	})
 
 	const context: FileManagerContext = {
@@ -492,6 +582,9 @@ export function provideServerFileManager(options: FileManagerOptions): ServerFil
 		readFileAsBlob,
 		writeFile,
 		downloadFile,
+		statFile,
+		zipFolder,
+		zipPaths,
 		uploadFiles,
 		cancelUpload,
 		uploadState,

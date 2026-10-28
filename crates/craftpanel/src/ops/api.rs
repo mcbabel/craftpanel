@@ -134,7 +134,9 @@ async fn cancel(
 
 fn may_cancel(mask: Permissions, kind: OperationKind) -> Answer<()> {
     match kind {
-        OperationKind::Unarchive => access::require(mask, Permission::FilesWrite),
+        OperationKind::Unarchive | OperationKind::Archive => {
+            access::require(mask, Permission::FilesWrite)
+        }
         OperationKind::BackupCreate | OperationKind::BackupRestore => {
             access::require(mask, Permission::Backups)
         }

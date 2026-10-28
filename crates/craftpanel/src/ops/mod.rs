@@ -572,6 +572,7 @@ mod tests {
             (OperationKind::BackupRestore, Some(BusyReasonCode::BackupRestoring)),
             (OperationKind::ServerDelete, Some(BusyReasonCode::Deleting)),
             (OperationKind::Unarchive, None),
+            (OperationKind::Archive, None),
         ];
 
         for (kind, expected) in cases {

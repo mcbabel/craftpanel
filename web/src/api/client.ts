@@ -98,6 +98,7 @@ import type {
 	UserLimitsResponse,
 	UserSearchResponse,
 	WriteContentQuery,
+	ZipRequest,
 } from './types'
 
 export const API_BASE = '/api/v1'
@@ -658,6 +659,13 @@ const files = {
 		requestJson<OperationAccepted>(serverPath(serverId, '/files/extract'), {
 			method: 'POST',
 			json: { ...body, dry: false },
+			signal: options.signal,
+		}),
+
+	zip: (serverId: Ulid, body: ZipRequest, options: Cancellable = {}) =>
+		requestJson<OperationAccepted>(serverPath(serverId, '/files/zip'), {
+			method: 'POST',
+			json: body,
 			signal: options.signal,
 		}),
 }

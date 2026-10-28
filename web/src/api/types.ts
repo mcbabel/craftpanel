@@ -45,6 +45,7 @@ export type OperationKind =
 	| 'backup_create'
 	| 'backup_restore'
 	| 'unarchive'
+	| 'archive'
 
 export type OperationState = 'queued' | 'ongoing' | 'done' | 'failed' | 'cancelled'
 
@@ -393,6 +394,15 @@ export interface ExtractRequest {
 	target?: FilePath | null
 	override: boolean
 	dry: boolean
+}
+
+export type ZipConflictMode = 'fail' | 'rename'
+
+export interface ZipRequest {
+	parent: FilePath
+	include: string[]
+	target?: string
+	on_conflict?: ZipConflictMode
 }
 
 export interface ExtractDryRunResponse {

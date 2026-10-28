@@ -2,6 +2,7 @@
 
 pub mod archive;
 pub mod jail;
+pub mod pack;
 pub mod path;
 
 use std::io;

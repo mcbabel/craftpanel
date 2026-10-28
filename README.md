@@ -24,7 +24,8 @@ and installing mods and plugins feels the way it does on Modrinth.
   checksum-verified.
 - **Content** — search, install, update and remove mods and plugins straight from Modrinth, one at a
   time or in bulk.
-- **Files** — browse, edit, upload, unpack, move and download server files in the browser.
+- **Files** — browse, edit, upload, move and download server files in the browser, pack folders
+  or the whole server into a ZIP, and unpack archives.
 - **Backups** — manual and scheduled backups that save the world consistently, with optional
   off-site copies in each user's own Google Drive.
 - **Users and access** — admin and user roles, per-server roles (owner, editor, viewer),

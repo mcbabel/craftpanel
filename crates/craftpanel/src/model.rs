@@ -525,6 +525,7 @@ wire_enum! {
         BackupCreate = "backup_create",
         BackupRestore = "backup_restore",
         Unarchive = "unarchive",
+        Archive = "archive",
     }
 }
 
@@ -542,21 +543,29 @@ impl OperationKind {
             Self::InstallContent | Self::UpdateContent => Some(BusyReasonCode::SyncingContent),
             Self::BackupCreate => Some(BusyReasonCode::BackupCreating),
             Self::BackupRestore => Some(BusyReasonCode::BackupRestoring),
-            Self::Unarchive => None,
+            Self::Unarchive | Self::Archive => None,
         }
     }
 
     pub const fn is_cancellable(self) -> bool {
         matches!(
             self,
-            Self::ServerCreate | Self::BackupCreate | Self::BackupRestore | Self::Unarchive
+            Self::ServerCreate
+                | Self::BackupCreate
+                | Self::BackupRestore
+                | Self::Unarchive
+                | Self::Archive
         )
     }
 
     pub const fn is_retryable(self) -> bool {
         !matches!(
             self,
-            Self::Unarchive | Self::ServerDelete | Self::BackupCreate | Self::BackupRestore
+            Self::Unarchive
+                | Self::Archive
+                | Self::ServerDelete
+                | Self::BackupCreate
+                | Self::BackupRestore
         )
     }
 
@@ -568,6 +577,7 @@ impl OperationKind {
                 | Self::UpdateContent
                 | Self::BackupCreate
                 | Self::Unarchive
+                | Self::Archive
         )
     }
 }
@@ -1973,8 +1983,9 @@ mod tests {
     #[test]
     fn every_kind_of_run_carries_the_lock_that_table_five_eight_gives_it() {
         assert_eq!(OperationKind::Unarchive.busy_reason(), None);
+        assert_eq!(OperationKind::Archive.busy_reason(), None);
         for kind in OperationKind::ALL {
-            if *kind != OperationKind::Unarchive {
+            if !matches!(kind, OperationKind::Unarchive | OperationKind::Archive) {
                 assert!(kind.busy_reason().is_some(), "{kind} locks nothing");
             }
         }
@@ -1993,12 +2004,15 @@ mod tests {
                 OperationKind::ServerCreate,
                 OperationKind::BackupCreate,
                 OperationKind::BackupRestore,
-                OperationKind::Unarchive
+                OperationKind::Unarchive,
+                OperationKind::Archive
             ]
         );
         assert!(!OperationKind::InstallLoader.is_cancellable());
         assert!(!OperationKind::BackupCreate.is_retryable());
         assert!(!OperationKind::Unarchive.is_retryable());
+        assert!(!OperationKind::Archive.is_retryable());
+        assert!(OperationKind::Archive.allows_running_server());
         assert!(OperationKind::InstallLoader.is_retryable());
 
         assert!(OperationKind::BackupCreate.allows_running_server());

@@ -2330,6 +2330,21 @@
   "craftpanel.files.upload-too-large": {
     "defaultMessage": "{file} ist größer, als hochgeladen werden darf."
   },
+  "craftpanel.files.zip-failed": {
+    "defaultMessage": "Die ZIP-Datei konnte nicht erstellt werden"
+  },
+  "craftpanel.files.zip-no-room": {
+    "defaultMessage": "In deinem Speicherplatz ist nicht mehr genug frei für diese ZIP-Datei."
+  },
+  "craftpanel.files.zip-ready": {
+    "defaultMessage": "ZIP-Datei fertig"
+  },
+  "craftpanel.files.zip-ready-text": {
+    "defaultMessage": "{file} wurde erstellt."
+  },
+  "craftpanel.files.zip-too-large": {
+    "defaultMessage": "Das ist mehr, als das Panel in eine ZIP-Datei packt (20 GiB oder 200.000 Dateien)."
+  },
   "craftpanel.installation.load-failed": {
     "defaultMessage": "Die Installationsoptionen konnten nicht geladen werden"
   },
@@ -2497,6 +2512,27 @@
   },
   "craftpanel.settings.general.danger-description": {
     "defaultMessage": "Diese Aktionen zerstören Daten. Für alle muss der Server gestoppt sein."
+  },
+  "craftpanel.settings.general.download-all": {
+    "defaultMessage": "Serverdateien herunterladen"
+  },
+  "craftpanel.settings.general.download-all-button": {
+    "defaultMessage": "Als ZIP herunterladen"
+  },
+  "craftpanel.settings.general.download-all-description": {
+    "defaultMessage": "Packt die Welt und alle anderen Dateien dieses Servers in eine ZIP-Datei in seinem Hauptordner und lädt sie herunter, sobald sie fertig ist. Die ZIP-Datei bleibt dort, bis du sie löschst."
+  },
+  "craftpanel.settings.general.download-empty": {
+    "defaultMessage": "Dieser Server hat noch keine Dateien."
+  },
+  "craftpanel.settings.general.download-failed": {
+    "defaultMessage": "Die ZIP-Datei konnte nicht erstellt werden"
+  },
+  "craftpanel.settings.general.download-preparing": {
+    "defaultMessage": "ZIP wird erstellt…"
+  },
+  "craftpanel.settings.general.download-started": {
+    "defaultMessage": "Die ZIP-Datei wird erstellt. Der Download startet, sobald sie fertig ist."
   },
   "craftpanel.settings.general.info": {
     "defaultMessage": "Info"
@@ -2761,6 +2797,9 @@
   },
   "panel.not-found.heading": {
     "defaultMessage": "Seite nicht gefunden"
+  },
+  "panel.operation.archive": {
+    "defaultMessage": "ZIP wird erstellt"
   },
   "panel.operation.backup-create": {
     "defaultMessage": "Sicherung wird erstellt"

@@ -664,7 +664,7 @@ async fn clean_up_after(
                 .await?;
             }
         }
-        InstallContent | UpdateContent | InstallJava | Unarchive | ServerDelete => {}
+        InstallContent | UpdateContent | InstallJava | Unarchive | Archive | ServerDelete => {}
     }
     Ok(())
 }

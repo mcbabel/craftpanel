@@ -19,6 +19,7 @@ use crate::auth::disk::{self, Disks};
 use crate::auth::error::{Failure, Result};
 use crate::auth::{access, Caller, JsonBody, Params};
 use crate::files::archive::{self, ExtractDryRunResponse, ExtractRequest};
+use crate::files::pack::{self, ZipRequest};
 use crate::files::{
     self, ApiFileItem, FilesMetaResponse, Kind, ListDirectoryResponse, Part, RelPath, Workspace,
 };
@@ -37,6 +38,7 @@ pub fn router(operations: Arc<Operations>, disks: Disks) -> Router<AppState> {
         .route("/servers/{server}/files", delete(remove))
         .route("/servers/{server}/files/content", get(read).put(write))
         .route("/servers/{server}/files/extract", post(extract))
+        .route("/servers/{server}/files/zip", post(zip))
         .route("/servers/{server}/icon", get(icon::read).put(icon::write).delete(icon::remove))
         .layer(Extension(operations))
         .layer(Extension(disks))
@@ -594,6 +596,41 @@ async fn extract(
     });
 
     Ok((StatusCode::ACCEPTED, Json(OperationAccepted { operation })).into_response())
+}
+
+async fn zip(
+    State(state): State<AppState>,
+    caller: Caller,
+    OfServer(server): OfServer,
+    Extension(operations): Extension<Arc<Operations>>,
+    Extension(disks): Extension<Disks>,
+    JsonBody(body): JsonBody<ZipRequest>,
+) -> Result<(StatusCode, Json<OperationAccepted>)> {
+    let (seat, workspace) = writable(&state, &caller, server, &operations).await?;
+
+    let planned = tokio::task::spawn_blocking(move || {
+        let plan = pack::plan(workspace.root(), &body)?;
+        Ok::<_, Failure>((plan, workspace))
+    })
+    .await
+    .map_err(joined)?;
+    let (plan, workspace) = planned?;
+    disk::guard(&state.pool, &disks, seat.owner_id, plan.bytes).await?;
+
+    let mut run = NewOperation::new(server, OperationKind::Archive, Some(caller.id()));
+    run.src = Some(plan.archive().on_the_wire());
+    let operation = operations.create(run).await.map_err(|fault| {
+        Failure::new(fault.status(), fault.code(), fault.message().to_owned())
+    })?;
+
+    pack::start(pack::Job {
+        operations: Arc::clone(&operations),
+        workspace,
+        operation: operation.id,
+        plan,
+    });
+
+    Ok((StatusCode::ACCEPTED, Json(OperationAccepted { operation })))
 }
 
 fn check_target(root: &crate::files::Root, target: &RelPath) -> Result<()> {
@@ -1619,6 +1656,117 @@ mod tests {
         );
     }
 
+    async fn settled(panel: &Panel, id: Id) -> crate::model::Operation {
+        for _ in 0..100 {
+            if panel.operations.get(id).await.expect("the run").state.is_terminal() {
+                break;
+            }
+            tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+        }
+        panel.operations.get(id).await.expect("the run")
+    }
+
+    #[tokio::test]
+    async fn zipping_runs_as_an_operation_and_hands_the_archive_back() {
+        let panel = panel().await;
+        panel.sandbox.write("world/level.dat", b"level");
+        panel.sandbox.write("world/region/r.0.0.mca", b"chunks");
+
+        let answer = panel
+            .post("/zip", serde_json::json!({ "parent": "/", "include": ["world"] }))
+            .await;
+        assert_eq!(answer.status(), StatusCode::ACCEPTED);
+        let body = body_json(answer).await;
+        assert_eq!(body["operation"]["kind"], "archive");
+        assert_eq!(body["operation"]["src"], "/world.zip", "the banner names the archive");
+        let id: Id = body["operation"]["id"].as_str().expect("an id").parse().expect("a ulid");
+
+        assert!(
+            panel.operations.busy_reasons(panel.server).await.expect("no fault").is_empty(),
+            "packing locks nothing"
+        );
+
+        let run = settled(&panel, id).await;
+        assert_eq!(run.state, crate::model::OperationState::Done, "{:?}", run.error);
+        assert_eq!(run.progress, 1.0);
+
+        let bytes = std::fs::read(panel.sandbox.server_dir().join("world.zip")).expect("the zip");
+        let mut zip = zip::ZipArchive::new(std::io::Cursor::new(bytes)).expect("a readable zip");
+        let mut text = String::new();
+        std::io::Read::read_to_string(&mut zip.by_name("world/level.dat").unwrap(), &mut text)
+            .unwrap();
+        assert_eq!(text, "level");
+
+        let chowned = panel.chowned();
+        assert!(chowned.iter().any(|path| path.ends_with("/world")), "read after a hand-back");
+        assert!(chowned.iter().any(|path| path.ends_with("/world.zip")), "{chowned:?}");
+    }
+
+    #[tokio::test]
+    async fn zipping_onto_a_taken_name_is_refused_unless_a_new_name_is_wanted() {
+        let panel = panel().await;
+        panel.sandbox.write("plugins/a.yml", b"a: 1\n");
+        panel.sandbox.write("plugins/b.yml", b"b: 2\n");
+        panel.sandbox.write("plugins/configs.zip", b"an older one");
+
+        let refused = panel
+            .post(
+                "/zip",
+                serde_json::json!({
+                    "parent": "/plugins", "include": ["a.yml", "b.yml"], "target": "configs.zip"
+                }),
+            )
+            .await;
+        assert_eq!(refused.status(), StatusCode::CONFLICT);
+        assert_eq!(body_json(refused).await["error"], "already_exists");
+
+        let renamed = panel
+            .post(
+                "/zip",
+                serde_json::json!({
+                    "parent": "/plugins", "include": ["a.yml", "b.yml"],
+                    "target": "configs.zip", "on_conflict": "rename"
+                }),
+            )
+            .await;
+        assert_eq!(renamed.status(), StatusCode::ACCEPTED);
+        let body = body_json(renamed).await;
+        assert_eq!(body["operation"]["src"], "/plugins/configs (2).zip");
+        let id: Id = body["operation"]["id"].as_str().unwrap().parse().unwrap();
+        assert_eq!(settled(&panel, id).await.state, crate::model::OperationState::Done);
+        assert_eq!(
+            std::fs::read(panel.sandbox.server_dir().join("plugins/configs.zip")).unwrap(),
+            b"an older one",
+            "the older archive is left alone"
+        );
+    }
+
+    #[tokio::test]
+    async fn zipping_more_than_the_disk_budget_holds_is_refused_up_front() {
+        const MIB: u64 = 1024 * 1024;
+        let panel = panel_with(Disks::fixed(1000 * MIB, 0)).await;
+        sqlx::query("UPDATE users SET disk_mib = 1024 WHERE id = ?")
+            .bind(panel.sandbox.owner)
+            .execute(&panel.pool)
+            .await
+            .expect("a budget");
+        std::fs::create_dir_all(panel.sandbox.server_dir().join("world")).unwrap();
+        std::fs::File::create(panel.sandbox.server_dir().join("world/big.dat"))
+            .and_then(|file| file.set_len(100 * MIB))
+            .expect("a sparse file");
+
+        let refused =
+            panel.post("/zip", serde_json::json!({ "parent": "/", "include": ["world"] })).await;
+        assert_eq!(refused.status(), StatusCode::CONFLICT);
+        assert_eq!(body_json(refused).await["error"], "disk_limit_reached");
+
+        let runs: i64 = sqlx::query_scalar("SELECT count(*) FROM operations")
+            .fetch_one(&panel.pool)
+            .await
+            .expect("a count");
+        assert_eq!(runs, 0);
+    }
+
     #[tokio::test]
     async fn a_jar_is_not_an_archive_here() {
         let panel = panel().await;
@@ -1716,6 +1864,7 @@ mod tests {
                 "/extract",
                 serde_json::json!({ "path": "/pack.zip", "override": true, "dry": true }),
             ),
+            ("/zip", serde_json::json!({ "parent": "/", "include": ["server.properties"] })),
         ];
         for (tail, body) in posts {
             let request = Request::builder()

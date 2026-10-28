@@ -2330,6 +2330,21 @@
   "craftpanel.files.upload-too-large": {
     "defaultMessage": "{file} is larger than the upload limit."
   },
+  "craftpanel.files.zip-failed": {
+    "defaultMessage": "Could not create the ZIP"
+  },
+  "craftpanel.files.zip-no-room": {
+    "defaultMessage": "There is not enough room left in your disk budget for this ZIP."
+  },
+  "craftpanel.files.zip-ready": {
+    "defaultMessage": "ZIP ready"
+  },
+  "craftpanel.files.zip-ready-text": {
+    "defaultMessage": "{file} has been created."
+  },
+  "craftpanel.files.zip-too-large": {
+    "defaultMessage": "This is more than the panel packs into one ZIP (20 GiB or 200,000 files)."
+  },
   "craftpanel.installation.load-failed": {
     "defaultMessage": "Failed to load installation options"
   },
@@ -2497,6 +2512,27 @@
   },
   "craftpanel.settings.general.danger-description": {
     "defaultMessage": "These actions destroy data. The server has to be stopped for all of them."
+  },
+  "craftpanel.settings.general.download-all": {
+    "defaultMessage": "Download server files"
+  },
+  "craftpanel.settings.general.download-all-button": {
+    "defaultMessage": "Download as ZIP"
+  },
+  "craftpanel.settings.general.download-all-description": {
+    "defaultMessage": "Packs the world and every other file of this server into a ZIP in its main folder and downloads it once it is ready. The ZIP stays there until you delete it."
+  },
+  "craftpanel.settings.general.download-empty": {
+    "defaultMessage": "This server has no files yet."
+  },
+  "craftpanel.settings.general.download-failed": {
+    "defaultMessage": "Could not create the ZIP"
+  },
+  "craftpanel.settings.general.download-preparing": {
+    "defaultMessage": "Creating ZIP…"
+  },
+  "craftpanel.settings.general.download-started": {
+    "defaultMessage": "Creating the ZIP. The download starts when it is ready."
   },
   "craftpanel.settings.general.info": {
     "defaultMessage": "Info"
@@ -2761,6 +2797,9 @@
   },
   "panel.not-found.heading": {
     "defaultMessage": "Page not found"
+  },
+  "panel.operation.archive": {
+    "defaultMessage": "Creating ZIP"
   },
   "panel.operation.backup-create": {
     "defaultMessage": "Backing up"

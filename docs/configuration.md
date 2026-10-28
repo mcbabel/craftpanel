@@ -99,7 +99,7 @@ A range that would leave an existing server's port outside it is refused.
 | Defaults: disk space | 51200 MiB | |
 | Largest upload | 4 GiB | Applies to file uploads and content uploads. |
 | Backups per server | 10 (1–50) | Split per server into automatic and manual slots under Settings → Backups. Automatic backups replace their oldest one when their slots are full; a manual backup is refused while its slots are full. |
-| Operations at the same time | 2 | Installs, backups and extractions queue behind this number. |
+| Operations at the same time | 2 | Installs, backups and ZIP archives (packing and unpacking) queue behind this number. |
 | Grace period when stopping | 60 s | How long a server may take to shut down before it is killed. |
 | Outbound services | on | Allows calls to Modrinth (content), the crash log service, playit.gg and Google Drive. Off: those features refuse; running servers are unaffected. |
 | Sign-ups | off; approval on | See [Accounts](accounts.md#self-sign-up). Needs working mail. |

@@ -188,16 +188,19 @@ function vendorStatus(status: ServerStatus): Archon.Servers.v0.Status {
 	return status === 'deleting' ? ('deleting' as Archon.Servers.v0.Status) : status
 }
 
-function toFileOperation(operation: Operation): FileOperation {
+export const FILE_OPERATION_KINDS = new Set<OperationKind>(['unarchive', 'archive'])
+
+export function toFileOperation(operation: Operation): FileOperation {
 	return {
 		id: operation.id,
-		op: operation.kind,
+		op: operation.kind === 'archive' ? 'zip' : operation.kind,
 		src: operation.src ?? '',
 		state: operation.state,
 		progress: operation.progress,
 		bytes_processed: operation.bytes_processed ?? undefined,
 		files_processed: operation.files_processed ?? undefined,
 		current_file: operation.current_file ?? undefined,
+		error: operation.error?.message,
 	}
 }
 
@@ -544,7 +547,7 @@ export function provideServerContext(input: ServerContextInput): ServerContextHa
 			operations.value
 				.filter(
 					(operation) =>
-						operation.kind === 'unarchive' &&
+						FILE_OPERATION_KINDS.has(operation.kind) &&
 						operation.state !== 'cancelled' &&
 						!dismissedOperationIds.value.has(operation.id),
 				)

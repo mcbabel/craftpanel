@@ -333,6 +333,7 @@ const operationLabels: Record<OperationKind, MessageDescriptor> = defineMessages
 	backup_create: { id: 'panel.operation.backup-create', defaultMessage: 'Backing up' },
 	backup_restore: { id: 'panel.operation.backup-restore', defaultMessage: 'Restoring backup' },
 	unarchive: { id: 'panel.operation.unarchive', defaultMessage: 'Extracting' },
+	archive: { id: 'panel.operation.archive', defaultMessage: 'Creating ZIP' },
 })
 
 const busyLabels: Record<BusyReasonCode, MessageDescriptor> = {

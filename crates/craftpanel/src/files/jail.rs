@@ -206,6 +206,11 @@ impl Dir {
         Ok(Self { fd: openat(self.fd.as_fd(), name, flags, 0)? })
     }
 
+    pub fn open_read(&self, name: &[u8]) -> io::Result<File> {
+        let flags = libc::O_RDONLY | libc::O_NONBLOCK | libc::O_NOFOLLOW | libc::O_CLOEXEC;
+        Ok(File::from(openat(self.fd.as_fd(), name, flags, 0)?))
+    }
+
     pub fn create_file(&self, name: &[u8]) -> io::Result<File> {
         let flags = libc::O_WRONLY
             | libc::O_CREAT
