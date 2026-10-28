@@ -5,6 +5,7 @@ import {
 	type ApiContentItem,
 	type ApiFileItem,
 	ApiRequestError,
+	type ContentDependentsResponse,
 	type ContentListResponse,
 	type ContentModpack,
 	type ServerEventSource,
@@ -103,7 +104,11 @@ const silentSocket: ServerEventSource = {
 	on: () => () => undefined,
 } as unknown as ServerEventSource
 
-function mount(response: ContentListResponse, directories: Record<string, ApiFileItem[]> = {}) {
+function mount(
+	response: ContentListResponse,
+	directories: Record<string, ApiFileItem[]> = {},
+	dependents: ContentDependentsResponse = { dependents: [] },
+) {
 	const show = vi.fn<UpdaterModalHandle['show']>()
 	const updaterModal = ref<UpdaterModalHandle>({ show, hide: vi.fn() })
 	const listAll = vi.fn(async (_server: string, path: string) => {
@@ -112,7 +117,10 @@ function mount(response: ContentListResponse, directories: Record<string, ApiFil
 		return { path, items, truncated: false }
 	})
 	const client = {
-		content: { list: vi.fn().mockResolvedValue(response) },
+		content: {
+			list: vi.fn().mockResolvedValue(response),
+			dependents: vi.fn().mockResolvedValue(dependents),
+		},
 		files: { listAll },
 	} as unknown as PanelApi
 	const modrinth: ModrinthVersionSource = {
@@ -141,7 +149,7 @@ function mount(response: ContentListResponse, directories: Record<string, ApiFil
 		}),
 	)!
 
-	return { manager, show, notify, modrinth, listAll, scope }
+	return { manager, show, notify, modrinth, listAll, scope, client }
 }
 
 async function settle() {
@@ -435,5 +443,44 @@ describe('The button into the config folder', () => {
 
 		expect(manager.context.getOverflowOptions?.(manager.context.items.value[0])).toEqual([])
 		scope.stop()
+	})
+})
+
+describe('disabling content that other content needs', () => {
+	const library = row({
+		id: '01J8Z0000000000000000LIB1',
+		file_name: 'fabric-api.jar',
+		project_id: 'P7sdjhYa',
+		project: { id: 'P7sdjhYa', slug: 'fabric-api', title: 'Fabric API', icon_url: null },
+	})
+	const needsIt = { dependents: [{ id: row().id, depends_on: [library.id] }] }
+
+	async function prepared(items: ApiContentItem[]) {
+		const mounted = mount(listResponse({ items }), {}, needsIt)
+		await settle()
+		const target = mounted.manager.context.items.value.find((item) => item.id === library.id)!
+		return { ...mounted, target }
+	}
+
+	it('warns when enabled content depends on it', async () => {
+		const { manager, target } = await prepared([library, row()])
+		expect(await manager.context.confirmAction!('disable', [target])).toBe(true)
+		expect(manager.context.getDisableWarning!([target])).toMatchObject({
+			admonitionHeader: 'craftpanel.content.disable-dependents.header',
+			actionLabel: 'craftpanel.content.disable-dependents.action',
+		})
+	})
+
+	it('stays quiet when what depends on it is disabled too', async () => {
+		const { manager, target } = await prepared([library, row({ enabled: false })])
+		await manager.context.confirmAction!('disable', [target])
+		expect(manager.context.getDisableWarning!([target])).toBeNull()
+	})
+
+	it('does not ask the server when something is enabled', async () => {
+		const { manager, target, client } = await prepared([library, row()])
+		expect(await manager.context.confirmAction!('enable', [target])).toBe(true)
+		expect(client.content.dependents).not.toHaveBeenCalled()
+		expect(manager.context.getDisableWarning!([target])).toBeNull()
 	})
 })

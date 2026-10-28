@@ -2258,6 +2258,15 @@
   "craftpanel.content.config-shared-tooltip": {
     "defaultMessage": "{name} has none of its own — this opens {path}"
   },
+  "craftpanel.content.disable-dependents.action": {
+    "defaultMessage": "Disable anyway"
+  },
+  "craftpanel.content.disable-dependents.body": {
+    "defaultMessage": "{names} {count, plural, one {needs} other {need}} what you are about to disable and may stop working without it, or keep the server from starting."
+  },
+  "craftpanel.content.disable-dependents.header": {
+    "defaultMessage": "Other content needs this"
+  },
   "craftpanel.content.entry-gone": {
     "defaultMessage": "This entry is no longer on the server."
   },

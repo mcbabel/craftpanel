@@ -107,6 +107,8 @@ const BANNER_KINDS = new Set<OperationKind>([
 	'update_content',
 ])
 
+const CONTENT_KINDS = new Set<OperationKind>(['install_content', 'update_content'])
+
 const LOADER_NAMES: Record<LoaderId, string> = {
 	vanilla: 'Vanilla',
 	paper: 'Paper',
@@ -196,6 +198,31 @@ function toFileOperation(operation: Operation): FileOperation {
 		bytes_processed: operation.bytes_processed ?? undefined,
 		files_processed: operation.files_processed ?? undefined,
 		current_file: operation.current_file ?? undefined,
+	}
+}
+
+export function installationKeyOf(operation: Operation, current: Server): ServerInstallationKey {
+	if (CONTENT_KINDS.has(operation.kind)) {
+		// The banner has no wording for a single mod or plugin; the one for a local modpack
+		// reads "Installing {filename}", which is what is happening.
+		const file = operation.current_file?.split('/').pop()
+		return file ? { type: 'local_modpack', filename: file } : { type: 'unknown' }
+	}
+	if (operation.kind === 'install_modpack') {
+		return {
+			type: 'modrinth_modpack',
+			project_id: current.upstream?.project_id ?? '',
+			version_id: current.upstream?.version_id ?? '',
+		}
+	}
+	if (current.loader === null || !PLATFORM_KEYS.has(current.loader) || !current.game_version) {
+		return { type: 'unknown' }
+	}
+	return {
+		type: 'platform',
+		platform: current.loader as Extract<ServerInstallationKey, { type: 'platform' }>['platform'],
+		platform_version: current.loader_version ?? '',
+		game_version: current.game_version,
 	}
 }
 
@@ -441,19 +468,6 @@ export function provideServerContext(input: ServerContextInput): ServerContextHa
 		return { step: operation.error.step, description: operation.error.message }
 	})
 
-	function installationKey(): ServerInstallationKey {
-		const current = server.value
-		if (current.loader === null || !PLATFORM_KEYS.has(current.loader) || !current.game_version) {
-			return { type: 'unknown' }
-		}
-		return {
-			type: 'platform',
-			platform: current.loader as Extract<ServerInstallationKey, { type: 'platform' }>['platform'],
-			platform_version: current.loader_version ?? '',
-			game_version: current.game_version,
-		}
-	}
-
 	const installation = computed<ServerInstallationState | null>(() => {
 		const operation = installOperation.value
 		if (operation === null || dismissedOperationIds.value.has(operation.id)) {
@@ -462,7 +476,7 @@ export function provideServerContext(input: ServerContextInput): ServerContextHa
 		const failed = operation.state === 'failed'
 		return {
 			id: operation.id,
-			key: installationKey(),
+			key: installationKeyOf(operation, server.value),
 			status: failed ? 'failed' : 'installing',
 			progress: failed ? null : operation.progress * 100,
 			error: failed ? (operation.error?.message ?? null) : null,

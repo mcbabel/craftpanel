@@ -3,6 +3,7 @@ import { FolderCogIcon } from '@modrinth/assets'
 import {
 	type BusyReason,
 	type ButtonMenuOption,
+	type ContentActionWarning,
 	type ContentDependencyWarning,
 	type ContentItem,
 	type ContentManagerContext,
@@ -141,6 +142,19 @@ const messages = defineMessages({
 		id: 'craftpanel.content.config-none-tooltip',
 		defaultMessage:
 			'Nothing has been written to {path} yet. A plugin or mod creates its files the first time the server runs.',
+	},
+	disableDependentsHeader: {
+		id: 'craftpanel.content.disable-dependents.header',
+		defaultMessage: 'Other content needs this',
+	},
+	disableDependentsBody: {
+		id: 'craftpanel.content.disable-dependents.body',
+		defaultMessage:
+			'{names} {count, plural, one {needs} other {need}} what you are about to disable and may stop working without it, or keep the server from starting.',
+	},
+	disableAnyway: {
+		id: 'craftpanel.content.disable-dependents.action',
+		defaultMessage: 'Disable anyway',
 	},
 })
 
@@ -833,6 +847,39 @@ export function useContentManager(options: ContentManagerOptions) {
 		return { items: targets.filter((item) => needed.has(item.id)), dependents }
 	}
 
+	// The layout awaits confirmAction before it asks getDisableWarning, which cannot wait for the
+	// server itself, so the dependents are looked up there and kept for the question that follows.
+	let disabling: { ids: Set<string>; warning: ContentDependencyWarning | null } | null = null
+
+	async function confirmAction(
+		action: 'enable' | 'disable',
+		targets: ContentItem[],
+	): Promise<boolean> {
+		disabling = null
+		if (action !== 'disable' || targets.length === 0) return true
+		const warning = await getDeleteDependencyWarning(targets).catch(() => null)
+		disabling = { ids: new Set(targets.map((item) => item.id)), warning }
+		return true
+	}
+
+	function getDisableWarning(targets: ContentItem[]): ContentActionWarning | null {
+		const known = disabling
+		disabling = null
+		if (known === null || targets.some((item) => !known.ids.has(item.id))) return null
+		const names = (known.warning?.dependents ?? [])
+			.filter((entry) => entry.item.enabled && !known.ids.has(entry.item.id))
+			.map((entry) => entry.item.project.title || entry.item.file_name)
+		if (names.length === 0) return null
+		return {
+			admonitionHeader: formatMessage(messages.disableDependentsHeader),
+			admonitionBody: formatMessage(messages.disableDependentsBody, {
+				names: names.join(', '),
+				count: names.length,
+			}),
+			actionLabel: formatMessage(messages.disableAnyway),
+		}
+	}
+
 	const stopContentChanged = options.socket.on('content_changed', () => {
 		void reload()
 	})
@@ -883,6 +930,8 @@ export function useContentManager(options: ContentManagerOptions) {
 		canDeleteItem: (item) => canWrite.value && !lockedIds.value.has(item.id),
 		canToggleItem: (item) => canWrite.value && !lockedIds.value.has(item.id),
 		getDeleteDependencyWarning,
+		confirmAction,
+		getDisableWarning,
 		hasUpdateSupport: true,
 		updateItem: (id) => void openUpdater(id, false),
 		bulkUpdateSelections: (selections: UpdateAllSelection[], onProgress) =>
