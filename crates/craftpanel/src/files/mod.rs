@@ -165,6 +165,14 @@ impl Workspace {
         }
         let steps = crate::helper::below_server(self.server, rel.segments());
         self.helper.chown_tree(&self.owner.to_string(), steps).await.map_err(|err| {
+            if crate::helper::is_unreachable(&err) {
+                return Failure::new(
+                    StatusCode::SERVICE_UNAVAILABLE,
+                    "helper_unavailable",
+                    "the privileged helper is not running, so files cannot be handed to the \
+                     server's account",
+                );
+            }
             Failure::internal(err.context(format!(
                 "{} still belongs to the panel and the game process cannot read it",
                 self.root.full_path(rel).display()
@@ -695,6 +703,20 @@ mod tests {
     fn mode_of(path: &std::path::Path) -> u32 {
         use std::os::unix::fs::PermissionsExt;
         std::fs::symlink_metadata(path).expect("the entry").permissions().mode() & 0o7777
+    }
+
+    #[tokio::test]
+    async fn a_missing_helper_is_named_rather_than_hidden() {
+        let sandbox = Sandbox::new();
+        let mut config = sandbox.config();
+        config.helper_socket = sandbox.data_dir().join("nobody-listens.sock");
+        sandbox.mkdir("plugins");
+
+        let workspace = Workspace::open(&config, sandbox.owner, sandbox.server).expect("a tree");
+        let refused = workspace.hand_back(&at("/plugins")).await.unwrap_err();
+
+        assert_eq!(refused.code(), "helper_unavailable");
+        assert_eq!(refused.status(), StatusCode::SERVICE_UNAVAILABLE);
     }
 
     #[tokio::test]

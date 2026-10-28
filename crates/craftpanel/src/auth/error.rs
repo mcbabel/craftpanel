@@ -77,6 +77,10 @@ impl Failure {
     pub fn status(&self) -> StatusCode {
         self.status
     }
+
+    pub fn message(&self) -> &str {
+        &self.message
+    }
 }
 
 impl IntoResponse for Failure {

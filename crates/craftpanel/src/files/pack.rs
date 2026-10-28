@@ -12,7 +12,9 @@ use crate::auth::error::{Failure, Result};
 use crate::model::{Id, OperationErrorStep};
 use crate::ops::{Operations, Step};
 
-use super::archive::{clone_root, drive, failed, share, trouble, wait_for_a_turn, Halt};
+use super::archive::{
+    clone_root, drive, failed, not_handed_back, share, trouble, wait_for_a_turn, Halt,
+};
 use super::jail::{Dir, Kind, Part, Root};
 use super::path::{self, RelPath, MAX_DEPTH};
 use super::{Workspace, WORK_DIR};
@@ -233,9 +235,7 @@ async fn run(job: Job) -> std::result::Result<(), Halt> {
         .await?
     };
 
-    workspace.hand_back(&plan.archive()).await.map_err(|failure| {
-        failed("chown_failed", OperationErrorStep::Filesystem, failure.to_string())
-    })?;
+    workspace.hand_back(&plan.archive()).await.map_err(|failure| not_handed_back(&failure))?;
 
     if packed.left_out > 0 {
         return Err(failed(

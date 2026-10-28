@@ -167,6 +167,7 @@ import { api, type LoaderId, type UpdateChannel } from '@/api'
 import { useServerPage } from '@/composables/server-page'
 import { useSession } from '@/composables/session'
 import { startDownload } from '@/providers/file-manager'
+import { operationErrorText } from '@/providers/operation-errors'
 
 const LOADERS: LoaderId[] = [
 	'vanilla',
@@ -419,6 +420,14 @@ function checkPacking(): void {
 	const operation = operations.value.find((candidate) => candidate.id === id)
 	if (!operation || !['done', 'failed', 'cancelled'].includes(operation.state)) return
 	packing.value = null
+	if (operation.state === 'failed') {
+		addNotification({
+			type: 'error',
+			title: formatMessage(messages.downloadFailed),
+			text: operationErrorText(operation.error),
+		})
+		return
+	}
 	if (operation.state !== 'done' || !operation.src) return
 	const name = operation.src.split('/').pop() ?? 'server.zip'
 	startDownload(api.files.contentUrl(serverId, { path: operation.src, download: 1 }), name)

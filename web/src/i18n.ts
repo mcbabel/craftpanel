@@ -11,6 +11,7 @@ import { I18N_INJECTION_KEY, type I18nContext } from '@modrinth/ui'
 
 import { describeUnreachable } from '@/api/client'
 import { setLocale, useLocale } from '@/composables/locale'
+import { describeOperationErrors } from '@/providers/operation-errors'
 
 const appLocales = import.meta.glob<{ default: CrowdinMessages }>('./locales/*/index.json', {
 	eager: true,
@@ -59,5 +60,6 @@ export default {
 
 		app.provide(I18N_INJECTION_KEY, context)
 		describeUnreachable(() => context.t(messages.unreachable.id))
+		describeOperationErrors((id) => context.t(id))
 	},
 }

@@ -18,6 +18,7 @@ import {
 import { computed, type ComputedRef, onScopeDispose, ref, type Ref } from 'vue'
 
 import { api } from '@/api'
+import { operationErrorText } from '@/providers/operation-errors'
 import type {
 	BusyReasonCode,
 	LoaderId,
@@ -200,7 +201,7 @@ export function toFileOperation(operation: Operation): FileOperation {
 		bytes_processed: operation.bytes_processed ?? undefined,
 		files_processed: operation.files_processed ?? undefined,
 		current_file: operation.current_file ?? undefined,
-		error: operation.error?.message,
+		error: operationErrorText(operation.error),
 	}
 }
 
@@ -486,7 +487,7 @@ export function provideServerContext(input: ServerContextInput): ServerContextHa
 			key: installationKeyOf(operation, server.value),
 			status: failed ? 'failed' : 'installing',
 			progress: failed ? null : operation.progress * 100,
-			error: failed ? (operation.error?.message ?? null) : null,
+			error: failed ? (operationErrorText(operation.error) ?? null) : null,
 			source: 'server',
 		}
 	})

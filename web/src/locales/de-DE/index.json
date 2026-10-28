@@ -2429,6 +2429,9 @@
   "craftpanel.installation.versions-failed": {
     "defaultMessage": "Die Versionen konnten nicht von Modrinth geladen werden"
   },
+  "craftpanel.operations.helper-unavailable": {
+    "defaultMessage": "Der Hilfsdienst des Panels läuft nicht, deshalb konnten die Dateien nicht an den Server übergeben werden. Prüfe craftpanel-helper.service auf dem Rechner."
+  },
   "craftpanel.playit.checked-at": {
     "defaultMessage": "Zuletzt bestätigt {ago}"
   },

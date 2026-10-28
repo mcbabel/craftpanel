@@ -2429,6 +2429,9 @@
   "craftpanel.installation.versions-failed": {
     "defaultMessage": "Failed to load versions from Modrinth"
   },
+  "craftpanel.operations.helper-unavailable": {
+    "defaultMessage": "The panel's helper service is not running, so the files could not be handed to the server. Check craftpanel-helper.service on the machine."
+  },
   "craftpanel.playit.checked-at": {
     "defaultMessage": "Last confirmed {ago}"
   },

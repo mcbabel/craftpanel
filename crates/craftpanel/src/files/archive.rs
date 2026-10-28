@@ -158,6 +158,15 @@ pub(super) fn failed(code: &str, step: OperationErrorStep, message: impl Into<St
     Halt::Failed(OperationError { code: code.to_owned(), message: message.into(), step })
 }
 
+// A missing helper is worth naming: it is a broken installation, not a fault in the archive.
+pub(super) fn not_handed_back(failure: &Failure) -> Halt {
+    let code = match failure.code() {
+        "helper_unavailable" => "helper_unavailable",
+        _ => "chown_failed",
+    };
+    failed(code, OperationErrorStep::Filesystem, failure.message())
+}
+
 pub fn start(job: Job) {
     tokio::spawn(async move {
         let operations = Arc::clone(&job.operations);
@@ -209,9 +218,7 @@ async fn run(job: Job) -> std::result::Result<(), Halt> {
 
     let handed = workspace.hand_back(&handover).await;
     applied?;
-    handed.map_err(|failure| {
-        failed("chown_failed", OperationErrorStep::Filesystem, failure.to_string())
-    })?;
+    handed.map_err(|failure| not_handed_back(&failure))?;
 
     let root = clone_root(&workspace)?;
     let sweep = work.clone();

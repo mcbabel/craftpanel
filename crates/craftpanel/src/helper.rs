@@ -1,9 +1,26 @@
 use std::path::PathBuf;
 
-use anyhow::{bail, Context, Result};
+use anyhow::{bail, Result};
 use craftpanel_proto::{HelperOk, HelperRequest, HelperResponse, ResourceLimits, SpawnRequest};
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tokio::net::UnixStream;
+
+/// The helper's socket could not be reached at all — it is not running, or the panel was
+/// pointed at the wrong socket. Callers look for it to say so instead of failing inside.
+#[derive(Debug)]
+pub struct Unreachable(pub PathBuf);
+
+impl std::fmt::Display for Unreachable {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "the privileged helper is not answering on {}", self.0.display())
+    }
+}
+
+impl std::error::Error for Unreachable {}
+
+pub fn is_unreachable(err: &anyhow::Error) -> bool {
+    err.downcast_ref::<Unreachable>().is_some()
+}
 
 #[derive(Clone)]
 pub struct Helper {
@@ -62,9 +79,9 @@ impl Helper {
     }
 
     async fn call(&self, request: HelperRequest) -> Result<HelperOk> {
-        let stream = UnixStream::connect(&self.socket).await.with_context(|| {
-            format!("the privileged helper is not answering on {}", self.socket.display())
-        })?;
+        let stream = UnixStream::connect(&self.socket)
+            .await
+            .map_err(|err| anyhow::Error::new(err).context(Unreachable(self.socket.clone())))?;
         let (reader, mut writer) = stream.into_split();
 
         let mut encoded = serde_json::to_vec(&request)?;
