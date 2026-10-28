@@ -1,4 +1,6 @@
 import type {
+	ServerTransferList,
+	ServerTransferOutcome,
 	AssignServerGroupRequest,
 	CreateServerGroupRequest,
 	ServerGroupList,
@@ -498,6 +500,30 @@ const serverGroups = {
 		requestJson<ServerGroupList>('/server-groups/members', {
 			method: 'PUT',
 			json: body,
+			signal: options.signal,
+		}),
+}
+
+const serverTransfers = {
+	start: (serverId: Ulid, to: string, options: Cancellable = {}) =>
+		requestJson<ServerTransferOutcome>(serverPath(serverId, '/transfer'), {
+			method: 'POST',
+			json: { to },
+			signal: options.signal,
+		}),
+
+	list: (options: Cancellable = {}) =>
+		requestJson<ServerTransferList>('/server-transfers', { method: 'GET', signal: options.signal }),
+
+	accept: (transferId: Ulid, options: Cancellable = {}) =>
+		requestJson<ServerTransferOutcome>(`/server-transfers/${segment(transferId)}/accept`, {
+			method: 'POST',
+			signal: options.signal,
+		}),
+
+	withdraw: (transferId: Ulid, options: Cancellable = {}) =>
+		requestVoid(`/server-transfers/${segment(transferId)}`, {
+			method: 'DELETE',
 			signal: options.signal,
 		}),
 }
@@ -1211,6 +1237,7 @@ export const api = {
 	auth,
 	servers,
 	serverGroups,
+	serverTransfers,
 	operations,
 	console: consoleApi,
 	files,

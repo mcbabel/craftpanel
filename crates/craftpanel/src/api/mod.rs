@@ -16,6 +16,7 @@ pub mod runtimes;
 pub mod servers;
 pub mod session;
 pub mod settings;
+pub mod transfers;
 pub mod ws;
 
 use std::sync::Arc;

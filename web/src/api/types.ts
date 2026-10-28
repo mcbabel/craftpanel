@@ -192,6 +192,23 @@ export interface UpdateServerGroupRequest {
 	position?: number
 }
 
+export interface ServerTransfer {
+	id: Ulid
+	server: { id: Ulid; name: string; memory_mib: number }
+	from: UserRef
+	to: UserRef
+	created_at: Rfc3339
+}
+
+export interface ServerTransferList {
+	incoming: ServerTransfer[]
+	outgoing: ServerTransfer[]
+}
+
+export type ServerTransferOutcome =
+	| { outcome: 'transferred'; server: Ulid; owner: UserRef }
+	| { outcome: 'requested'; transfer: ServerTransfer }
+
 export interface AssignServerGroupRequest {
 	server_ids: Ulid[]
 	group_id: Ulid | null

@@ -93,6 +93,12 @@
 				</Button>
 			</div>
 
+			<TransferServer
+				:server-id="serverId"
+				:server-name="serverName"
+				:disabled-reason="removeDisabled ? removeTooltip : undefined"
+			/>
+
 			<div class="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
 				<div class="flex flex-col gap-1">
 					<span class="font-semibold text-contrast">{{ formatMessage(messages.remove) }}</span>
@@ -170,6 +176,8 @@ import { useServerPage } from '@/composables/server-page'
 import { useSession } from '@/composables/session'
 import { startDownload } from '@/providers/file-manager'
 import { operationErrorText } from '@/providers/operation-errors'
+
+import TransferServer from './TransferServer.vue'
 
 const LOADERS: LoaderId[] = [
 	'vanilla',

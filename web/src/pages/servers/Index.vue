@@ -64,6 +64,8 @@
 
 		<InvitationInbox @accepted="() => void load(false)" />
 
+		<TransferInbox @accepted="() => void load(false)" />
+
 		<Admonition v-if="failure" type="critical" :header="formatMessage(messages.loadFailed)">
 			{{ failure }}
 			<template #actions>
@@ -434,6 +436,7 @@ import {
 } from '@/api'
 import InvitationInbox from '@/components/InvitationInbox.vue'
 import PanelServerIcon from '@/components/PanelServerIcon.vue'
+import TransferInbox from '@/components/TransferInbox.vue'
 import { useInvitations } from '@/composables/invitations'
 import { useSession } from '@/composables/session'
 

@@ -3386,6 +3386,81 @@
   "panel.servers.up-for": {
     "defaultMessage": "Läuft seit {time}"
   },
+  "panel.transfer.description": {
+    "defaultMessage": "Biete diesen Server jemand anderem an. Er wechselt erst, wenn die Person annimmt."
+  },
+  "panel.transfer.description-admin": {
+    "defaultMessage": "Gib diesen Server einem anderen Konto. Als Administrator überträgst du ihn sofort."
+  },
+  "panel.transfer.explain": {
+    "defaultMessage": "{name} wird dem Konto angeboten, das du nennst. Er bleibt deiner, bis die Person annimmt, und ihr Budget muss Platz für ihn haben."
+  },
+  "panel.transfer.explain-admin": {
+    "defaultMessage": "{name} wechselt sofort mit allen Dateien zu dem Konto, das du nennst. Dessen Budget muss trotzdem Platz für ihn haben."
+  },
+  "panel.transfer.failed": {
+    "defaultMessage": "Die Übertragung konnte nicht geändert werden"
+  },
+  "panel.transfer.move-now": {
+    "defaultMessage": "Jetzt übertragen"
+  },
+  "panel.transfer.moved": {
+    "defaultMessage": "{server} gehört jetzt {name}"
+  },
+  "panel.transfer.no-room": {
+    "defaultMessage": "Nicht genug Platz in deren Budget"
+  },
+  "panel.transfer.receiver": {
+    "defaultMessage": "Benutzername"
+  },
+  "panel.transfer.receiver-placeholder": {
+    "defaultMessage": "Wer bekommt ihn?"
+  },
+  "panel.transfer.send": {
+    "defaultMessage": "Angebot senden"
+  },
+  "panel.transfer.sent": {
+    "defaultMessage": "Angebot an {name} gesendet"
+  },
+  "panel.transfer.title": {
+    "defaultMessage": "An ein anderes Konto übertragen"
+  },
+  "panel.transfer.waiting": {
+    "defaultMessage": "{name} angeboten. Er wechselt, sobald die Person annimmt."
+  },
+  "panel.transfer.withdraw": {
+    "defaultMessage": "Angebot zurückziehen"
+  },
+  "panel.transfer.withdrawn": {
+    "defaultMessage": "Angebot zurückgezogen"
+  },
+  "panel.transfers.accept": {
+    "defaultMessage": "Annehmen"
+  },
+  "panel.transfers.accepted": {
+    "defaultMessage": "{name} gehört jetzt dir"
+  },
+  "panel.transfers.claims": {
+    "defaultMessage": "Belegt {memory} Arbeitsspeicher"
+  },
+  "panel.transfers.decline": {
+    "defaultMessage": "Ablehnen"
+  },
+  "panel.transfers.declined": {
+    "defaultMessage": "Übertragung abgelehnt"
+  },
+  "panel.transfers.failed": {
+    "defaultMessage": "Auf die Übertragung konnte nicht geantwortet werden"
+  },
+  "panel.transfers.help": {
+    "defaultMessage": "Nimm einen an, um sein Besitzer zu werden. Sein Arbeitsspeicher zählt dann zu deinem Budget."
+  },
+  "panel.transfers.offered-by": {
+    "defaultMessage": "Angeboten von"
+  },
+  "panel.transfers.title": {
+    "defaultMessage": "Dir angebotene Server"
+  },
   "server.settings.tabs.advanced": {
     "defaultMessage": "Erweitert"
   },

@@ -3386,6 +3386,81 @@
   "panel.servers.up-for": {
     "defaultMessage": "Up {time}"
   },
+  "panel.transfer.description": {
+    "defaultMessage": "Offer this server to someone else. It only moves once they accept."
+  },
+  "panel.transfer.description-admin": {
+    "defaultMessage": "Give this server to another account. As an administrator you move it right away."
+  },
+  "panel.transfer.explain": {
+    "defaultMessage": "{name} is offered to the account you name. It stays yours until they accept, and their budget has to have room for it."
+  },
+  "panel.transfer.explain-admin": {
+    "defaultMessage": "{name} moves to the account you name right away, files and all. Their budget still has to have room for it."
+  },
+  "panel.transfer.failed": {
+    "defaultMessage": "The transfer could not be changed"
+  },
+  "panel.transfer.move-now": {
+    "defaultMessage": "Transfer now"
+  },
+  "panel.transfer.moved": {
+    "defaultMessage": "{server} now belongs to {name}"
+  },
+  "panel.transfer.no-room": {
+    "defaultMessage": "Not enough room in their budget"
+  },
+  "panel.transfer.receiver": {
+    "defaultMessage": "Username"
+  },
+  "panel.transfer.receiver-placeholder": {
+    "defaultMessage": "Who gets it?"
+  },
+  "panel.transfer.send": {
+    "defaultMessage": "Send offer"
+  },
+  "panel.transfer.sent": {
+    "defaultMessage": "Offer sent to {name}"
+  },
+  "panel.transfer.title": {
+    "defaultMessage": "Transfer to another account"
+  },
+  "panel.transfer.waiting": {
+    "defaultMessage": "Offered to {name}. It moves once they accept."
+  },
+  "panel.transfer.withdraw": {
+    "defaultMessage": "Withdraw offer"
+  },
+  "panel.transfer.withdrawn": {
+    "defaultMessage": "Offer withdrawn"
+  },
+  "panel.transfers.accept": {
+    "defaultMessage": "Accept"
+  },
+  "panel.transfers.accepted": {
+    "defaultMessage": "{name} is yours now"
+  },
+  "panel.transfers.claims": {
+    "defaultMessage": "Claims {memory} of memory"
+  },
+  "panel.transfers.decline": {
+    "defaultMessage": "Decline"
+  },
+  "panel.transfers.declined": {
+    "defaultMessage": "Transfer declined"
+  },
+  "panel.transfers.failed": {
+    "defaultMessage": "The transfer could not be answered"
+  },
+  "panel.transfers.help": {
+    "defaultMessage": "Accept one to become its owner. Its memory then counts against your budget."
+  },
+  "panel.transfers.offered-by": {
+    "defaultMessage": "Offered by"
+  },
+  "panel.transfers.title": {
+    "defaultMessage": "Servers offered to you"
+  },
   "server.settings.tabs.advanced": {
     "defaultMessage": "Advanced"
   },
