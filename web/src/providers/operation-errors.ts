@@ -6,7 +6,7 @@ const messages = defineMessages({
 	helperUnavailable: {
 		id: 'craftpanel.operations.helper-unavailable',
 		defaultMessage:
-			"The panel's helper service is not running, so the files could not be handed to the server. Check craftpanel-helper.service on the machine.",
+			"The panel's helper service is not running, so this could not be done. Check craftpanel-helper.service on the machine.",
 	},
 })
 
@@ -23,8 +23,12 @@ export function describeOperationErrors(lookup: (id: string) => string): void {
 
 // The panel words its errors in English. Where the reader can act on one, it gets a sentence in
 // their language instead.
+export function knownErrorText(code: string | null | undefined): string | undefined {
+	const known = code ? TRANSLATED[code] : undefined
+	return known ? (translate(known.id) ?? known.defaultMessage) : undefined
+}
+
 export function operationErrorText(error: OperationError | null | undefined): string | undefined {
 	if (!error) return undefined
-	const known = TRANSLATED[error.code]
-	return known ? (translate(known.id) ?? known.defaultMessage) : error.message
+	return knownErrorText(error.code) ?? error.message
 }

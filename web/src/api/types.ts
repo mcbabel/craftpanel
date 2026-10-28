@@ -1121,6 +1121,7 @@ export interface SystemUser {
 	name: string
 	uid: number | null
 	error_message: string | null
+	error_code?: string | null
 }
 
 export type CpuMode = 'cap' | 'share'

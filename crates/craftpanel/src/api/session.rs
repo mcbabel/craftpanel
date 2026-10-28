@@ -514,7 +514,7 @@ mod tests {
                     "system_user", "usage", "username",
                 ],
             ),
-            ("system_user", vec!["error_message", "name", "state", "uid"]),
+            ("system_user", vec!["error_code", "error_message", "name", "state", "uid"]),
             ("limits", vec!["cpu_cores", "cpu_mode", "disk_mib", "memory_mib", "pids_max"]),
             (
                 "usage",

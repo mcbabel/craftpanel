@@ -721,8 +721,12 @@ async fn retry_system_user(
     if row.system_state != SystemUserState::Ready {
         let system = users::provision(&state.pool, &helper(&state), &row).await?;
         if system.state != SystemUserState::Ready {
+            let code = match system.error_code.as_deref() {
+                Some("helper_unavailable") => "helper_unavailable",
+                _ => "system_user_not_ready",
+            };
             return Err(Failure::conflict(
-                "system_user_not_ready",
+                code,
                 system.error_message.unwrap_or_else(|| "the helper refused again".to_owned()),
             ));
         }

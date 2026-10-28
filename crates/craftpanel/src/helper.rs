@@ -10,9 +10,16 @@ use tokio::net::UnixStream;
 #[derive(Debug)]
 pub struct Unreachable(pub PathBuf);
 
+const UNREACHABLE: &str = "the privileged helper is not answering";
+
+/// The stable code for a stored message that says the helper was not there.
+pub fn code_of(message: &str) -> Option<String> {
+    message.starts_with(UNREACHABLE).then(|| "helper_unavailable".to_owned())
+}
+
 impl std::fmt::Display for Unreachable {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "the privileged helper is not answering on {}", self.0.display())
+        write!(f, "{UNREACHABLE} on {}", self.0.display())
     }
 }
 

@@ -61,6 +61,7 @@ impl UserRow {
             name: craftpanel_proto::system_username(&self.id.to_string()),
             uid: self.system_uid,
             error_message: self.system_error_message.clone(),
+            error_code: self.system_error_message.as_deref().and_then(crate::helper::code_of),
         }
     }
 
@@ -487,6 +488,7 @@ pub async fn provision(pool: &SqlitePool, helper: &Helper, row: &UserRow) -> sql
         state,
         name: craftpanel_proto::system_username(&id),
         uid,
+        error_code: message.as_deref().and_then(crate::helper::code_of),
         error_message: message,
     })
 }

@@ -948,6 +948,7 @@ import {
 } from '@/pages/admin/users'
 import { LINK_MINUTES } from '@/pages/auth/recovery'
 import { addressLooksRight } from '@/pages/auth/register'
+import { knownErrorText } from '@/providers/operation-errors'
 
 const { formatMessage } = useVIntl()
 const formatBytes = useFormatBytes()
@@ -1365,7 +1366,8 @@ function switchPage(next: number): void {
 }
 
 function reason(error: unknown): string {
-	return isApiRequestError(error) ? error.message : formatMessage(messages.unknownError)
+	if (!isApiRequestError(error)) return formatMessage(messages.unknownError)
+	return knownErrorText(error.code) ?? error.message
 }
 
 function addressReason(error: unknown): string {
@@ -1397,7 +1399,8 @@ function systemTooltip(index: number): string | undefined {
 	const system = at(index).system_user
 	if (system.state === 'ready') return undefined
 	const hint = formatMessage(messages.systemNotReadyHint)
-	return system.error_message ? `${system.error_message}\n${hint}` : hint
+	const message = knownErrorText(system.error_code) ?? system.error_message
+	return message ? `${message}\n${hint}` : hint
 }
 
 function overLimit(index: number): boolean {

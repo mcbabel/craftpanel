@@ -1261,6 +1261,10 @@ pub struct SystemUser {
     pub name: String,
     pub uid: Option<u32>,
     pub error_message: Option<String>,
+    /// `helper_unavailable` when the helper could not be reached at all, so the interface can
+    /// say what to check in the reader's language. Derived, never stored.
+    #[serde(default)]
+    pub error_code: Option<String>,
 }
 
 wire_enum! {
@@ -1673,6 +1677,7 @@ mod tests {
                 name: format!("craft-{}", USER_ID.to_lowercase()),
                 uid: Some(6104),
                 error_message: None,
+                error_code: None,
             },
             limits: Some(limits()),
             usage: usage(),
