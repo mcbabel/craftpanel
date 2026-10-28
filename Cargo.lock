@@ -542,7 +542,7 @@ dependencies = [
 
 [[package]]
 name = "craftpanel"
-version = "0.1.0-dev.2"
+version = "0.1.0-dev.3"
 dependencies = [
  "anyhow",
  "argon2",
@@ -584,7 +584,7 @@ dependencies = [
 
 [[package]]
 name = "craftpanel-helper"
-version = "0.1.0-dev.2"
+version = "0.1.0-dev.3"
 dependencies = [
  "anyhow",
  "craftpanel-proto",
@@ -597,7 +597,7 @@ dependencies = [
 
 [[package]]
 name = "craftpanel-proto"
-version = "0.1.0-dev.2"
+version = "0.1.0-dev.3"
 dependencies = [
  "serde",
 ]
