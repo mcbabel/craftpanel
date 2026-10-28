@@ -70,9 +70,10 @@ pub async fn run(args: McsmanagerArgs) -> Result<()> {
         }
     }
 
+    let guard = Guard { daemon: &args.from, data_dir: &config.data_dir, allow_outside: args.allow_outside };
     let (mut imported, mut skipped) = (0, 0);
     for instance in &chosen {
-        let checked = check_folder(instance, &args.from, &config.data_dir, args.allow_outside);
+        let checked = guard.check(instance);
         let planned = match checked.and_then(|()| plan(instance)) {
             Ok(planned) => planned,
             Err(why) => {
@@ -85,7 +86,7 @@ pub async fn run(args: McsmanagerArgs) -> Result<()> {
             println!("import  {}", describe(&planned));
             continue;
         }
-        match import(&pool, &config, &helper, owner.id, &planned, args.copy).await {
+        match import(&pool, &config, &helper, &guard, owner.id, &planned, args.copy).await {
             Ok(done) => {
                 imported += 1;
                 println!("done    {} as {} on port {}", describe(&planned), done.server, done.port);
@@ -173,34 +174,63 @@ fn select(found: Vec<Instance>, only: &[String]) -> Result<Vec<Instance>> {
     Ok(chosen)
 }
 
-pub fn check_folder(
-    instance: &Instance,
-    daemon: &Path,
-    data_dir: &Path,
-    allow_outside: bool,
-) -> Result<(), String> {
-    let meta = std::fs::symlink_metadata(&instance.dir)
-        .map_err(|_| format!("its folder {} does not exist", instance.dir.display()))?;
-    if !meta.is_dir() {
-        return Err(format!("{} is a link or not a folder", instance.dir.display()));
+pub struct Guard<'a> {
+    pub daemon: &'a Path,
+    pub data_dir: &'a Path,
+    pub allow_outside: bool,
+}
+
+impl Guard<'_> {
+    pub fn check(&self, instance: &Instance) -> Result<(), String> {
+        let meta = std::fs::symlink_metadata(&instance.dir)
+            .map_err(|_| format!("its folder {} does not exist", instance.dir.display()))?;
+        if !meta.is_dir() {
+            return Err(format!("{} is a link or not a folder", instance.dir.display()));
+        }
+        let folder = instance.dir.canonicalize().map_err(|err| err.to_string())?;
+        self.check_resolved(&folder)
     }
-    let folder = instance.dir.canonicalize().map_err(|err| err.to_string())?;
-    if folder.components().count() < 3 {
-        return Err(format!("{} is too close to the root of the disk", folder.display()));
+
+    pub fn check_resolved(&self, folder: &Path) -> Result<(), String> {
+        if folder.components().count() < 3 {
+            return Err(format!("{} is too close to the root of the disk", folder.display()));
+        }
+        if let Ok(data) = self.data_dir.canonicalize() {
+            if folder.starts_with(&data) || data.starts_with(folder) {
+                return Err(format!("{} overlaps the panel's own data", folder.display()));
+            }
+        }
+        let instances = self.daemon.join("data").join("InstanceData").canonicalize().ok();
+        if !self.allow_outside && !instances.is_some_and(|inside| folder.starts_with(inside)) {
+            return Err(format!(
+                "{} lies outside MCSManager's InstanceData; pass --allow-outside if it should move",
+                folder.display()
+            ));
+        }
+        guarded_ancestors(folder)
     }
-    if let Ok(data) = data_dir.canonicalize() {
-        if folder.starts_with(&data) || data.starts_with(&folder) {
-            return Err(format!("{} overlaps the panel's own data", folder.display()));
+}
+
+fn guarded_ancestors(folder: &Path) -> Result<(), String> {
+    use std::os::unix::fs::MetadataExt;
+    let me = effective_uid();
+    for ancestor in folder.ancestors().skip(1) {
+        let meta = std::fs::symlink_metadata(ancestor).map_err(|err| err.to_string())?;
+        let mode = meta.mode();
+        let shared = mode & 0o022 != 0 && mode & 0o1000 == 0;
+        if (meta.uid() != 0 && meta.uid() != me) || shared {
+            return Err(format!(
+                "{} can be changed by other users, so a folder below it could be swapped while it moves",
+                ancestor.display()
+            ));
         }
     }
-    let instances = daemon.join("data").join("InstanceData").canonicalize().ok();
-    if !allow_outside && !instances.is_some_and(|inside| folder.starts_with(inside)) {
-        return Err(format!(
-            "{} lies outside MCSManager's InstanceData; pass --allow-outside if it should move",
-            folder.display()
-        ));
-    }
     Ok(())
+}
+
+fn effective_uid() -> u32 {
+    use std::os::unix::fs::MetadataExt;
+    std::fs::metadata("/proc/self").map_or(0, |meta| meta.uid())
 }
 
 pub fn plan(instance: &Instance) -> Result<Planned, String> {
@@ -251,15 +281,15 @@ pub async fn import(
     pool: &SqlitePool,
     config: &Config,
     helper: &Helper,
+    guard: &Guard<'_>,
     owner: Id,
     planned: &Planned,
     copy: bool,
 ) -> Result<Imported> {
-    let source = planned.instance.dir.canonicalize().with_context(|| format!("finding {}", planned.instance.dir.display()))?;
-    let opened = open_dir(&source).with_context(|| format!("opening {}", source.display()))?;
-    if std::fs::read_link(fd_path(&opened))? != source {
-        bail!("{} changed while it was being checked", source.display());
-    }
+    let opened = open_dir(&planned.instance.dir)
+        .with_context(|| format!("opening {}", planned.instance.dir.display()))?;
+    let source = std::fs::read_link(fd_path(&opened))?;
+    guard.check_resolved(&source).map_err(anyhow::Error::msg)?;
     let identity = identity_of(&opened.metadata()?);
     if let Some(pid) = running_in(&source) {
         bail!("process {pid} still runs in {}; stop the instance in MCSManager first", source.display());
@@ -282,9 +312,10 @@ pub async fn import(
     let imported = match settled {
         Ok(imported) => imported,
         Err(err) => {
-            let undone = if copy { std::fs::remove_dir_all(&target) } else { std::fs::rename(&target, source) };
-            if let Err(undo) = undone {
-                eprintln!("        the files could not be put back from {}: {undo}", target.display());
+            if copy {
+                let _ = std::fs::remove_dir_all(&target);
+            } else {
+                put_back(&target, source);
             }
             return Err(err);
         }
@@ -406,6 +437,10 @@ fn identity_of(meta: &std::fs::Metadata) -> (u64, u64) {
 }
 
 fn move_dir(source: &Path, target: &Path, identity: (u64, u64)) -> Result<()> {
+    let present = std::fs::symlink_metadata(source)?;
+    if !present.is_dir() || identity_of(&present) != identity {
+        bail!("{} changed while it was being checked", source.display());
+    }
     match std::fs::rename(source, target) {
         Ok(()) => {}
         Err(err) if err.raw_os_error() == Some(libc::EXDEV) => bail!(
@@ -416,10 +451,17 @@ fn move_dir(source: &Path, target: &Path, identity: (u64, u64)) -> Result<()> {
     }
     let moved = std::fs::symlink_metadata(target)?;
     if !moved.is_dir() || identity_of(&moved) != identity {
-        let _ = std::fs::rename(target, source);
+        put_back(target, source);
         bail!("{} was swapped for something else while it was being moved", source.display());
     }
     Ok(())
+}
+
+fn put_back(target: &Path, source: &Path) {
+    let free = matches!(std::fs::symlink_metadata(source), Err(err) if err.kind() == std::io::ErrorKind::NotFound);
+    if !free || std::fs::rename(target, source).is_err() {
+        eprintln!("        the files stay in {}; move them back by hand", target.display());
+    }
 }
 
 fn copy_dir(dir: &std::fs::File, target: &Path, depth: usize) -> Result<()> {
@@ -551,21 +593,24 @@ mod tests {
             kind: String::new(),
         };
 
+        let guard_check = |instance: &Instance, daemon: &Path, data: &Path, allow_outside: bool| {
+            Guard { daemon, data_dir: data, allow_outside }.check(instance)
+        };
         let inside = setup.folder("fine");
-        assert!(check_folder(&at(inside.clone()), &setup.daemon, &data, false).is_ok());
+        assert!(guard_check(&at(inside.clone()), &setup.daemon, &data, false).is_ok());
 
         let outside = setup.daemon.parent().unwrap().join("elsewhere");
         std::fs::create_dir_all(&outside).unwrap();
-        assert!(check_folder(&at(outside.clone()), &setup.daemon, &data, false).unwrap_err().contains("--allow-outside"));
-        assert!(check_folder(&at(outside), &setup.daemon, &data, true).is_ok());
+        assert!(guard_check(&at(outside.clone()), &setup.daemon, &data, false).unwrap_err().contains("--allow-outside"));
+        assert!(guard_check(&at(outside), &setup.daemon, &data, true).is_ok());
 
-        assert!(check_folder(&at(PathBuf::from("/")), &setup.daemon, &data, true).is_err());
-        assert!(check_folder(&at(PathBuf::from("/etc")), &setup.daemon, &data, true).is_err());
-        assert!(check_folder(&at(data.clone()), &setup.daemon, &data, true).is_err());
+        assert!(guard_check(&at(PathBuf::from("/")), &setup.daemon, &data, true).is_err());
+        assert!(guard_check(&at(PathBuf::from("/etc")), &setup.daemon, &data, true).is_err());
+        assert!(guard_check(&at(data.clone()), &setup.daemon, &data, true).is_err());
 
         let link = setup.daemon.join("data/InstanceData/link");
         std::os::unix::fs::symlink(&inside, &link).unwrap();
-        assert!(check_folder(&at(link), &setup.daemon, &data, false).unwrap_err().contains("link"));
+        assert!(guard_check(&at(link), &setup.daemon, &data, false).unwrap_err().contains("link"));
     }
 
     #[tokio::test]
@@ -577,6 +622,7 @@ mod tests {
         std::fs::create_dir_all(config.users_dir().join(owner.to_string()).join("servers")).unwrap();
         let helper_fake = FakeHelper::obliging().await;
         let helper = Helper::new(helper_fake.socket());
+        let guard = Guard { daemon: &setup.daemon, data_dir: &config.data_dir, allow_outside: false };
 
         let dir = setup.folder("f00");
         paper(&dir, 25590);
@@ -586,7 +632,7 @@ mod tests {
         }));
 
         let planned = plan(&instances(&setup.daemon).unwrap()[0]).unwrap();
-        let done = import(&pool, &config, &helper, owner, &planned, false).await.unwrap();
+        let done = import(&pool, &config, &helper, &guard, owner, &planned, false).await.unwrap();
 
         assert_eq!(done.port, 25590);
         assert!(!done.port_changed);
@@ -620,6 +666,7 @@ mod tests {
         std::fs::create_dir_all(config.users_dir().join(owner.to_string()).join("servers")).unwrap();
         let helper_fake = FakeHelper::obliging().await;
         let helper = Helper::new(helper_fake.socket());
+        let guard = Guard { daemon: &setup.daemon, data_dir: &config.data_dir, allow_outside: false };
 
         for (uuid, name) in [("one", "First"), ("two", "Second")] {
             let dir = setup.folder(uuid);
@@ -631,8 +678,8 @@ mod tests {
         }
 
         let found = instances(&setup.daemon).unwrap();
-        let first = import(&pool, &config, &helper, owner, &plan(&found[0]).unwrap(), true).await.unwrap();
-        let second = import(&pool, &config, &helper, owner, &plan(&found[1]).unwrap(), true).await.unwrap();
+        let first = import(&pool, &config, &helper, &guard, owner, &plan(&found[0]).unwrap(), true).await.unwrap();
+        let second = import(&pool, &config, &helper, &guard, owner, &plan(&found[1]).unwrap(), true).await.unwrap();
 
         assert_eq!(first.port, 25565);
         assert_ne!(second.port, 25565);
@@ -643,6 +690,22 @@ mod tests {
         .unwrap();
         assert!(properties.contains(&format!("server-port={}", second.port)));
         assert!(setup.daemon.join("data/InstanceData/one").exists(), "copied, the original stays");
+    }
+
+    #[test]
+    fn a_folder_under_a_parent_anyone_may_change_is_refused() {
+        use std::os::unix::fs::PermissionsExt;
+        let setup = setup();
+        let open = setup.daemon.join("data/InstanceData/open");
+        std::fs::create_dir_all(open.join("server")).unwrap();
+        std::fs::set_permissions(&open, std::fs::Permissions::from_mode(0o777)).unwrap();
+        let guard = Guard { daemon: &setup.daemon, data_dir: &setup.data, allow_outside: false };
+
+        let refused = guard.check_resolved(&open.join("server").canonicalize().unwrap()).unwrap_err();
+        assert!(refused.contains("can be changed by other users"), "{refused}");
+
+        std::fs::set_permissions(&open, std::fs::Permissions::from_mode(0o1777)).unwrap();
+        assert!(guard.check_resolved(&open.join("server").canonicalize().unwrap()).is_ok(), "sticky like /tmp");
     }
 
     #[test]
@@ -677,6 +740,7 @@ mod tests {
         let config = setup.config();
         std::fs::create_dir_all(config.users_dir().join(owner.to_string()).join("servers")).unwrap();
         let helper = Helper::new(setup.data.join("nobody.sock"));
+        let guard = Guard { daemon: &setup.daemon, data_dir: &config.data_dir, allow_outside: false };
         sqlx::query("UPDATE panel_settings SET port_pool_from = 30000, port_pool_to = 30000 WHERE id = 1")
             .execute(&pool)
             .await
@@ -695,7 +759,7 @@ mod tests {
         }));
 
         let planned = plan(&instances(&setup.daemon).unwrap()[0]).unwrap();
-        let refused = import(&pool, &config, &helper, owner, &planned, false).await.unwrap_err();
+        let refused = import(&pool, &config, &helper, &guard, owner, &planned, false).await.unwrap_err();
         assert!(format!("{refused:#}").contains("no free port"), "{refused:#}");
         assert!(dir.join("world/level.dat").is_file(), "the folder is back where it was");
         let count: i64 = sqlx::query_scalar("SELECT count(*) FROM servers").fetch_one(&pool).await.unwrap();
