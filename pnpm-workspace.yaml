@@ -1,5 +1,6 @@
 packages:
   - 'web'
+  - 'website'
   - 'vendor/modrinth/*'
 
 allowBuilds:

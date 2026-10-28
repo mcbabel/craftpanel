@@ -9,3 +9,6 @@ target/
 __pycache__/
 .cargo/
 .claude/
+website/docs/
+website/.vitepress/cache/
+website/.vitepress/dist/

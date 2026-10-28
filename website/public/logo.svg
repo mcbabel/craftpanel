@@ -1,0 +1,38 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="CraftPanel">
+  <defs>
+    <linearGradient id="tile" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#1c2128"/>
+      <stop offset="1" stop-color="#0d1014"/>
+    </linearGradient>
+    <linearGradient id="top" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#6ff2a0"/>
+      <stop offset="1" stop-color="#34d97a"/>
+    </linearGradient>
+    <linearGradient id="left" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#22c55e"/>
+      <stop offset="1" stop-color="#15a34a"/>
+    </linearGradient>
+    <linearGradient id="right" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#16a34a"/>
+      <stop offset="1" stop-color="#0f7a37"/>
+    </linearGradient>
+  </defs>
+  <rect width="512" height="512" rx="116" fill="url(#tile)"/>
+  <rect x="1.5" y="1.5" width="509" height="509" rx="114.5" fill="none" stroke="#ffffff" stroke-opacity="0.07" stroke-width="3"/>
+  <g stroke-linejoin="round">
+    <polygon points="256,92 398,174 256,256 114,174" fill="url(#top)"/>
+    <polygon points="114,174 256,256 256,420 114,338" fill="url(#left)"/>
+    <polygon points="256,256 398,174 398,338 256,420" fill="url(#right)"/>
+    <polygon points="256,92 398,174 256,256 114,174" fill="none" stroke="#ffffff" stroke-opacity="0.18" stroke-width="2"/>
+  </g>
+  <g fill="#0b2e18" fill-opacity="0.55">
+    <polygon points="136,214 234,270.6 234,288.6 136,232"/>
+    <polygon points="136,256 234,312.6 234,330.6 136,274"/>
+    <polygon points="136,298 234,354.6 234,372.6 136,316"/>
+  </g>
+  <g fill="#bbf7d0">
+    <circle cx="300" cy="286" r="9"/>
+    <circle cx="330" cy="268.5" r="9" fill-opacity="0.55"/>
+    <circle cx="360" cy="251" r="9" fill-opacity="0.3"/>
+  </g>
+</svg>
