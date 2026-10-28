@@ -1820,7 +1820,7 @@ async fn next_free_port(tx: &mut Transaction<'_, Sqlite>) -> Result<u16> {
             .fetch_one(&mut **tx)
             .await?;
     let taken: Vec<(u16,)> =
-        sqlx::query_as("SELECT port FROM allocations WHERE port BETWEEN ? AND ? ORDER BY port")
+        sqlx::query_as("SELECT port FROM ports_in_use WHERE port BETWEEN ? AND ? ORDER BY port")
             .bind(from)
             .bind(to)
             .fetch_all(&mut **tx)

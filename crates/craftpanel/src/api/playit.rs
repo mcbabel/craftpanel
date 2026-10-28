@@ -878,12 +878,81 @@ mod tests {
         let mut servers = Vec::new();
         for index in 0..5u16 {
             let server = a_server(&panel.pool, anna, &format!("s{index}"), 1024).await;
+            an_extra_port(&panel.pool, server, 25600 + index).await;
             let slot = store::Slot { id: Id::new(), server, kind: store::TunnelKind::Udp, local_port: 25600 + index, label: None };
             servers.push(server);
             let claimed = store::claim(&panel.pool, anna, &slot, 4).await.unwrap();
             assert_eq!(matches!(claimed, store::Claimed::Full), index == 4, "UDP tunnel {index}");
         }
         assert!(matches!(store::claim_slot(&panel.pool, anna, servers[0], 25565, 4).await.unwrap(), store::Claimed::Ok));
+    }
+
+    #[tokio::test]
+    async fn the_database_keeps_tunnels_and_ports_from_drifting_apart() {
+        let panel = panel().await;
+        let anna = a_user(&panel.pool, "anna").await;
+        let ben = a_user(&panel.pool, "ben").await;
+        let hers = a_server(&panel.pool, anna, "hers", 1024).await;
+        let his = a_server(&panel.pool, ben, "his", 1024).await;
+        an_extra_port(&panel.pool, hers, 25600).await;
+
+        let stray = store::Slot { id: Id::new(), server: hers, kind: store::TunnelKind::Udp, local_port: 25601, label: None };
+        assert!(store::claim(&panel.pool, anna, &stray, 4).await.is_err(), "no tunnel onto a port the server does not hold");
+
+        let voice = store::Slot { id: Id::new(), server: hers, kind: store::TunnelKind::Udp, local_port: 25600, label: None };
+        store::claim(&panel.pool, anna, &voice, 4).await.unwrap();
+        store::attach(&panel.pool, voice.id, "voice-tunnel").await.unwrap();
+        let refused = crate::settings::allocations::remove(&panel.pool, hers, 25600).await.unwrap_err();
+        assert_eq!(refused.code(), "port_published", "even without the check in the handler");
+
+        let squatter = sqlx::query(
+            "INSERT INTO allocations (port, server_id, name, is_primary, created_at) VALUES (25600, ?, 'x', 0, ?)",
+        )
+        .bind(his)
+        .bind(Timestamp::now())
+        .execute(&panel.pool)
+        .await;
+        assert!(squatter.is_err());
+
+        store::forget(&panel.pool, voice.id).await.unwrap();
+        crate::settings::allocations::remove(&panel.pool, hers, 25600).await.unwrap();
+        let still_out_there = sqlx::query(
+            "INSERT INTO allocations (port, server_id, name, is_primary, created_at) VALUES (25600, ?, 'x', 0, ?)",
+        )
+        .bind(his)
+        .bind(Timestamp::now())
+        .execute(&panel.pool)
+        .await;
+        assert!(still_out_there.is_err(), "until playit.gg has the tunnel back, nobody else gets that port");
+        let in_use: Vec<i64> = sqlx::query_scalar("SELECT port FROM ports_in_use").fetch_all(&panel.pool).await.unwrap();
+        assert!(in_use.contains(&25600));
+
+        store::settled(&panel.pool, "voice-tunnel").await.unwrap();
+        sqlx::query(
+            "INSERT INTO allocations (port, server_id, name, is_primary, created_at) VALUES (25600, ?, 'x', 0, ?)",
+        )
+        .bind(his)
+        .bind(Timestamp::now())
+        .execute(&panel.pool)
+        .await
+        .unwrap();
+    }
+
+    #[tokio::test]
+    async fn a_server_being_deleted_lets_go_of_its_published_ports() {
+        let panel = panel().await;
+        let anna = a_user(&panel.pool, "anna").await;
+        let server = a_server(&panel.pool, anna, "survival", 1024).await;
+        an_extra_port(&panel.pool, server, 25600).await;
+        let voice = store::Slot { id: Id::new(), server, kind: store::TunnelKind::Udp, local_port: 25600, label: None };
+        store::claim(&panel.pool, anna, &voice, 4).await.unwrap();
+        store::attach(&panel.pool, voice.id, "voice-tunnel").await.unwrap();
+
+        sqlx::query("UPDATE servers SET status = 'deleting' WHERE id = ?").bind(server).execute(&panel.pool).await.unwrap();
+        sqlx::query("DELETE FROM allocations WHERE server_id = ?").bind(server).execute(&panel.pool).await.unwrap();
+        sqlx::query("DELETE FROM servers WHERE id = ?").bind(server).execute(&panel.pool).await.unwrap();
+
+        assert_eq!(store::released(&panel.pool, anna).await.unwrap(), ["voice-tunnel"], "the debt is written down");
     }
 
     #[tokio::test]

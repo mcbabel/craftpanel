@@ -150,11 +150,23 @@ pub async fn remove(pool: &SqlitePool, server: Id, port: u16) -> Result<()> {
             "the primary port is swapped, not deleted",
         )),
         Some(false) => {
-            sqlx::query("DELETE FROM allocations WHERE server_id = ? AND port = ?")
-                .bind(server)
-                .bind(port)
-                .execute(pool)
-                .await?;
+            let removed = sqlx::query(
+                "DELETE FROM allocations WHERE server_id = ? AND port = ? \
+                   AND NOT EXISTS (SELECT 1 FROM playit_tunnels \
+                                    WHERE server_id = ? AND local_port = ?)",
+            )
+            .bind(server)
+            .bind(port)
+            .bind(server)
+            .bind(port)
+            .execute(pool)
+            .await?;
+            if removed.rows_affected() == 0 {
+                return Err(Failure::conflict(
+                    "port_published",
+                    "this port is published through playit.gg; take it off there first",
+                ));
+            }
             Ok(())
         }
     }
@@ -210,7 +222,7 @@ async fn next_free(
     range: PortRange,
 ) -> Result<u16> {
     let taken: Vec<u16> =
-        sqlx::query_scalar("SELECT port FROM allocations WHERE port BETWEEN ? AND ? ORDER BY port")
+        sqlx::query_scalar("SELECT port FROM ports_in_use WHERE port BETWEEN ? AND ? ORDER BY port")
             .bind(range.from)
             .bind(range.to)
             .fetch_all(&mut *transaction)
@@ -252,7 +264,8 @@ fn unknown(port: u16) -> Failure {
 }
 
 fn is_taken(err: &sqlx::Error) -> bool {
-    err.as_database_error().is_some_and(|db| db.is_unique_violation())
+    err.as_database_error()
+        .is_some_and(|db| db.is_unique_violation() || db.message().contains("port_still_published"))
 }
 
 #[cfg(test)]

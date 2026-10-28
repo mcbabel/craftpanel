@@ -169,7 +169,7 @@ async fn owner(pool: &SqlitePool, username: &str) -> Result<Answer> {
 }
 
 async fn ports(pool: &SqlitePool) -> Result<Answer> {
-    let taken: Vec<i64> = sqlx::query_scalar("SELECT port FROM allocations").fetch_all(pool).await?;
+    let taken: Vec<i64> = sqlx::query_scalar("SELECT port FROM ports_in_use").fetch_all(pool).await?;
     let (from, to): (i64, i64) =
         sqlx::query_as("SELECT port_pool_from, port_pool_to FROM panel_settings WHERE id = 1")
             .fetch_one(pool)

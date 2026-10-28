@@ -439,7 +439,17 @@ impl Connection {
 
         let account = store::account(&self.pool, self.user).await?.unwrap_or_default();
         let limit = limit_of(account.has_premium);
-        match store::claim(&self.pool, self.user, slot, limit).await? {
+        let claimed = store::claim(&self.pool, self.user, slot, limit).await.map_err(|err| {
+            if err.as_database_error().is_some_and(|db| db.message().contains("playit_port_not_held")) {
+                Failure::bad_request(
+                    "playit_port_not_held",
+                    format!("port {} does not belong to this server", slot.local_port),
+                )
+            } else {
+                err.into()
+            }
+        })?;
+        match claimed {
             Claimed::Taken => {
                 return Err(Failure::conflict(
                     "playit_tunnel_exists",

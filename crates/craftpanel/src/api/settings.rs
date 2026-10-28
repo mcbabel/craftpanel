@@ -378,12 +378,6 @@ async fn drop_allocation(
 ) -> Result<StatusCode> {
     let (access, row) = seen(&state, &caller, server, Permission::Advanced).await?;
     ports_open(&state, &caller, row.owner_id).await?;
-    if crate::playit::store::on_port(&state.pool, server, port).await? {
-        return Err(Failure::conflict(
-            "port_published",
-            "this port is published through playit.gg; take it off there first",
-        ));
-    }
     operations.guard_write(server).await.map_err(crate::settings::from_fault)?;
     allocations::remove(&state.pool, server, port).await?;
 

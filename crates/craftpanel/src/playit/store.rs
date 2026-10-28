@@ -554,16 +554,6 @@ pub async fn forget(pool: &SqlitePool, id: Id) -> sqlx::Result<bool> {
     Ok(done.rows_affected() == 1)
 }
 
-pub async fn on_port(pool: &SqlitePool, server: Id, local_port: u16) -> sqlx::Result<bool> {
-    sqlx::query_scalar(
-        "SELECT EXISTS (SELECT 1 FROM playit_tunnels WHERE server_id = ? AND local_port = ?)",
-    )
-    .bind(server)
-    .bind(local_port)
-    .fetch_one(pool)
-    .await
-}
-
 pub async fn forget_all(pool: &SqlitePool, user: Id) -> sqlx::Result<()> {
     sqlx::query("DELETE FROM playit_tunnels WHERE user_id = ?")
         .bind(user)
