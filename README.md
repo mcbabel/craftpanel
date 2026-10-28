@@ -59,6 +59,8 @@ and installing from a bundle you built yourself.
 
 ## Documentation
 
+The guides below are also on the website: **[mcbabel.github.io/craftpanel](https://mcbabel.github.io/craftpanel/)**.
+
 | Guide | |
 |---|---|
 | [Installation](docs/installation.md) | Requirements, installing, updating, uninstalling |
