@@ -2294,6 +2294,12 @@
   "craftpanel.content.entry-gone": {
     "defaultMessage": "This entry is no longer on the server."
   },
+  "craftpanel.content.limbo-body": {
+    "defaultMessage": "They are not on Modrinth, so there is nothing to browse here. Upload a Limbo plugin as a .jar and it lands in the plugins folder."
+  },
+  "craftpanel.content.limbo-header": {
+    "defaultMessage": "Limbo has plugins of its own"
+  },
   "craftpanel.content.load-failed": {
     "defaultMessage": "Failed to load content"
   },

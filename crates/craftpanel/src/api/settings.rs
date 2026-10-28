@@ -1346,7 +1346,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn the_catalogue_is_ten_entries_and_needs_a_session() {
+    async fn the_catalogue_lists_every_loader_and_needs_a_session() {
         let world = world().await;
         let secret = world.as_owner().await;
 
@@ -1356,7 +1356,7 @@ mod tests {
         let listed = world.call(fetch("/loaders"), &secret).await;
         assert_eq!(listed.status(), StatusCode::OK);
         let body = body_json(listed).await;
-        assert_eq!(body["loaders"].as_array().unwrap().len(), 10);
+        assert_eq!(body["loaders"].as_array().unwrap().len(), 12);
         assert_eq!(body["loaders"][0]["id"], "vanilla");
         assert_eq!(body["loaders"][7]["name"], "NeoForge");
         assert_eq!(body["loaders"][6]["supports_properties"], false, "velocity");

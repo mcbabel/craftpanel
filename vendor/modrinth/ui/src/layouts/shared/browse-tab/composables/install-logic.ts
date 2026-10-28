@@ -511,6 +511,9 @@ export function getCompatibleLoaderAliases(loader: string) {
 	if (normalized === 'neoforge' || normalized === 'neo') {
 		return new Set(['neoforge', 'neo'])
 	}
+	if (normalized === 'craftbukkit') {
+		return new Set(['craftbukkit', 'bukkit', 'spigot'])
+	}
 	return new Set([normalized])
 }
 

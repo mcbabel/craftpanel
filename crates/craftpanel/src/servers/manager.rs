@@ -1843,9 +1843,8 @@ fn argv(loader: Option<LoaderId>, memory_mib: u32, extra: &[String]) -> Vec<Stri
     }
     args.push("-jar".to_owned());
     args.push(JAR.to_owned());
-    if loader != Some(LoaderId::Velocity) {
-        args.push("nogui".to_owned());
-    }
+    let launch = crate::settings::startup::launch_of(loader);
+    args.extend(launch.trailing.iter().map(|word| (*word).to_owned()));
     args
 }
 

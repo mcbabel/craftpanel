@@ -124,6 +124,8 @@ export type LoaderId =
 	| 'neoforge'
 	| 'quilt'
 	| 'forge'
+	| 'craftbukkit'
+	| 'limbo'
 
 export interface ServerNet {
 	ip: string | null
@@ -802,6 +804,8 @@ export interface LoaderInfo {
 		| 'neoforged'
 		| 'quiltmc'
 		| 'minecraftforge'
+		| 'getbukkit'
+		| 'modrinth'
 	wave: 1 | 2
 }
 

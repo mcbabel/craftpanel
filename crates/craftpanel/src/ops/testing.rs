@@ -20,13 +20,12 @@ pub async fn schema() -> SqlitePool {
         .page_size(1024)
         .synchronous(sqlx::sqlite::SqliteSynchronous::Off)
         .foreign_keys(true);
-    let pool = sqlx::sqlite::SqlitePoolOptions::new()
+    crate::db::migrate(options.clone()).await.expect("the migrations apply");
+    sqlx::sqlite::SqlitePoolOptions::new()
         .max_connections(1)
         .connect_with(options)
         .await
-        .expect("a database of its own");
-    sqlx::migrate!("./migrations").run(&pool).await.expect("the migrations apply");
-    pool
+        .expect("a database of its own")
 }
 
 fn a_database_of_its_own() -> PathBuf {
@@ -63,13 +62,12 @@ pub async fn busy_schema(dir: &DataDir) -> SqlitePool {
         .journal_mode(sqlx::sqlite::SqliteJournalMode::Wal)
         .foreign_keys(true)
         .busy_timeout(std::time::Duration::from_secs(10));
-    let pool = sqlx::sqlite::SqlitePoolOptions::new()
+    crate::db::migrate(options.clone()).await.expect("the migrations apply");
+    sqlx::sqlite::SqlitePoolOptions::new()
         .max_connections(8)
         .connect_with(options)
         .await
-        .expect("a database on disk");
-    sqlx::migrate!("./migrations").run(&pool).await.expect("the migrations apply");
-    pool
+        .expect("a database on disk")
 }
 
 pub async fn a_user(pool: &SqlitePool, role: PanelRole) -> Id {

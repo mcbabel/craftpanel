@@ -182,6 +182,8 @@ const LOADERS: LoaderId[] = [
 	'neoforge',
 	'quilt',
 	'forge',
+	'craftbukkit',
+	'limbo',
 ]
 
 const CHANNELS: UpdateChannel[] = ['release', 'beta', 'alpha']

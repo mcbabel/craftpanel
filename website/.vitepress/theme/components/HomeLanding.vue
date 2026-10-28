@@ -197,7 +197,7 @@ const groups = [
 	{
 		title: 'Run servers',
 		items: [
-			'Vanilla, Paper, Folia, Purpur, Leaf, Fabric and Velocity',
+			'Vanilla, Paper, Folia, Purpur, Leaf, Fabric, Velocity, CraftBukkit and Limbo',
 			'Live console with search and log sharing',
 			'CPU, memory and storage at a glance',
 			'The right Java runtime per Minecraft version',

@@ -107,6 +107,11 @@ show a scrollbar or cut off a field. Those are corrected in place, one class at 
   opens toward the side with more room and its list shrinks to fit, scrolling inside. Upstream it
   always opened downwards and ran off the bottom of the window.
 
+- CraftBukkit is a server type of CraftPanel's own. `ui/src/utils/loaders.ts` names it,
+  `assets/generated-icons.ts` gives it the Bukkit icon, and `ui/src/utils/version-compatibility.ts`
+  and `ui/src/layouts/shared/browse-tab/composables/install-logic.ts` let it take Bukkit and Spigot
+  plugins (not Paper's).
+
 A new copy of Modrinth's code overwrites these as well; check each one again after an update.
 
 ## Mail templates

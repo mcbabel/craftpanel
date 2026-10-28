@@ -1,0 +1,105 @@
+[
+ {
+  "version_number": "2026.0.3-ALPHA",
+  "game_versions": [
+   "26.3"
+  ],
+  "loaders": [
+   "java-agent"
+  ],
+  "version_type": "alpha",
+  "date_published": "2026-09-15T16:51:33.265261Z",
+  "files": [
+   {
+    "id": "9uL1SJGE",
+    "hashes": {
+     "sha1": "9a2b48224873ec75ff63685c350262a368a1d6db",
+     "sha512": "bbba39d8ae69d33652a11d0eba4bd7082a84fa1ea2f211ed822f248eea17caf2e91d466490d309c9414fa79b3666b7c0098d50f119ab14f305fb0f225f5764df"
+    },
+    "url": "https://cdn.modrinth.com/data/gIDqs3gn/versions/t4FmKS67/Limbo-2026.0.3-ALPHA-26.3.jar",
+    "filename": "Limbo-2026.0.3-ALPHA-26.3.jar",
+    "primary": true,
+    "size": 8819668,
+    "file_type": null
+   }
+  ]
+ },
+ {
+  "version_number": "2026.0.2-ALPHA",
+  "game_versions": [
+   "26.2"
+  ],
+  "loaders": [
+   "java-agent"
+  ],
+  "version_type": "alpha",
+  "date_published": "2026-06-16T23:22:41.710101Z",
+  "files": [
+   {
+    "id": "F5VEWW53",
+    "hashes": {
+     "sha1": "753f6197b183ef0f3a144c4e332fbf491c524cf7",
+     "sha512": "b2be71e7e322fd476eb8e87a13636029652076abea02190edb2ecbcb32ffd5c8709d80569aefdfe8174df9bcdb872df71f26a319062bbc55f2e66232d646fc73"
+    },
+    "url": "https://cdn.modrinth.com/data/gIDqs3gn/versions/W9yOc4GR/Limbo-2026.0.2-ALPHA-26.2.jar",
+    "filename": "Limbo-2026.0.2-ALPHA-26.2.jar",
+    "primary": true,
+    "size": 8783373,
+    "file_type": null
+   }
+  ]
+ },
+ {
+  "version_number": "2026.0.1-ALPHA",
+  "game_versions": [
+   "26.1",
+   "26.1.1",
+   "26.1.2"
+  ],
+  "loaders": [
+   "java-agent"
+  ],
+  "version_type": "alpha",
+  "date_published": "2026-04-09T17:45:50.330738Z",
+  "files": [
+   {
+    "id": "UfBUl6Pw",
+    "hashes": {
+     "sha512": "819a8276f2689f00fe9141165dca34f078b6b7614f6091b9d9f60847bb83dda1f928f7f657c08c69096588bed0b6e3a5a286b29c1d87c03c81f1c2be9aafbeb2",
+     "sha1": "00a0974be493e3a5f957ee4615a87ee4f31c46f6"
+    },
+    "url": "https://cdn.modrinth.com/data/gIDqs3gn/versions/ax9WHV6q/Limbo-2026.0.1-ALPHA-26.1.2.jar",
+    "filename": "Limbo-2026.0.1-ALPHA-26.1.2.jar",
+    "primary": true,
+    "size": 8932103,
+    "file_type": null
+   }
+  ]
+ },
+ {
+  "version_number": "2026.0.1-ALPHA",
+  "game_versions": [
+   "26.1",
+   "26.1.1"
+  ],
+  "loaders": [
+   "java-agent"
+  ],
+  "version_type": "alpha",
+  "date_published": "2026-04-01T21:13:35.326166Z",
+  "files": [
+   {
+    "id": "vR3iOWFI",
+    "hashes": {
+     "sha1": "1d4d0a48f103fe413832ba8c469a973f4bf3fb45",
+     "sha512": "3837540df8b687307b21256ef575d9e7582ee4a4caa8809fd0c40c6afe98b13e95418583feee22d72e648f505fa1e445be7fd97dab5bf4cb979b1609ef452f31"
+    },
+    "url": "https://cdn.modrinth.com/data/gIDqs3gn/versions/MAURM1cR/Limbo-2026.0.1-ALPHA-26.1.1.jar",
+    "filename": "Limbo-2026.0.1-ALPHA-26.1.1.jar",
+    "primary": true,
+    "size": 8932103,
+    "file_type": null
+   }
+  ]
+ }
+]

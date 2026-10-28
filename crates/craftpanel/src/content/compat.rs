@@ -6,6 +6,8 @@ use super::modrinth::MrVersion;
 
 const ALIAS_GROUPS: [&[&str]; 2] = [&["paper", "purpur", "spigot", "bukkit"], &["neoforge", "neo"]];
 
+const ONE_WAY: [(&str, &[&str]); 1] = [("craftbukkit", &["bukkit", "spigot"])];
+
 const LOADERLESS: [&str; 4] = ["shader", "shaderpack", "resourcepack", "datapack"];
 
 pub fn normalise_loader(loader: &str) -> String {
@@ -17,6 +19,9 @@ pub fn aliases(loader: &str) -> BTreeSet<String> {
     let mut names = BTreeSet::from([loader.clone()]);
     if let Some(group) = ALIAS_GROUPS.iter().find(|group| group.contains(&loader.as_str())) {
         names.extend(group.iter().map(|name| (*name).to_owned()));
+    }
+    if let Some((_, accepted)) = ONE_WAY.iter().find(|(name, _)| *name == loader) {
+        names.extend(accepted.iter().map(|name| (*name).to_owned()));
     }
     names
 }
@@ -127,5 +132,13 @@ mod tests {
         assert_eq!(normalise_loader("Neo-Forge"), "neoforge");
         assert_eq!(normalise_loader("quilt_loader"), "quiltloader");
         assert!(aliases("PAPER").contains("purpur"));
+    }
+
+    #[test]
+    fn craftbukkit_takes_bukkit_and_spigot_plugins_but_not_paper_ones() {
+        let names = aliases("craftbukkit");
+        assert!(names.contains("bukkit") && names.contains("spigot") && names.contains("craftbukkit"));
+        assert!(!names.contains("paper"));
+        assert!(!aliases("bukkit").contains("craftbukkit"), "only one way");
     }
 }

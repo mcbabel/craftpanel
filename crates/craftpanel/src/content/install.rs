@@ -49,7 +49,7 @@ impl Plan {
 pub fn directory_of(loader: LoaderId) -> &'static str {
     match loader.family() {
         LoaderFamily::Vanilla => "world/datapacks",
-        LoaderFamily::Bukkit | LoaderFamily::Proxy => "plugins",
+        LoaderFamily::Bukkit | LoaderFamily::Proxy | LoaderFamily::Limbo => "plugins",
         LoaderFamily::Modloader => "mods",
     }
 }

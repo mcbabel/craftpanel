@@ -34,7 +34,7 @@ impl Held {
         loader: Option<LoaderId>,
         patience: Duration,
     ) -> Option<Self> {
-        if loader == Some(LoaderId::Velocity) {
+        if matches!(loader, Some(LoaderId::Velocity | LoaderId::Limbo)) {
             return None;
         }
         let link = running_link(hub, server).await?;

@@ -2294,6 +2294,12 @@
   "craftpanel.content.entry-gone": {
     "defaultMessage": "Diesen Eintrag gibt es auf dem Server nicht mehr."
   },
+  "craftpanel.content.limbo-body": {
+    "defaultMessage": "Die gibt es nicht auf Modrinth, deshalb kann man hier nichts durchsuchen. Lade ein Limbo-Plugin als .jar hoch, dann landet es im plugins-Ordner."
+  },
+  "craftpanel.content.limbo-header": {
+    "defaultMessage": "Limbo hat eigene Plugins"
+  },
   "craftpanel.content.load-failed": {
     "defaultMessage": "Die Inhalte konnten nicht geladen werden"
   },

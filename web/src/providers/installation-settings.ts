@@ -51,6 +51,8 @@ const LOADER_FAMILY: Record<LoaderId, string> = {
 	neoforge: 'modloader',
 	forge: 'modloader',
 	velocity: 'proxy',
+	craftbukkit: 'bukkit',
+	limbo: 'limbo',
 }
 
 const messages = defineMessages({

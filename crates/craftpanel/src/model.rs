@@ -691,6 +691,8 @@ wire_enum! {
         NeoForge = "neoforge",
         Quilt = "quilt",
         Forge = "forge",
+        CraftBukkit = "craftbukkit",
+        Limbo = "limbo",
     }
 }
 
@@ -700,22 +702,28 @@ pub enum LoaderFamily {
     Bukkit,
     Modloader,
     Proxy,
+    Limbo,
 }
 
 impl LoaderId {
     pub const fn family(self) -> LoaderFamily {
         match self {
             Self::Vanilla => LoaderFamily::Vanilla,
-            Self::Paper | Self::Folia | Self::Purpur | Self::Leaf => LoaderFamily::Bukkit,
+            Self::Paper | Self::Folia | Self::Purpur | Self::Leaf | Self::CraftBukkit => {
+                LoaderFamily::Bukkit
+            }
             Self::Fabric | Self::Quilt | Self::NeoForge | Self::Forge => LoaderFamily::Modloader,
             Self::Velocity => LoaderFamily::Proxy,
+            Self::Limbo => LoaderFamily::Limbo,
         }
     }
 
     pub const fn content_type(self) -> ContentProjectType {
         match self.family() {
             LoaderFamily::Vanilla => ContentProjectType::Datapack,
-            LoaderFamily::Bukkit | LoaderFamily::Proxy => ContentProjectType::Plugin,
+            LoaderFamily::Bukkit | LoaderFamily::Proxy | LoaderFamily::Limbo => {
+                ContentProjectType::Plugin
+            }
             LoaderFamily::Modloader => ContentProjectType::Mod,
         }
     }
@@ -1782,7 +1790,7 @@ mod tests {
         assert_snake_case::<LimitDimension>(&[]);
         assert_snake_case::<BlockedReason>(&[]);
 
-        assert_snake_case::<LoaderId>(&["NeoForge"]);
+        assert_snake_case::<LoaderId>(&["NeoForge", "CraftBukkit"]);
         assert_eq!(LoaderId::NeoForge.as_str(), "neoforge");
     }
 
@@ -1795,10 +1803,10 @@ mod tests {
     }
 
     #[test]
-    fn the_loader_catalogue_has_ten_entries_and_seven_sources() {
-        assert_eq!(LoaderId::ALL.len(), 10);
+    fn the_loader_catalogue_has_twelve_entries_and_nine_sources() {
+        assert_eq!(LoaderId::ALL.len(), 12);
         let with_source = LoaderId::ALL.iter().filter(|l| l.source().is_some()).count();
-        assert_eq!(with_source, 7);
+        assert_eq!(with_source, 9);
         assert!(LoaderId::Forge.source().is_none());
         assert_eq!(LoaderId::Paper.source(), Some(crate::loaders::Loader::Paper));
     }

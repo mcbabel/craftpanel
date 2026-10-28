@@ -1,11 +1,13 @@
 #![allow(dead_code)]
 
 pub(crate) mod checksum;
+mod craftbukkit;
 mod error;
 mod fabric;
 mod fill;
 pub(crate) mod http;
 mod leaf;
+mod limbo;
 mod purpur;
 mod vanilla;
 
@@ -28,10 +30,12 @@ pub enum Loader {
     Leaf,
     Fabric,
     Velocity,
+    CraftBukkit,
+    Limbo,
 }
 
 impl Loader {
-    pub const ALL: [Self; 7] = [
+    pub const ALL: [Self; 9] = [
         Self::Vanilla,
         Self::Paper,
         Self::Folia,
@@ -39,6 +43,8 @@ impl Loader {
         Self::Leaf,
         Self::Fabric,
         Self::Velocity,
+        Self::CraftBukkit,
+        Self::Limbo,
     ];
 
     pub fn id(self) -> &'static str {
@@ -50,6 +56,8 @@ impl Loader {
             Self::Leaf => "leaf",
             Self::Fabric => "fabric",
             Self::Velocity => "velocity",
+            Self::CraftBukkit => "craftbukkit",
+            Self::Limbo => "limbo",
         }
     }
 
@@ -62,6 +70,8 @@ impl Loader {
             Self::Leaf => "Leaf",
             Self::Fabric => "Fabric",
             Self::Velocity => "Velocity",
+            Self::CraftBukkit => "CraftBukkit",
+            Self::Limbo => "Limbo",
         }
     }
 
@@ -139,6 +149,8 @@ impl Sources {
             Loader::Purpur => purpur::versions(&self.http).await,
             Loader::Leaf => leaf::versions(&self.http).await,
             Loader::Fabric => fabric::versions(&self.http).await,
+            Loader::CraftBukkit => craftbukkit::versions(&self.http).await,
+            Loader::Limbo => limbo::versions(&self.http).await,
         }
     }
 
@@ -151,6 +163,8 @@ impl Sources {
             Loader::Purpur => purpur::builds(&self.http, version).await,
             Loader::Leaf => leaf::builds(&self.http, version).await,
             Loader::Fabric => fabric::builds(&self.http, version).await,
+            Loader::CraftBukkit => craftbukkit::builds(&self.http, version).await,
+            Loader::Limbo => limbo::builds(&self.http, version).await,
         }
     }
 
@@ -232,7 +246,7 @@ mod tests {
             assert_eq!(Loader::from_id(loader.id()), Some(loader));
         }
         assert_eq!(Loader::from_id("spigot"), None);
-        assert_eq!(Loader::ALL.len(), 7);
+        assert_eq!(Loader::ALL.len(), 9);
     }
 
     #[test]

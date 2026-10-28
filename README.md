@@ -20,8 +20,9 @@ and installing mods and plugins feels the way it does on Modrinth.
 
 - **Server management** — create, start, stop, restart and kill servers, with a live console and
   live CPU, memory and storage metrics.
-- **Loaders** — Vanilla, Paper, Folia, Purpur, Leaf, Fabric and Velocity, each downloaded and
-  checksum-verified.
+- **Loaders** — Vanilla, Paper, Folia, Purpur, Leaf, Fabric, Velocity, CraftBukkit and Limbo, each
+  downloaded and checksum-verified. CraftBukkit comes from [GetBukkit](https://getbukkit.org), which
+  builds it with SpigotMC's BuildTools; Limbo comes from Modrinth.
 - **Content** — search, install, update and remove mods and plugins straight from Modrinth, one at a
   time or in bulk.
 - **Modpacks** — start a server from a Modrinth modpack or an uploaded `.mrpack`, switch its
@@ -81,8 +82,9 @@ CraftPanel is a tool for **your own machine**, not a hosting business:
 - One machine — no nodes, agents or clusters.
 - Linux only — system accounts, cgroup v2 and systemd are load-bearing.
 - No billing, plans, subdomains, DNS or SFTP.
-- NeoForge, Quilt and Forge are listed but not supported yet. Spigot and CraftBukkit are not
-  offered because they may not be redistributed; Bedrock is out of scope.
+- NeoForge, Quilt and Forge are listed but not supported yet. CraftPanel ships no server software
+  itself: every jar is downloaded by the panel from its project's own source. Bedrock is out of
+  scope.
 
 Google Drive backups, mail and playit.gg each need an account of your own and stay switched off
 until you set them up.

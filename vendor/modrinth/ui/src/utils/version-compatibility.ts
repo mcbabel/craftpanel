@@ -24,6 +24,10 @@ export function getCompatibleLoaderAliases(loader: string) {
 			aliases.add(alias)
 		}
 	}
+	if (normalizedLoader === 'craftbukkit') {
+		aliases.add('bukkit')
+		aliases.add('spigot')
+	}
 
 	return aliases
 }

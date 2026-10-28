@@ -1088,6 +1088,7 @@ export const loaderIconMap: Record<string, IconComponent> = {
 	babric: TagLoaderBabricIcon,
 	'bta-babric': TagLoaderBtaBabricIcon,
 	bukkit: TagLoaderBukkitIcon,
+	craftbukkit: TagLoaderBukkitIcon,
 	bungeecord: TagLoaderBungeecordIcon,
 	canvas: TagLoaderCanvasIcon,
 	datapack: TagLoaderDatapackIcon,

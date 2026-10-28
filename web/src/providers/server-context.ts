@@ -121,6 +121,8 @@ const LOADER_NAMES: Record<LoaderId, string> = {
 	neoforge: 'NeoForge',
 	quilt: 'Quilt',
 	forge: 'Forge',
+	craftbukkit: 'CraftBukkit',
+	limbo: 'Limbo',
 }
 
 const GRAPH_POINTS = 10

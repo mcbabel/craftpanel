@@ -39,6 +39,8 @@ pub enum Origin {
     Neoforged,
     Quiltmc,
     Minecraftforge,
+    Getbukkit,
+    Modrinth,
 }
 
 impl Origin {
@@ -52,6 +54,8 @@ impl Origin {
             Self::Neoforged => "maven.neoforged.net",
             Self::Quiltmc => "meta.quiltmc.org",
             Self::Minecraftforge => "files.minecraftforge.net",
+            Self::Getbukkit => "getbukkit.org",
+            Self::Modrinth => "api.modrinth.com",
         }
     }
 }
@@ -127,6 +131,10 @@ macro_rules! loader {
             wave: $wave,
         }
     };
+    ($id:ident, $name:literal, $kind:ident, $install:ident, $versions:literal, $props:literal,
+     $source:ident, $wave:literal, without content) => {
+        LoaderInfo { supports_content: false, ..loader!($id, $name, $kind, $install, $versions, $props, $source, $wave) }
+    };
 }
 
 pub const LOADERS: &[LoaderInfo] = &[
@@ -140,10 +148,12 @@ pub const LOADERS: &[LoaderInfo] = &[
     loader!(NeoForge, "NeoForge", Modloader, Installer, true, true, Neoforged, 2),
     loader!(Quilt, "Quilt", Modloader, Installer, true, true, Quiltmc, 2),
     loader!(Forge, "Forge", Modloader, Installer, true, true, Minecraftforge, 2),
+    loader!(CraftBukkit, "CraftBukkit", Server, Download, true, true, Getbukkit, 1),
+    loader!(Limbo, "Limbo", Server, Download, true, true, Modrinth, 1, without content),
 ];
 
 pub fn info(id: LoaderId) -> &'static LoaderInfo {
-    LOADERS.iter().find(|entry| entry.id == id).expect("the catalogue holds all ten")
+    LOADERS.iter().find(|entry| entry.id == id).expect("the catalogue holds every loader")
 }
 
 struct Cached<T> {
@@ -466,15 +476,15 @@ mod tests {
     }
 
     #[test]
-    fn the_catalogue_is_ten_lower_case_ids_with_display_names_of_their_own() {
-        assert_eq!(LOADERS.len(), 10);
+    fn the_catalogue_is_twelve_lower_case_ids_with_display_names_of_their_own() {
+        assert_eq!(LOADERS.len(), 12);
 
         let ids: Vec<&str> = LOADERS.iter().map(|entry| entry.id.as_str()).collect();
         assert_eq!(
             ids,
             [
                 "vanilla", "paper", "folia", "purpur", "leaf", "fabric", "velocity", "neoforge",
-                "quilt", "forge"
+                "quilt", "forge", "craftbukkit", "limbo"
             ]
         );
         assert!(ids.iter().all(|id| *id == id.to_lowercase()), "the layout lower-cases everything");

@@ -8,6 +8,10 @@
 			{{ formatMessage(messages.truncatedBody, { limit: CONTENT_LIMIT }) }}
 		</Admonition>
 
+		<Admonition v-if="ownPlugins" type="info" :header="formatMessage(messages.limboHeader)">
+			{{ formatMessage(messages.limboBody) }}
+		</Admonition>
+
 		<Admonition
 			v-if="restartHintVisible"
 			type="info"
@@ -87,6 +91,15 @@ const CONTENT_LIMIT = 2000
 const SKIP_UNKNOWN_FILE_WARNING = 'craftpanel.content.skip-unknown-file-warning'
 
 const messages = defineMessages({
+	limboHeader: {
+		id: 'craftpanel.content.limbo-header',
+		defaultMessage: 'Limbo has plugins of its own',
+	},
+	limboBody: {
+		id: 'craftpanel.content.limbo-body',
+		defaultMessage:
+			'They are not on Modrinth, so there is nothing to browse here. Upload a Limbo plugin as a .jar and it lands in the plugins folder.',
+	},
 	truncatedHeader: {
 		id: 'craftpanel.content.truncated-header',
 		defaultMessage: 'Not all content is shown',
@@ -186,7 +199,10 @@ onScopeDispose(() => {
 	page.context.cancelUpload.value = null
 })
 
+const ownPlugins = computed(() => content.currentLoader.value === 'limbo')
+
 function browseCatalogue(): void {
+	if (ownPlugins.value) return
 	void router.push({ name: 'server-browse', params: { id: page.serverId } })
 }
 

@@ -58,11 +58,13 @@ pub struct Launch {
 }
 
 const NOGUI: &[&str] = &["nogui"];
+const DASHED_NOGUI: &[&str] = &["--nogui"];
 const NOTHING: &[&str] = &[];
 
 pub fn launch_of(loader: Option<LoaderId>) -> Launch {
     match loader {
         Some(LoaderId::Velocity) => Launch { jar: "server.jar", trailing: NOTHING },
+        Some(LoaderId::Limbo) => Launch { jar: "server.jar", trailing: DASHED_NOGUI },
         Some(LoaderId::Quilt) => Launch { jar: "quilt-server-launch.jar", trailing: NOGUI },
         _ => Launch { jar: "server.jar", trailing: NOGUI },
     }
