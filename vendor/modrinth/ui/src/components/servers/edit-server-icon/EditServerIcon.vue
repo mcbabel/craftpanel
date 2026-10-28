@@ -6,7 +6,7 @@
 		:save="saveGeneratedIcon"
 	/>
 	<div class="flex flex-col gap-2.5">
-		<span class="text-lg font-semibold text-contrast">Icon</span>
+		<span class="text-lg font-semibold text-contrast">{{ formatMessage(messages.title) }}</span>
 		<div class="group relative w-fit">
 			<TeleportOverflowMenu
 				:label="editIconTooltip"
@@ -19,21 +19,21 @@
 				:options="[
 					{
 						id: 'upload',
-						label: 'Upload icon',
+						label: formatMessage(messages.upload),
 						action: () => triggerFileInput(),
 						disabled: !props.canEdit,
 						tooltip: !props.canEdit ? editIconTooltip : undefined,
 					},
 					{
 						id: 'create',
-						label: generatedConfig ? 'Edit created icon' : 'Create an icon',
+						label: formatMessage(generatedConfig ? messages.editCreated : messages.create),
 						action: () => openIconEditor(),
 						disabled: !props.canEdit,
 						tooltip: !props.canEdit ? editIconTooltip : undefined,
 					},
 					{
 						id: 'sync',
-						label: 'Sync icon',
+						label: formatMessage(messages.sync),
 						action: () => resetIcon(),
 						disabled: !props.canEdit,
 						tooltip: !props.canEdit ? editIconTooltip : undefined,
@@ -56,11 +56,12 @@
 					/>
 					<EditIcon v-else aria-hidden="true" class="h-10 w-10 text-primary" />
 				</div>
-				<template #upload> <UploadIcon /> Upload icon </template>
+				<template #upload> <UploadIcon /> {{ formatMessage(messages.upload) }} </template>
 				<template #create>
-					<PaletteIcon /> {{ generatedConfig ? 'Edit created icon' : 'Create an icon' }}
+					<PaletteIcon />
+					{{ formatMessage(generatedConfig ? messages.editCreated : messages.create) }}
 				</template>
-				<template #sync> <TransferIcon /> Sync icon </template>
+				<template #sync> <TransferIcon /> {{ formatMessage(messages.sync) }} </template>
 			</TeleportOverflowMenu>
 		</div>
 	</div>
@@ -76,7 +77,7 @@ import { type IconConfig, renderIcon } from '#ui/components/base/icon-editor-mod
 import IconEditorModal from '#ui/components/base/icon-editor-modal/index.vue'
 import ServerIcon from '#ui/components/servers/icons/ServerIcon.vue'
 import { useServerImage } from '#ui/composables'
-import { useVIntl } from '#ui/composables/i18n'
+import { defineMessages, useVIntl } from '#ui/composables/i18n'
 import {
 	injectModrinthClient,
 	injectModrinthServerContext,
@@ -97,6 +98,70 @@ const props = withDefaults(
 
 const { addNotification } = injectNotificationManager()
 const { formatMessage } = useVIntl()
+
+const messages = defineMessages({
+	title: { id: 'craftpanel.vendor.edit-server-icon.title', defaultMessage: 'Icon' },
+	upload: { id: 'craftpanel.vendor.edit-server-icon.upload', defaultMessage: 'Upload icon' },
+	editCreated: {
+		id: 'craftpanel.vendor.edit-server-icon.edit-created',
+		defaultMessage: 'Edit created icon',
+	},
+	create: { id: 'craftpanel.vendor.edit-server-icon.create', defaultMessage: 'Create an icon' },
+	sync: { id: 'craftpanel.vendor.edit-server-icon.sync', defaultMessage: 'Sync icon' },
+	edit: { id: 'craftpanel.vendor.edit-server-icon.edit', defaultMessage: 'Edit icon' },
+	unavailable: {
+		id: 'craftpanel.vendor.edit-server-icon.unavailable',
+		defaultMessage: 'Server icon editing is unavailable.',
+	},
+	noFileTitle: {
+		id: 'craftpanel.vendor.edit-server-icon.no-file-title',
+		defaultMessage: 'No file selected',
+	},
+	noFileText: {
+		id: 'craftpanel.vendor.edit-server-icon.no-file-text',
+		defaultMessage: 'Please select a file to upload.',
+	},
+	settingsNotSavedTitle: {
+		id: 'craftpanel.vendor.edit-server-icon.settings-not-saved-title',
+		defaultMessage: 'Icon editor settings not saved',
+	},
+	settingsNotSavedText: {
+		id: 'craftpanel.vendor.edit-server-icon.settings-not-saved-text',
+		defaultMessage: 'The server icon was updated, but its editor settings could not be saved.',
+	},
+	updatedTitle: {
+		id: 'craftpanel.vendor.edit-server-icon.updated-title',
+		defaultMessage: 'Server icon updated',
+	},
+	updatedText: {
+		id: 'craftpanel.vendor.edit-server-icon.updated-text',
+		defaultMessage: 'Your server icon was successfully changed.',
+	},
+	uploadFailedTitle: {
+		id: 'craftpanel.vendor.edit-server-icon.upload-failed-title',
+		defaultMessage: 'Upload failed',
+	},
+	uploadFailedText: {
+		id: 'craftpanel.vendor.edit-server-icon.upload-failed-text',
+		defaultMessage: 'Failed to upload server icon.',
+	},
+	resetTitle: {
+		id: 'craftpanel.vendor.edit-server-icon.reset-title',
+		defaultMessage: 'Server icon reset',
+	},
+	resetText: {
+		id: 'craftpanel.vendor.edit-server-icon.reset-text',
+		defaultMessage: 'Your server icon was successfully reset.',
+	},
+	resetFailedTitle: {
+		id: 'craftpanel.vendor.edit-server-icon.reset-failed-title',
+		defaultMessage: 'Reset failed',
+	},
+	resetFailedText: {
+		id: 'craftpanel.vendor.edit-server-icon.reset-failed-text',
+		defaultMessage: 'Failed to reset server icon.',
+	},
+})
 const client = injectModrinthClient()
 const { serverId, server } = injectModrinthServerContext()
 const queryClient = useQueryClient()
@@ -108,7 +173,7 @@ const isIconActionLoading = computed(() => isUploadingIcon.value || isSyncingIco
 const isIconActionDisabled = computed(() => isIconActionLoading.value || !props.canEdit)
 const editIconTooltip = computed(() =>
 	props.canEdit
-		? 'Edit icon'
+		? formatMessage(messages.edit)
 		: (props.permissionDeniedMessage ?? formatMessage(commonMessages.noPermissionAction)),
 )
 
@@ -206,9 +271,9 @@ async function openIconEditor() {
 }
 
 async function saveGeneratedIcon(config: IconConfig, symbolAsset: string) {
-	if (isIconActionDisabled.value) throw new Error('Server icon editing is unavailable.')
+	if (isIconActionDisabled.value) throw new Error(formatMessage(messages.unavailable))
 	const icon = await renderIcon(config, symbolAsset)
-	if (!(await uploadIcon(icon, config))) throw new Error('Failed to upload server icon.')
+	if (!(await uploadIcon(icon, config))) throw new Error(formatMessage(messages.uploadFailedText))
 }
 
 const uploadFile = async (e: Event) => {
@@ -218,8 +283,8 @@ const uploadFile = async (e: Event) => {
 	if (!file) {
 		addNotification({
 			type: 'error',
-			title: 'No file selected',
-			text: 'Please select a file to upload.',
+			title: formatMessage(messages.noFileTitle),
+			text: formatMessage(messages.noFileText),
 		})
 		return
 	}
@@ -314,23 +379,23 @@ async function uploadIcon(file: File, config: IconConfig | null): Promise<boolea
 		} catch {
 			addNotification({
 				type: 'error',
-				title: 'Icon editor settings not saved',
-				text: 'The server icon was updated, but its editor settings could not be saved.',
+				title: formatMessage(messages.settingsNotSavedTitle),
+				text: formatMessage(messages.settingsNotSavedText),
 			})
 			return true
 		}
 
 		addNotification({
 			type: 'success',
-			title: 'Server icon updated',
-			text: 'Your server icon was successfully changed.',
+			title: formatMessage(messages.updatedTitle),
+			text: formatMessage(messages.updatedText),
 		})
 		return true
 	} catch {
 		addNotification({
 			type: 'error',
-			title: 'Upload failed',
-			text: 'Failed to upload server icon.',
+			title: formatMessage(messages.uploadFailedTitle),
+			text: formatMessage(messages.uploadFailedText),
 		})
 		return false
 	} finally {
@@ -366,14 +431,14 @@ const resetIcon = async () => {
 
 		addNotification({
 			type: 'success',
-			title: 'Server icon reset',
-			text: 'Your server icon was successfully reset.',
+			title: formatMessage(messages.resetTitle),
+			text: formatMessage(messages.resetText),
 		})
 	} catch {
 		addNotification({
 			type: 'error',
-			title: 'Reset failed',
-			text: 'Failed to reset server icon.',
+			title: formatMessage(messages.resetFailedTitle),
+			text: formatMessage(messages.resetFailedText),
 		})
 	} finally {
 		isSyncingIcon.value = false

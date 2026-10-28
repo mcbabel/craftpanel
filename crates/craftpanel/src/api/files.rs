@@ -26,6 +26,8 @@ use crate::model::{Id, OperationAccepted, OperationKind, Permission};
 use crate::ops::{NewOperation, Operations};
 use crate::AppState;
 
+mod icon;
+
 pub fn router(operations: Arc<Operations>, disks: Disks) -> Router<AppState> {
     Router::new()
         .route("/servers/{server}/files/meta", get(meta))
@@ -35,6 +37,7 @@ pub fn router(operations: Arc<Operations>, disks: Disks) -> Router<AppState> {
         .route("/servers/{server}/files", delete(remove))
         .route("/servers/{server}/files/content", get(read).put(write))
         .route("/servers/{server}/files/extract", post(extract))
+        .route("/servers/{server}/icon", get(icon::read).put(icon::write).delete(icon::remove))
         .layer(Extension(operations))
         .layer(Extension(disks))
         .layer(axum::middleware::from_fn(crate::auth::extract::same_origin))
@@ -1800,5 +1803,229 @@ mod tests {
         assert_eq!(body_json(refused).await["error"], "server_busy");
 
         assert_eq!(panel.get("/list").await.status(), StatusCode::OK);
+    }
+
+    fn picture(width: u32, height: u32, format: image::ImageFormat) -> Vec<u8> {
+        let pixels = image::RgbImage::from_fn(width, height, |x, y| {
+            image::Rgb([(x % 256) as u8, (y % 256) as u8, 200])
+        });
+        let mut bytes = Vec::new();
+        image::DynamicImage::ImageRgb8(pixels)
+            .write_to(&mut std::io::Cursor::new(&mut bytes), format)
+            .expect("an encoded picture");
+        bytes
+    }
+
+    impl Panel {
+        async fn icon_as(&self, cookie: &str, method: &str, body: Vec<u8>) -> Response {
+            let request = Request::builder()
+                .method(method)
+                .uri(format!("/servers/{}/icon", self.server))
+                .header(CONTENT_TYPE, "application/octet-stream")
+                .header(COOKIE, format!("craft_session={cookie}"))
+                .body(Body::from(body))
+                .expect("a request");
+            self.send(request).await
+        }
+
+        async fn icon(&self, method: &str, body: Vec<u8>) -> Response {
+            self.icon_as(&self.cookie, method, body).await
+        }
+
+        fn stored_icon(&self) -> Option<Vec<u8>> {
+            std::fs::read(self.sandbox.server_dir().join("server-icon.png")).ok()
+        }
+    }
+
+    #[tokio::test]
+    async fn a_picture_of_any_size_and_kind_becomes_the_64_pixel_png_minecraft_reads() {
+        let panel = panel().await;
+
+        let jpeg = picture(300, 200, image::ImageFormat::Jpeg);
+        assert_eq!(panel.icon("PUT", jpeg).await.status(), StatusCode::NO_CONTENT);
+
+        let stored = panel.stored_icon().expect("server-icon.png in the server directory");
+        assert_eq!(image::guess_format(&stored).unwrap(), image::ImageFormat::Png);
+        let decoded = image::load_from_memory(&stored).expect("a readable icon");
+        assert_eq!((decoded.width(), decoded.height()), (64, 64));
+        assert!(
+            panel.chowned().iter().any(|path| path.ends_with("server-icon.png")),
+            "the game process has to be able to read its icon: {:?}",
+            panel.chowned()
+        );
+
+        let png = picture(64, 64, image::ImageFormat::Png);
+        assert_eq!(panel.icon("PUT", png).await.status(), StatusCode::NO_CONTENT);
+
+        let written: Vec<(String, Option<String>)> =
+            sqlx::query_as("SELECT action, metadata FROM audit_log ORDER BY id")
+                .fetch_all(&panel.pool)
+                .await
+                .expect("the log");
+        let actions: Vec<&str> = written.iter().map(|(action, _)| action.as_str()).collect();
+        assert_eq!(actions, ["file_uploaded", "file_edited"]);
+        assert!(written[0].1.as_deref().unwrap_or_default().contains("/server-icon.png"));
+    }
+
+    #[tokio::test]
+    async fn the_icon_is_served_as_png_and_an_unchanged_one_answers_not_modified() {
+        let panel = panel().await;
+        let png = picture(64, 64, image::ImageFormat::Png);
+        panel.sandbox.write("server-icon.png", &png);
+
+        let served = panel.icon("GET", Vec::new()).await;
+        assert_eq!(served.status(), StatusCode::OK);
+        assert_eq!(served.headers()[CONTENT_TYPE], "image/png");
+        assert_eq!(served.headers()[CACHE_CONTROL], "private, no-cache");
+        let tag = served.headers()[ETAG].clone();
+        assert_eq!(body_bytes(served).await, png);
+
+        let request = Request::builder()
+            .uri(format!("/servers/{}/icon", panel.server))
+            .header(axum::http::header::IF_NONE_MATCH, tag.clone())
+            .header(COOKIE, format!("craft_session={}", panel.cookie))
+            .body(Body::empty())
+            .expect("a request");
+        let again = panel.send(request).await;
+        assert_eq!(again.status(), StatusCode::NOT_MODIFIED);
+        assert!(body_bytes(again).await.is_empty());
+
+        panel.icon("PUT", picture(32, 32, image::ImageFormat::Gif)).await;
+        let changed = panel.icon("GET", Vec::new()).await;
+        assert_ne!(changed.headers()[ETAG], tag, "a new icon needs a new tag");
+    }
+
+    #[tokio::test]
+    async fn a_server_without_a_png_icon_has_no_icon() {
+        let panel = panel().await;
+        let missing = panel.icon("GET", Vec::new()).await;
+        assert_eq!(missing.status(), StatusCode::NOT_FOUND);
+        assert_eq!(body_json(missing).await["error"], "icon_not_found");
+
+        panel.sandbox.write("server-icon.png", b"<html>not a picture</html>");
+        let not_png = panel.icon("GET", Vec::new()).await;
+        assert_eq!(not_png.status(), StatusCode::NOT_FOUND);
+    }
+
+    #[tokio::test]
+    async fn what_is_no_picture_is_refused_and_the_old_icon_stays() {
+        let panel = panel().await;
+        let old = picture(64, 64, image::ImageFormat::Png);
+        panel.sandbox.write("server-icon.png", &old);
+
+        let html = panel.icon("PUT", b"<html><script>alert(1)</script></html>".to_vec()).await;
+        assert_eq!(html.status(), StatusCode::UNSUPPORTED_MEDIA_TYPE);
+        assert_eq!(body_json(html).await["error"], "unsupported_image");
+
+        let mut broken = picture(64, 64, image::ImageFormat::Png);
+        broken.truncate(40);
+        let cut = panel.icon("PUT", broken).await;
+        assert_eq!(cut.status(), StatusCode::UNPROCESSABLE_ENTITY);
+        assert_eq!(body_json(cut).await["error"], "invalid_image");
+
+        let huge = panel.icon("PUT", vec![0u8; 5 * 1024 * 1024]).await;
+        assert_eq!(huge.status(), StatusCode::PAYLOAD_TOO_LARGE);
+        assert_eq!(body_json(huge).await["error"], "icon_too_large");
+
+        assert_eq!(panel.stored_icon(), Some(old));
+        let listed: Vec<String> = std::fs::read_dir(panel.sandbox.server_dir())
+            .expect("the server directory")
+            .filter_map(|entry| Some(entry.ok()?.file_name().to_string_lossy().into_owned()))
+            .collect();
+        assert_eq!(listed, ["server-icon.png"], "no part file is left behind");
+    }
+
+    #[tokio::test]
+    async fn removing_the_icon_deletes_the_file_once() {
+        let panel = panel().await;
+        panel.sandbox.write("server-icon.png", &picture(64, 64, image::ImageFormat::Png));
+
+        assert_eq!(panel.icon("DELETE", Vec::new()).await.status(), StatusCode::NO_CONTENT);
+        assert_eq!(panel.stored_icon(), None);
+
+        let again = panel.icon("DELETE", Vec::new()).await;
+        assert_eq!(again.status(), StatusCode::NOT_FOUND);
+        assert_eq!(body_json(again).await["error"], "icon_not_found");
+
+        let (action,): (String,) = sqlx::query_as("SELECT action FROM audit_log")
+            .fetch_one(&panel.pool)
+            .await
+            .expect("one entry");
+        assert_eq!(action, "file_deleted");
+    }
+
+    #[tokio::test]
+    async fn a_viewer_sees_the_icon_but_may_not_change_it() {
+        let panel = panel().await;
+        let png = picture(64, 64, image::ImageFormat::Png);
+        panel.sandbox.write("server-icon.png", &png);
+
+        let anna = a_user(&panel.pool, "anna").await;
+        sqlx::query("INSERT INTO server_members (id, server_id, user_id, role, invited_at, joined_at) VALUES (?, ?, ?, ?, ?, ?)")
+            .bind(Id::new())
+            .bind(panel.server)
+            .bind(anna)
+            .bind(ServerRole::Viewer)
+            .bind(crate::model::Timestamp::now())
+            .bind(crate::model::Timestamp::now())
+            .execute(&panel.pool)
+            .await
+            .expect("a viewer");
+        let cookie = sign_in(&panel.pool, anna).await;
+
+        assert_eq!(panel.icon_as(&cookie, "GET", Vec::new()).await.status(), StatusCode::OK);
+        let other = picture(64, 64, image::ImageFormat::Jpeg);
+        assert_eq!(panel.icon_as(&cookie, "PUT", other).await.status(), StatusCode::FORBIDDEN);
+        let removal = panel.icon_as(&cookie, "DELETE", Vec::new()).await;
+        assert_eq!(removal.status(), StatusCode::FORBIDDEN);
+        assert_eq!(panel.stored_icon(), Some(png));
+
+        let carl = a_user(&panel.pool, "carl").await;
+        let stranger = sign_in(&panel.pool, carl).await;
+        let hidden = panel.icon_as(&stranger, "GET", Vec::new()).await;
+        assert_eq!(hidden.status(), StatusCode::NOT_FOUND);
+    }
+
+    #[tokio::test]
+    async fn an_icon_linking_out_of_the_server_directory_is_neither_served_nor_written_through() {
+        let panel = panel().await;
+        let secret = panel.sandbox.data_dir().join("panel.db");
+        let mut disguised = picture(64, 64, image::ImageFormat::Png);
+        disguised.extend_from_slice(b"password hashes");
+        std::fs::write(&secret, &disguised).expect("the database");
+        std::os::unix::fs::symlink(&secret, panel.sandbox.server_dir().join("server-icon.png"))
+            .expect("the link a plugin could lay");
+
+        let read = panel.icon("GET", Vec::new()).await;
+        assert_eq!(read.status(), StatusCode::FORBIDDEN);
+        assert_eq!(body_json(read).await["error"], "forbidden_path");
+
+        let png = picture(64, 64, image::ImageFormat::Png);
+        assert_eq!(panel.icon("PUT", png).await.status(), StatusCode::NO_CONTENT);
+        assert_eq!(std::fs::read(&secret).unwrap(), disguised, "the target stays untouched");
+        let placed = std::fs::symlink_metadata(panel.sandbox.server_dir().join("server-icon.png"))
+            .expect("the icon");
+        assert!(placed.is_file(), "the link was replaced, not followed");
+    }
+
+    #[tokio::test]
+    async fn the_icon_is_not_changed_while_a_backup_runs() {
+        let panel = panel().await;
+        let backup = Id::new();
+        sqlx::query("INSERT INTO backups (id, server_id, name, created_at) VALUES (?, ?, 'B', ?)")
+            .bind(backup)
+            .bind(panel.server)
+            .bind(crate::model::Timestamp::now())
+            .execute(&panel.pool)
+            .await
+            .expect("a backup row");
+        let mut run = NewOperation::new(panel.server, OperationKind::BackupCreate, None);
+        run.target_id = Some(backup);
+        panel.operations.create(run).await.expect("a run");
+
+        let refused = panel.icon("PUT", picture(64, 64, image::ImageFormat::Png)).await;
+        assert_eq!(refused.status(), StatusCode::CONFLICT);
+        assert_eq!(body_json(refused).await["error"], "server_busy");
+        assert_eq!(panel.stored_icon(), None);
     }
 }

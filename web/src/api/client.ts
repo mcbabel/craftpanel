@@ -444,6 +444,20 @@ const servers = {
 			json: body,
 			signal: options.signal,
 		}),
+
+	icon: (serverId: Ulid, options: Cancellable = {}) =>
+		requestBlob(serverPath(serverId, '/icon'), { method: 'GET', signal: options.signal }),
+
+	setIcon: (serverId: Ulid, picture: Blob, options: Cancellable = {}) =>
+		requestVoid(serverPath(serverId, '/icon'), {
+			method: 'PUT',
+			body: picture,
+			headers: { 'content-type': picture.type || 'application/octet-stream' },
+			signal: options.signal,
+		}),
+
+	removeIcon: (serverId: Ulid, options: Cancellable = {}) =>
+		requestVoid(serverPath(serverId, '/icon'), { method: 'DELETE', signal: options.signal }),
 }
 
 const operations = {

@@ -1,20 +1,27 @@
 <template>
 	<div class="flex flex-col gap-8">
-		<div class="flex max-w-[32rem] flex-col gap-2.5">
-			<label for="server-name-field" class="text-lg font-semibold text-contrast">
-				{{ formatMessage(messages.nameLabel) }}
-			</label>
-			<Input
-				id="server-name-field"
-				v-model="name"
-				v-tooltip="renameTooltip"
-				wrapper-class="w-full"
-				:maxlength="48"
-				:disabled="!canUseAdvancedSettings"
+		<div class="flex flex-wrap items-start justify-start gap-x-16 gap-y-8">
+			<div class="flex min-w-0 max-w-[32rem] grow basis-64 flex-col gap-2.5">
+				<label for="server-name-field" class="text-lg font-semibold text-contrast">
+					{{ formatMessage(messages.nameLabel) }}
+				</label>
+				<Input
+					id="server-name-field"
+					v-model="name"
+					v-tooltip="renameTooltip"
+					wrapper-class="w-full"
+					:maxlength="48"
+					:disabled="!canUseAdvancedSettings"
+				/>
+				<span v-if="!isValidName" class="font-medium text-red">
+					{{ formatMessage(messages.nameEmpty) }}
+				</span>
+			</div>
+
+			<EditServerIcon
+				:can-edit="canUseAdvancedSettings"
+				:permission-denied-message="permissionDeniedMessage"
 			/>
-			<span v-if="!isValidName" class="font-medium text-red">
-				{{ formatMessage(messages.nameEmpty) }}
-			</span>
 		</div>
 
 		<div class="flex flex-col gap-2.5">
@@ -135,6 +142,7 @@ import {
 	useServerPermissions,
 	useVIntl,
 } from '@modrinth/ui'
+import EditServerIcon from '@modrinth/ui/src/components/servers/edit-server-icon/EditServerIcon.vue'
 import { computed, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 

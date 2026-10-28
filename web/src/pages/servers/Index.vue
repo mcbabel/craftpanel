@@ -89,7 +89,10 @@
 				<div
 					class="smart-clickable:highlight-on-hover smart-clickable:outline-on-focus flex flex-row items-center gap-4 overflow-x-hidden rounded-2xl border-[1px] border-solid border-surface-4 bg-bg-raised p-4"
 				>
-					<ServerIcon :image="undefined" :disabled="row.server.status !== 'available'" />
+					<PanelServerIcon
+						:server-id="row.server.id"
+						:disabled="row.server.status !== 'available'"
+					/>
 
 					<div class="flex min-w-0 flex-col gap-1.5">
 						<div class="flex flex-row flex-wrap items-center gap-2.5">
@@ -189,7 +192,6 @@ import {
 	LoadingIndicator,
 	type MessageDescriptor,
 	ProgressBar,
-	ServerIcon,
 	ServerInfoLabels,
 	SmartClickable,
 	StatItem,
@@ -210,6 +212,7 @@ import {
 	type UserRef,
 } from '@/api'
 import InvitationInbox from '@/components/InvitationInbox.vue'
+import PanelServerIcon from '@/components/PanelServerIcon.vue'
 import { useInvitations } from '@/composables/invitations'
 import { useSession } from '@/composables/session'
 

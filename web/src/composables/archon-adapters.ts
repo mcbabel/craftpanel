@@ -1,4 +1,4 @@
-import type { AbstractModrinthClient, Archon } from '@modrinth/api-client'
+import type { AbstractModrinthClient, Archon, UploadHandle } from '@modrinth/api-client'
 import { injectModrinthClient, provideModrinthClient } from '@modrinth/ui'
 
 import {
@@ -35,6 +35,42 @@ export function toOptions(schedule: BackupSchedule): Archon.BackupsQueue.v1.Worl
 		split_automatic: automatic,
 		split_manual: window - automatic,
 		interval: schedule.interval_hours,
+	}
+}
+
+const ICON_PATH = '/server-icon.png'
+
+class NotKept extends Error {
+	readonly statusCode = 404
+}
+
+function missingOrRethrow(cause: unknown): never {
+	if (isApiRequestError(cause) && cause.status === 404) throw new NotKept(cause.message)
+	rethrow(cause)
+}
+
+// The vendored icon editor works on files next to the server. The panel keeps only the icon
+// itself; the original upload and the editor settings Modrinth stores beside it are not kept.
+function buildIconFiles(serverId: Ulid) {
+	return {
+		downloadFileWithAuth: async (_auth: unknown, path: string): Promise<Blob> => {
+			if (path !== ICON_PATH) throw new NotKept(path)
+			return await api.servers.icon(serverId).catch(missingOrRethrow)
+		},
+		uploadFileWithAuth: (_auth: unknown, path: string, file: Blob): UploadHandle<void> => {
+			const promise =
+				path === ICON_PATH ? api.servers.setIcon(serverId, file).catch(rethrow) : Promise.resolve()
+			const handle: UploadHandle<void> = {
+				promise,
+				onProgress: () => handle,
+				cancel: () => undefined,
+			}
+			return handle
+		},
+		deleteFileOrFolderWithAuth: async (_auth: unknown, path: string): Promise<void> => {
+			if (path !== ICON_PATH) throw new NotKept(path)
+			await api.servers.removeIcon(serverId).catch(missingOrRethrow)
+		},
 	}
 }
 
@@ -117,11 +153,21 @@ function buildModules(serverId: Ulid) {
 	return { backups_queue_v1, backups_v1, properties_v1 }
 }
 
+function withFilesystemAuth(real: AbstractModrinthClient) {
+	return Object.assign(Object.create(real.archon.servers_v0), {
+		getFilesystemAuth: async (): Promise<Archon.Servers.v0.JWTAuth> => ({ url: '', token: '' }),
+	})
+}
+
 export function provideArchonAdapters(serverId: Ulid): void {
 	const real = injectModrinthClient()
 	const shim: AbstractModrinthClient = Object.create(real)
 	Object.defineProperty(shim, 'archon', {
-		value: { ...real.archon, ...buildModules(serverId) },
+		value: { ...real.archon, ...buildModules(serverId), servers_v0: withFilesystemAuth(real) },
+		enumerable: true,
+	})
+	Object.defineProperty(shim, 'kyros', {
+		value: { ...real.kyros, files_v0: buildIconFiles(serverId) },
 		enumerable: true,
 	})
 	provideModrinthClient(shim)

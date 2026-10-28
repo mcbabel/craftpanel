@@ -46,7 +46,7 @@ Every server has one owner. The owner can invite other panel users as **editor**
 | `FILES_WRITE` | Change, upload and delete files | yes | yes | |
 | `SETUP` | Install loaders and content, repair | yes | yes | |
 | `BACKUPS` | Create, restore and delete backups | yes | yes | |
-| `ADVANCED` | Server properties, startup settings, ports | yes | yes | |
+| `ADVANCED` | Server name and icon, server properties, startup settings, ports | yes | yes | |
 | `RESET_SERVER` | Reset the server | yes | | |
 | `MANAGE_USERS` | Invite and remove members, change their roles | yes | | |
 

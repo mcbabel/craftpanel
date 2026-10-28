@@ -8,7 +8,7 @@
 			row-class="max-md:gap-3"
 		>
 			<template #leading>
-				<ServerIcon :image="undefined" class="max-md:size-12" />
+				<PanelServerIcon :server-id="server.id" class="max-md:size-12" />
 			</template>
 
 			<template #badges>
@@ -95,7 +95,6 @@ import {
 	PageHeader,
 	PageHeaderActions,
 	PanelServerActionButton,
-	ServerIcon,
 	ServerInfoLabels,
 	ServerNotice,
 	ServerPanelAdmonitions,
@@ -106,6 +105,7 @@ import { RouterView, useRoute, useRouter } from 'vue-router'
 
 import { api, isApiRequestError, type PowerState, type Server, ServerSocket } from '@/api'
 import { publicAddress } from '@/api/playit'
+import PanelServerIcon from '@/components/PanelServerIcon.vue'
 import ServerTabBar from '@/components/ServerTabBar.vue'
 import { provideArchonAdapters } from '@/composables/archon-adapters'
 import { useServerTunnel } from '@/composables/playit'

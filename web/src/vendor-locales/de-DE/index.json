@@ -173,6 +173,63 @@
   "craftpanel.vendor.dropdown.select-an-option": {
     "defaultMessage": "Option auswählen"
   },
+  "craftpanel.vendor.edit-server-icon.create": {
+    "defaultMessage": "Symbol erstellen"
+  },
+  "craftpanel.vendor.edit-server-icon.edit": {
+    "defaultMessage": "Symbol bearbeiten"
+  },
+  "craftpanel.vendor.edit-server-icon.edit-created": {
+    "defaultMessage": "Erstelltes Symbol bearbeiten"
+  },
+  "craftpanel.vendor.edit-server-icon.no-file-text": {
+    "defaultMessage": "Wähle eine Datei zum Hochladen aus."
+  },
+  "craftpanel.vendor.edit-server-icon.no-file-title": {
+    "defaultMessage": "Keine Datei ausgewählt"
+  },
+  "craftpanel.vendor.edit-server-icon.reset-failed-text": {
+    "defaultMessage": "Das Server-Symbol konnte nicht zurückgesetzt werden."
+  },
+  "craftpanel.vendor.edit-server-icon.reset-failed-title": {
+    "defaultMessage": "Zurücksetzen fehlgeschlagen"
+  },
+  "craftpanel.vendor.edit-server-icon.reset-text": {
+    "defaultMessage": "Dein Server-Symbol wurde zurückgesetzt."
+  },
+  "craftpanel.vendor.edit-server-icon.reset-title": {
+    "defaultMessage": "Server-Symbol zurückgesetzt"
+  },
+  "craftpanel.vendor.edit-server-icon.settings-not-saved-text": {
+    "defaultMessage": "Das Server-Symbol wurde geändert, aber die Einstellungen des Editors konnten nicht gespeichert werden."
+  },
+  "craftpanel.vendor.edit-server-icon.settings-not-saved-title": {
+    "defaultMessage": "Einstellungen des Symbol-Editors nicht gespeichert"
+  },
+  "craftpanel.vendor.edit-server-icon.sync": {
+    "defaultMessage": "Symbol zurücksetzen"
+  },
+  "craftpanel.vendor.edit-server-icon.title": {
+    "defaultMessage": "Symbol"
+  },
+  "craftpanel.vendor.edit-server-icon.unavailable": {
+    "defaultMessage": "Das Server-Symbol kann gerade nicht bearbeitet werden."
+  },
+  "craftpanel.vendor.edit-server-icon.updated-text": {
+    "defaultMessage": "Dein Server-Symbol wurde geändert."
+  },
+  "craftpanel.vendor.edit-server-icon.updated-title": {
+    "defaultMessage": "Server-Symbol geändert"
+  },
+  "craftpanel.vendor.edit-server-icon.upload": {
+    "defaultMessage": "Symbol hochladen"
+  },
+  "craftpanel.vendor.edit-server-icon.upload-failed-text": {
+    "defaultMessage": "Das Server-Symbol konnte nicht hochgeladen werden."
+  },
+  "craftpanel.vendor.edit-server-icon.upload-failed-title": {
+    "defaultMessage": "Hochladen fehlgeschlagen"
+  },
   "craftpanel.vendor.error-card.copy-information": {
     "defaultMessage": "Informationen kopieren"
   },
