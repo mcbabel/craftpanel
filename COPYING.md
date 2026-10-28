@@ -84,6 +84,21 @@ test above then lists every translation that has lost its message, and every mes
 its translation. Where upstream has meanwhile made a string translatable itself, its own message
 wins and our id goes.
 
+## Layout fixes in the vendored code
+
+A few of Modrinth's components no longer fit the modal they sit in after an upstream change, and
+show a scrollbar or cut off a field. Those are corrected in place, one class at a time:
+
+- `ui/src/components/servers/backups/BackupCreateModal.vue`: the name field's wrapper lost its
+  `-mb-2` and got a `pb-1`. The modal's content area has no bottom padding when it has actions, so
+  the negative margin made the field overflow it and the dialog scroll, and without the padding
+  the field's focus ring is cut off.
+- `ui/src/components/modal/ShareModal.vue`: the copy buttons are `!absolute`. Every button frame
+  sets `relative` itself now, which won over `absolute` and pushed the QR code's copy button out of
+  its corner and below the code.
+
+A new copy of Modrinth's code overwrites these as well; check each one again after an update.
+
 ## Mail templates
 
 `crates/craftpanel/src/mail/templates/` is built from Modrinth's own email templates

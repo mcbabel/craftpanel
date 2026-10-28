@@ -226,7 +226,7 @@ defineExpose({
 						v-tooltip="formatMessage(messages.copyQrCode)"
 						type="quiet"
 						:label="formatMessage(messages.copyQrCode)"
-						class="absolute top-0 right-0 m-2"
+						class="!absolute top-0 right-0 m-2"
 						@click="copyImage"
 					>
 						<ClipboardCopyIcon class="h-5 w-5" aria-hidden="true" />
@@ -239,7 +239,7 @@ defineExpose({
 							type="quiet"
 							:label="formatMessage(messages.copyText)"
 							native-type="button"
-							class="absolute top-0 right-0 m-2"
+							class="!absolute top-0 right-0 m-2"
 							@click="copyText"
 						>
 							<ClipboardCopyIcon class="h-5 w-5" aria-hidden="true" />
