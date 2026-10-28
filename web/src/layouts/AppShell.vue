@@ -39,32 +39,33 @@
 			<RouterView />
 		</main>
 
-		<NewModal
-			ref="themeModal"
-			:header="formatMessage(commonSettingsMessages.appearance)"
-			width="44rem"
-		>
-			<ThemeSelector
-				:aria-label="formatMessage(commonSettingsMessages.appearance)"
-				:model-value="choice"
-				:theme-options="themeChoices"
-				:system-theme-color="systemTheme"
-				preferred-dark-theme="dark"
-				@update:model-value="chooseTheme"
-			/>
-		</NewModal>
-
-		<NewModal
-			ref="languageModal"
-			:header="formatMessage(commonSettingsMessages.language)"
-			width="44rem"
-		>
-			<LanguageSelector
-				product="website"
-				:current-locale="locale"
-				:locales="locales"
-				:on-locale-change="changeLocale"
-			/>
+		<NewModal ref="preferencesModal" :header="formatMessage(messages.preferences)" width="44rem">
+			<div class="flex flex-col gap-6">
+				<section class="flex flex-col gap-3">
+					<h3 class="m-0 text-lg font-semibold text-contrast">
+						{{ formatMessage(commonSettingsMessages.appearance) }}
+					</h3>
+					<ThemeSelector
+						:aria-label="formatMessage(commonSettingsMessages.appearance)"
+						:model-value="choice"
+						:theme-options="themeChoices"
+						:system-theme-color="systemTheme"
+						preferred-dark-theme="dark"
+						@update:model-value="chooseTheme"
+					/>
+				</section>
+				<section class="flex flex-col gap-3">
+					<h3 class="m-0 text-lg font-semibold text-contrast">
+						{{ formatMessage(commonSettingsMessages.language) }}
+					</h3>
+					<LanguageSelector
+						product="website"
+						:current-locale="locale"
+						:locales="locales"
+						:on-locale-change="changeLocale"
+					/>
+				</section>
+			</div>
 		</NewModal>
 
 		<NotificationPanel />
@@ -75,12 +76,11 @@
 import {
 	CircleUserIcon,
 	DropdownIcon,
-	KeyIcon,
-	LanguagesIcon,
 	LogOutIcon,
 	MailIcon,
 	PaletteIcon,
 	ServerStackIcon,
+	ShieldCheckIcon,
 } from '@modrinth/assets'
 import {
 	Avatar,
@@ -106,7 +106,6 @@ import { useInvitations } from '@/composables/invitations'
 import { provideModrinthHost, provideNotifications } from '@/composables/modrinth-host'
 import { useSession } from '@/composables/session'
 import { isChoice, themeChoices, useTheme } from '@/composables/theme'
-import { adminPages } from '@/pages/admin/routes'
 
 const { formatMessage } = useVIntl()
 const router = useRouter()
@@ -119,8 +118,7 @@ provideModrinthHost()
 const invitations = useInvitations()
 const invitationCount = invitations.count
 
-const themeModal = ref<InstanceType<typeof NewModal> | null>(null)
-const languageModal = ref<InstanceType<typeof NewModal> | null>(null)
+const preferencesModal = ref<InstanceType<typeof NewModal> | null>(null)
 
 const locales = LOCALES.filter((entry) => isLocale(entry.code))
 
@@ -138,9 +136,13 @@ const messages = defineMessages({
 		id: 'panel.menu.account',
 		defaultMessage: 'Your account',
 	},
-	changePassword: {
-		id: 'panel.menu.change-password',
-		defaultMessage: 'Change password',
+	preferences: {
+		id: 'panel.menu.preferences',
+		defaultMessage: 'Appearance and language',
+	},
+	administration: {
+		id: 'panel.menu.administration',
+		defaultMessage: 'Administration',
 	},
 	copyFailed: {
 		id: 'panel.copy.failed',
@@ -212,39 +214,20 @@ const options = computed<ButtonMenuOption[]>(() => [
 		icon: CircleUserIcon,
 	},
 	{
-		id: 'change-password',
-		type: 'link',
-		to: { name: 'change-password' },
-		label: formatMessage(messages.changePassword),
-		icon: KeyIcon,
-	},
-	{
-		id: 'appearance',
-		label: formatMessage(commonSettingsMessages.appearance),
+		id: 'preferences',
+		label: formatMessage(messages.preferences),
 		icon: PaletteIcon,
-		action: () => themeModal.value?.show(),
-	},
-	{
-		id: 'language',
-		label: formatMessage(commonSettingsMessages.language),
-		icon: LanguagesIcon,
-		action: () => languageModal.value?.show(),
+		action: () => preferencesModal.value?.show(),
 	},
 	{ type: 'divider', shown: isAdmin.value },
-	...adminPages.flatMap((page): ButtonMenuOption[] =>
-		page.label === null
-			? []
-			: [
-					{
-						id: page.name,
-						type: 'link',
-						to: { name: page.name },
-						label: formatMessage(page.label),
-						icon: page.icon ?? undefined,
-						shown: isAdmin.value,
-					},
-				],
-	),
+	{
+		id: 'administration',
+		type: 'link',
+		to: { name: 'admin-overview' },
+		label: formatMessage(messages.administration),
+		icon: ShieldCheckIcon,
+		shown: isAdmin.value,
+	},
 	{ type: 'divider' },
 	{
 		id: 'sign-out',

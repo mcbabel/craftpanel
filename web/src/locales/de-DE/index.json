@@ -215,6 +215,15 @@
   "account.over-limit.memory": {
     "defaultMessage": "An deine Server ist mehr Arbeitsspeicher vergeben, als dieses Konto hat. Nichts wurde gestoppt, aber du kannst keinen neuen Server anlegen oder starten, bis du einen Server löschst oder kleiner machst."
   },
+  "account.password.button": {
+    "defaultMessage": "Passwort ändern"
+  },
+  "account.password.hint": {
+    "defaultMessage": "Beim Ändern werden alle anderen Sitzungen dieses Kontos abgemeldet."
+  },
+  "account.password.title": {
+    "defaultMessage": "Passwort"
+  },
   "account.pids.none": {
     "defaultMessage": "{used}, ohne Limit"
   },
@@ -2846,6 +2855,144 @@
   "format.decimal-bytes.4": {
     "defaultMessage": "{count, number} TB"
   },
+  "panel.admin.group.connections": {
+    "defaultMessage": "Verbindungen"
+  },
+  "panel.admin.group.overview": {
+    "defaultMessage": "Maschine"
+  },
+  "panel.admin.group.people": {
+    "defaultMessage": "Personen"
+  },
+  "panel.admin.group.system": {
+    "defaultMessage": "System"
+  },
+  "panel.admin.navigation": {
+    "defaultMessage": "Seiten der Verwaltung"
+  },
+  "panel.admin.stats.accounts-title": {
+    "defaultMessage": "Nach Konto"
+  },
+  "panel.admin.stats.backups": {
+    "defaultMessage": "Sicherungen"
+  },
+  "panel.admin.stats.backups-value": {
+    "defaultMessage": "{count} · {size}"
+  },
+  "panel.admin.stats.broken": {
+    "defaultMessage": "Defekt oder in Installation"
+  },
+  "panel.admin.stats.col-cores": {
+    "defaultMessage": "Belegte Kerne"
+  },
+  "panel.admin.stats.col-cpu": {
+    "defaultMessage": "CPU"
+  },
+  "panel.admin.stats.col-memory": {
+    "defaultMessage": "Arbeitsspeicher"
+  },
+  "panel.admin.stats.col-owner": {
+    "defaultMessage": "Besitzer"
+  },
+  "panel.admin.stats.col-server": {
+    "defaultMessage": "Server"
+  },
+  "panel.admin.stats.col-servers": {
+    "defaultMessage": "Server"
+  },
+  "panel.admin.stats.col-uptime": {
+    "defaultMessage": "Läuft seit"
+  },
+  "panel.admin.stats.col-user": {
+    "defaultMessage": "Nutzer"
+  },
+  "panel.admin.stats.cpu": {
+    "defaultMessage": "Prozessorlast"
+  },
+  "panel.admin.stats.cpu-detail": {
+    "defaultMessage": "{cores} Kerne · Gameserver nutzen {used} Kerne"
+  },
+  "panel.admin.stats.disk": {
+    "defaultMessage": "Belegter Speicherplatz"
+  },
+  "panel.admin.stats.disk-detail": {
+    "defaultMessage": "von {total} · {free} frei"
+  },
+  "panel.admin.stats.failed": {
+    "defaultMessage": "Die Werte konnten nicht gelesen werden"
+  },
+  "panel.admin.stats.load": {
+    "defaultMessage": "Last (1, 5, 15 Min.)"
+  },
+  "panel.admin.stats.memory": {
+    "defaultMessage": "Belegter Arbeitsspeicher"
+  },
+  "panel.admin.stats.memory-detail": {
+    "defaultMessage": "von {total} · Gameserver nutzen {games}"
+  },
+  "panel.admin.stats.memory-plan": {
+    "defaultMessage": "Vergebener Arbeitsspeicher"
+  },
+  "panel.admin.stats.memory-plan-hint": {
+    "defaultMessage": "Gemessen an dem Arbeitsspeicher, den das Panel vergeben darf: dem Speicher der Maschine abzüglich einer Reserve für das System."
+  },
+  "panel.admin.stats.none-running": {
+    "defaultMessage": "Gerade läuft kein Server."
+  },
+  "panel.admin.stats.of-assignable": {
+    "defaultMessage": "{used} von {total}"
+  },
+  "panel.admin.stats.operations": {
+    "defaultMessage": "Laufende Aufgaben"
+  },
+  "panel.admin.stats.panel": {
+    "defaultMessage": "Panel"
+  },
+  "panel.admin.stats.port": {
+    "defaultMessage": "Port {port}"
+  },
+  "panel.admin.stats.processes": {
+    "defaultMessage": "Spielprozesse"
+  },
+  "panel.admin.stats.promised": {
+    "defaultMessage": "An alle Server vergeben"
+  },
+  "panel.admin.stats.refreshed": {
+    "defaultMessage": "Aktualisiert um {time}"
+  },
+  "panel.admin.stats.running-memory": {
+    "defaultMessage": "An laufende Server vergeben"
+  },
+  "panel.admin.stats.running-title": {
+    "defaultMessage": "Läuft gerade ({count})"
+  },
+  "panel.admin.stats.servers": {
+    "defaultMessage": "Laufende Server"
+  },
+  "panel.admin.stats.servers-detail": {
+    "defaultMessage": "von {total} · {starting} starten · {crashed} abgestürzt"
+  },
+  "panel.admin.stats.servers-running": {
+    "defaultMessage": "{running} von {total} laufen"
+  },
+  "panel.admin.stats.stopped": {
+    "defaultMessage": "Gestoppte Server"
+  },
+  "panel.admin.stats.subtitle": {
+    "defaultMessage": "CraftPanel {version} · Maschine läuft seit {uptime}"
+  },
+  "panel.admin.stats.title": {
+    "defaultMessage": "Übersicht"
+  },
+  "panel.admin.stats.unlimited": {
+    "defaultMessage": "kein Limit"
+  },
+  "panel.admin.stats.users": {
+    "defaultMessage": "Nutzer"
+  },
+  "panel.admin.title": {
+    "defaultMessage": "Verwaltung"
+  },
   "panel.copy.failed": {
     "defaultMessage": "Es wurde nichts kopiert"
   },
@@ -2882,8 +3029,8 @@
   "panel.menu.account": {
     "defaultMessage": "Dein Konto"
   },
-  "panel.menu.change-password": {
-    "defaultMessage": "Passwort ändern"
+  "panel.menu.administration": {
+    "defaultMessage": "Verwaltung"
   },
   "panel.menu.drive": {
     "defaultMessage": "Google Drive"
@@ -2897,11 +3044,17 @@
   "panel.menu.mail": {
     "defaultMessage": "E-Mail"
   },
+  "panel.menu.overview": {
+    "defaultMessage": "Übersicht"
+  },
   "panel.menu.panel-settings": {
     "defaultMessage": "Panel-Einstellungen"
   },
   "panel.menu.playit-all": {
-    "defaultMessage": "Öffentliche Adressen (alle Nutzer)"
+    "defaultMessage": "Öffentliche Adressen"
+  },
+  "panel.menu.preferences": {
+    "defaultMessage": "Darstellung und Sprache"
   },
   "panel.menu.registrations": {
     "defaultMessage": "Registrierungen"

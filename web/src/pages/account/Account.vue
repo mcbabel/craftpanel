@@ -31,6 +31,17 @@
 				/>
 			</Card>
 
+			<Card class="!mb-0 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+				<SettingsLabel
+					:title="formatMessage(messages.passwordTitle)"
+					:description="formatMessage(messages.passwordHint)"
+				/>
+				<ButtonLink :to="{ name: 'change-password' }" class="shrink-0">
+					<KeyIcon aria-hidden="true" />
+					{{ formatMessage(messages.passwordButton) }}
+				</ButtonLink>
+			</Card>
+
 			<Admonition
 				v-if="me.usage.over_limit"
 				type="critical"
@@ -161,10 +172,11 @@
 </template>
 
 <script setup lang="ts">
-import { CircleUserIcon, CpuIcon, DatabaseIcon, MemoryStickIcon } from '@modrinth/assets'
+import { CircleUserIcon, CpuIcon, DatabaseIcon, KeyIcon, MemoryStickIcon } from '@modrinth/assets'
 import {
 	Admonition,
 	Badge,
+	ButtonLink,
 	Card,
 	defineMessages,
 	LoadingIndicator,
@@ -192,6 +204,12 @@ const MIB = 1024 * 1024
 
 const messages = defineMessages({
 	title: { id: 'account.title', defaultMessage: 'Your account' },
+	passwordTitle: { id: 'account.password.title', defaultMessage: 'Password' },
+	passwordHint: {
+		id: 'account.password.hint',
+		defaultMessage: 'Changing it signs out every other session of this account.',
+	},
+	passwordButton: { id: 'account.password.button', defaultMessage: 'Change password' },
 	subtitle: {
 		id: 'account.subtitle',
 		defaultMessage: 'What this account is allowed, and how much of it is in use.',

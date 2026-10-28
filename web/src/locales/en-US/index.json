@@ -215,6 +215,15 @@
   "account.over-limit.memory": {
     "defaultMessage": "More memory is handed out to servers than this account has. Nothing was stopped, but no new server can be created or started until a server is deleted or made smaller."
   },
+  "account.password.button": {
+    "defaultMessage": "Change password"
+  },
+  "account.password.hint": {
+    "defaultMessage": "Changing it signs out every other session of this account."
+  },
+  "account.password.title": {
+    "defaultMessage": "Password"
+  },
   "account.pids.none": {
     "defaultMessage": "{used}, no limit"
   },
@@ -2846,6 +2855,144 @@
   "format.decimal-bytes.4": {
     "defaultMessage": "{count, number} TB"
   },
+  "panel.admin.group.connections": {
+    "defaultMessage": "Connections"
+  },
+  "panel.admin.group.overview": {
+    "defaultMessage": "Machine"
+  },
+  "panel.admin.group.people": {
+    "defaultMessage": "People"
+  },
+  "panel.admin.group.system": {
+    "defaultMessage": "System"
+  },
+  "panel.admin.navigation": {
+    "defaultMessage": "Administration pages"
+  },
+  "panel.admin.stats.accounts-title": {
+    "defaultMessage": "By account"
+  },
+  "panel.admin.stats.backups": {
+    "defaultMessage": "Backups"
+  },
+  "panel.admin.stats.backups-value": {
+    "defaultMessage": "{count} · {size}"
+  },
+  "panel.admin.stats.broken": {
+    "defaultMessage": "Broken or installing"
+  },
+  "panel.admin.stats.col-cores": {
+    "defaultMessage": "Cores in use"
+  },
+  "panel.admin.stats.col-cpu": {
+    "defaultMessage": "CPU"
+  },
+  "panel.admin.stats.col-memory": {
+    "defaultMessage": "Memory"
+  },
+  "panel.admin.stats.col-owner": {
+    "defaultMessage": "Owner"
+  },
+  "panel.admin.stats.col-server": {
+    "defaultMessage": "Server"
+  },
+  "panel.admin.stats.col-servers": {
+    "defaultMessage": "Servers"
+  },
+  "panel.admin.stats.col-uptime": {
+    "defaultMessage": "Up for"
+  },
+  "panel.admin.stats.col-user": {
+    "defaultMessage": "User"
+  },
+  "panel.admin.stats.cpu": {
+    "defaultMessage": "Processor load"
+  },
+  "panel.admin.stats.cpu-detail": {
+    "defaultMessage": "{cores} cores · game servers use {used} cores"
+  },
+  "panel.admin.stats.disk": {
+    "defaultMessage": "Disk in use"
+  },
+  "panel.admin.stats.disk-detail": {
+    "defaultMessage": "of {total} · {free} free"
+  },
+  "panel.admin.stats.failed": {
+    "defaultMessage": "The figures could not be read"
+  },
+  "panel.admin.stats.load": {
+    "defaultMessage": "Load (1, 5, 15 min)"
+  },
+  "panel.admin.stats.memory": {
+    "defaultMessage": "Memory in use"
+  },
+  "panel.admin.stats.memory-detail": {
+    "defaultMessage": "of {total} · game servers use {games}"
+  },
+  "panel.admin.stats.memory-plan": {
+    "defaultMessage": "Memory handed out"
+  },
+  "panel.admin.stats.memory-plan-hint": {
+    "defaultMessage": "Measured against the memory the panel may hand out, which is the machine’s memory minus a reserve for the system."
+  },
+  "panel.admin.stats.none-running": {
+    "defaultMessage": "No server is running."
+  },
+  "panel.admin.stats.of-assignable": {
+    "defaultMessage": "{used} of {total}"
+  },
+  "panel.admin.stats.operations": {
+    "defaultMessage": "Tasks running"
+  },
+  "panel.admin.stats.panel": {
+    "defaultMessage": "Panel"
+  },
+  "panel.admin.stats.port": {
+    "defaultMessage": "port {port}"
+  },
+  "panel.admin.stats.processes": {
+    "defaultMessage": "Game processes"
+  },
+  "panel.admin.stats.promised": {
+    "defaultMessage": "Given to all servers"
+  },
+  "panel.admin.stats.refreshed": {
+    "defaultMessage": "Updated at {time}"
+  },
+  "panel.admin.stats.running-memory": {
+    "defaultMessage": "Given to running servers"
+  },
+  "panel.admin.stats.running-title": {
+    "defaultMessage": "Running now ({count})"
+  },
+  "panel.admin.stats.servers": {
+    "defaultMessage": "Running servers"
+  },
+  "panel.admin.stats.servers-detail": {
+    "defaultMessage": "of {total} · {starting} starting · {crashed} crashed"
+  },
+  "panel.admin.stats.servers-running": {
+    "defaultMessage": "{running} of {total} running"
+  },
+  "panel.admin.stats.stopped": {
+    "defaultMessage": "Stopped servers"
+  },
+  "panel.admin.stats.subtitle": {
+    "defaultMessage": "CraftPanel {version} · machine up for {uptime}"
+  },
+  "panel.admin.stats.title": {
+    "defaultMessage": "Overview"
+  },
+  "panel.admin.stats.unlimited": {
+    "defaultMessage": "no limit"
+  },
+  "panel.admin.stats.users": {
+    "defaultMessage": "Users"
+  },
+  "panel.admin.title": {
+    "defaultMessage": "Administration"
+  },
   "panel.copy.failed": {
     "defaultMessage": "Nothing was copied"
   },
@@ -2882,8 +3029,8 @@
   "panel.menu.account": {
     "defaultMessage": "Your account"
   },
-  "panel.menu.change-password": {
-    "defaultMessage": "Change password"
+  "panel.menu.administration": {
+    "defaultMessage": "Administration"
   },
   "panel.menu.drive": {
     "defaultMessage": "Google Drive"
@@ -2897,11 +3044,17 @@
   "panel.menu.mail": {
     "defaultMessage": "Mail"
   },
+  "panel.menu.overview": {
+    "defaultMessage": "Overview"
+  },
   "panel.menu.panel-settings": {
     "defaultMessage": "Panel settings"
   },
   "panel.menu.playit-all": {
-    "defaultMessage": "Public addresses (all users)"
+    "defaultMessage": "Public addresses"
+  },
+  "panel.menu.preferences": {
+    "defaultMessage": "Appearance and language"
   },
   "panel.menu.registrations": {
     "defaultMessage": "Sign-ups"

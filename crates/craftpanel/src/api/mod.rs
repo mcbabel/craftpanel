@@ -16,6 +16,7 @@ pub mod runtimes;
 pub mod servers;
 pub mod session;
 pub mod settings;
+pub mod statistics;
 pub mod transfers;
 pub mod ws;
 

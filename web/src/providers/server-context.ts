@@ -110,7 +110,7 @@ const BANNER_KINDS = new Set<OperationKind>([
 
 const CONTENT_KINDS = new Set<OperationKind>(['install_content', 'update_content'])
 
-const LOADER_NAMES: Record<LoaderId, string> = {
+export const LOADER_NAMES: Record<LoaderId, string> = {
 	vanilla: 'Vanilla',
 	paper: 'Paper',
 	folia: 'Folia',

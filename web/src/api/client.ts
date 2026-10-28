@@ -1,4 +1,5 @@
 import type {
+	AdminStatistics,
 	ServerTransferList,
 	ServerTransferOutcome,
 	AssignServerGroupRequest,
@@ -1158,6 +1159,9 @@ const access = {
 const admin = {
 	host: (options: Cancellable = {}) =>
 		requestJson<HostCapacity>('/admin/host', { method: 'GET', signal: options.signal }),
+
+	statistics: (options: Cancellable = {}) =>
+		requestJson<AdminStatistics>('/admin/statistics', { method: 'GET', signal: options.signal }),
 
 	users: (query: AdminUserListQuery = {}, options: Cancellable = {}) =>
 		requestJson<AdminUserList>('/admin/users', { method: 'GET', query, signal: options.signal }),

@@ -192,6 +192,56 @@ export interface UpdateServerGroupRequest {
 	position?: number
 }
 
+export interface AdminStatistics {
+	host: {
+		cpu_cores: number
+		load_average: [number, number, number]
+		memory_total_bytes: number
+		memory_available_bytes: number
+		disk_total_bytes: number
+		disk_free_bytes: number
+		uptime_seconds: number
+		version: string
+	}
+	servers: {
+		total: number
+		running: number
+		starting: number
+		stopping: number
+		crashed: number
+		stopped: number
+		installing: number
+		broken: number
+	}
+	memory: { assignable_mib: number; promised_mib: number; running_mib: number }
+	games: { memory_bytes: number; cpu_cores: number; pids: number }
+	backups: { count: number; bytes: number }
+	users: number
+	active_operations: number
+	running: {
+		id: Ulid
+		name: string
+		owner: UserRef
+		state: PowerState
+		loader: LoaderId | null
+		game_version: string | null
+		memory_mib: number
+		ram_usage_bytes: number
+		cpu_percent: number
+		running_since: Rfc3339 | null
+		port: number | null
+	}[]
+	accounts: {
+		user: UserRef
+		servers: number
+		running: number
+		memory_bytes: number
+		cpu_cores: number
+		memory_limit_mib: number | null
+	}[]
+	measured_at: Rfc3339
+}
+
 export interface ServerTransfer {
 	id: Ulid
 	server: { id: Ulid; name: string; memory_mib: number }

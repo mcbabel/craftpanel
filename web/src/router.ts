@@ -98,14 +98,19 @@ const routes: RouteRecordRaw[] = [
 				name: 'account',
 				component: () => import('@/pages/account/Account.vue'),
 			},
-			...adminPages.map(
-				(page): RouteRecordSingleView => ({
-					path: page.path,
-					name: page.name,
-					component: page.component,
-					meta: { admin: true },
-				}),
-			),
+			{
+				path: 'admin',
+				component: () => import('@/layouts/AdminShell.vue'),
+				meta: { admin: true },
+				children: adminPages.map(
+					(page): RouteRecordSingleView => ({
+						path: page.path.replace(/^admin\/?/, ''),
+						name: page.name,
+						component: page.component,
+						meta: { admin: true },
+					}),
+				),
+			},
 			{
 				path: 'hosting/manage/:id/files',
 				redirect: (to) => ({ name: 'server-files', params: { id: to.params.id } }),
