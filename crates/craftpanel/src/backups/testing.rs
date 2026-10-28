@@ -258,7 +258,8 @@ impl FakeServer {
             }
             tokio::time::sleep(Duration::from_millis(10)).await;
         }
-        panic!("the run on {backup} never ended");
+        let last = crate::backups::store::one(&self.pool, backup).await.expect("the backup");
+        panic!("the run on {backup} never ended: {:?}", last.history.first());
     }
 
     pub async fn await_operation(&self, operation: Id) -> crate::model::OperationState {

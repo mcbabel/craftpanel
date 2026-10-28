@@ -21,6 +21,15 @@ tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 debug = false
 incremental = true
 
+[profile.dev.package.zstd-sys]
+opt-level = 3
+
+[profile.dev.package.md-5]
+opt-level = 3
+
+[profile.dev.package.sha2]
+opt-level = 3
+
 [profile.release]
 opt-level = "z"
 lto = "thin"
