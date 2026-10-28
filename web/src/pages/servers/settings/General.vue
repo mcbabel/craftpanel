@@ -1,41 +1,43 @@
 <template>
 	<div class="flex flex-col gap-8">
-		<div class="flex flex-wrap items-start justify-start gap-x-16 gap-y-8">
-			<div class="flex min-w-0 max-w-[32rem] grow basis-64 flex-col gap-2.5">
-				<label for="server-name-field" class="text-lg font-semibold text-contrast">
-					{{ formatMessage(messages.nameLabel) }}
-				</label>
-				<Input
-					id="server-name-field"
-					v-model="name"
-					v-tooltip="renameTooltip"
-					wrapper-class="w-full"
-					:maxlength="48"
-					:disabled="!canUseAdvancedSettings"
-				/>
-				<span v-if="!isValidName" class="font-medium text-red">
-					{{ formatMessage(messages.nameEmpty) }}
-				</span>
+		<div class="flex flex-wrap items-start gap-x-16 gap-y-8">
+			<div class="flex min-w-0 max-w-[36rem] grow basis-72 flex-col gap-8">
+				<div class="flex flex-col gap-2.5">
+					<label for="server-name-field" class="text-lg font-semibold text-contrast">
+						{{ formatMessage(messages.nameLabel) }}
+					</label>
+					<Input
+						id="server-name-field"
+						v-model="name"
+						v-tooltip="renameTooltip"
+						wrapper-class="w-full"
+						:maxlength="48"
+						:disabled="!canUseAdvancedSettings"
+					/>
+					<span v-if="!isValidName" class="font-medium text-red">
+						{{ formatMessage(messages.nameEmpty) }}
+					</span>
+				</div>
+
+				<div class="flex flex-col gap-2.5">
+					<span class="text-lg font-semibold text-contrast">
+						{{ formatMessage(messages.updateChannel) }}
+					</span>
+					<Chips
+						v-model="channel"
+						:items="CHANNELS"
+						:disabled-items="channelDisabledItems"
+						:disabled-tooltip="renameTooltip"
+						:aria-label="formatMessage(messages.updateChannel)"
+					/>
+					<span>{{ formatMessage(CHANNEL_DESCRIPTIONS[channel]) }}</span>
+				</div>
 			</div>
 
 			<EditServerIcon
 				:can-edit="canUseAdvancedSettings"
 				:permission-denied-message="permissionDeniedMessage"
 			/>
-		</div>
-
-		<div class="flex flex-col gap-2.5">
-			<span class="text-lg font-semibold text-contrast">
-				{{ formatMessage(messages.updateChannel) }}
-			</span>
-			<Chips
-				v-model="channel"
-				:items="CHANNELS"
-				:disabled-items="channelDisabledItems"
-				:disabled-tooltip="renameTooltip"
-				:aria-label="formatMessage(messages.updateChannel)"
-			/>
-			<span>{{ formatMessage(CHANNEL_DESCRIPTIONS[channel]) }}</span>
 		</div>
 
 		<div class="flex flex-col gap-2.5">
