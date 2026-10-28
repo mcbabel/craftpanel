@@ -12,9 +12,9 @@ for and how you can have it deleted. It also covers this website.
 
 ## Who is responsible
 
-MCbabel, contact: [gdpr@mcbabel.de](mailto:gdpr@mcbabel.de)
+Marlian, contact: [gdpr@mcbabel.de](mailto:gdpr@mcbabel.de)
 
-This policy applies to the Google Cloud app "CraftPanel" that MCbabel registered with Google, and
+This policy applies to the Google Cloud app "CraftPanel" that Marlian registered with Google, and
 to the CraftPanel panels that use it. CraftPanel is open-source software that anyone can run on
 their own machine with their own Google Cloud app. For a panel run by someone else, that person
 is responsible for the data, and their own policy applies.
@@ -45,7 +45,7 @@ upload limit.
 
 ## Where the data goes
 
-- Google data is processed only between the panel machine and Google. It is not sent to MCbabel,
+- Google data is processed only between the panel machine and Google. It is not sent to Marlian,
   the CraftPanel project or any other third party.
 - Google data is not sold, not used for advertising, not used to train AI or machine-learning
   models, and not used for anything except the backup function described above.
