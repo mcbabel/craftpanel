@@ -2696,6 +2696,30 @@
   "panel.footer.source-code": {
     "defaultMessage": "Source code"
   },
+  "panel.invitations.accept": {
+    "defaultMessage": "Accept"
+  },
+  "panel.invitations.accepted": {
+    "defaultMessage": "{name} is now in your server list"
+  },
+  "panel.invitations.decline": {
+    "defaultMessage": "Decline"
+  },
+  "panel.invitations.declined": {
+    "defaultMessage": "Invitation declined"
+  },
+  "panel.invitations.failed": {
+    "defaultMessage": "The invitation could not be answered"
+  },
+  "panel.invitations.help": {
+    "defaultMessage": "Accept an invitation to see and manage the server."
+  },
+  "panel.invitations.invited-by": {
+    "defaultMessage": "Invited by"
+  },
+  "panel.invitations.title": {
+    "defaultMessage": "Invitations"
+  },
   "panel.menu.account": {
     "defaultMessage": "Your account"
   },
@@ -2704,6 +2728,12 @@
   },
   "panel.menu.drive": {
     "defaultMessage": "Google Drive"
+  },
+  "panel.menu.invitations": {
+    "defaultMessage": "{count, plural, one {# invitation} other {# invitations}}"
+  },
+  "panel.menu.label-with-invitations": {
+    "defaultMessage": "{name}, {count, plural, one {# open invitation} other {# open invitations}}"
   },
   "panel.menu.mail": {
     "defaultMessage": "Mail"

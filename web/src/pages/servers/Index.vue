@@ -32,6 +32,8 @@
 
 		<Admonition v-if="blocked" type="warning" :body="blocked" />
 
+		<InvitationInbox @accepted="() => void load(false)" />
+
 		<Admonition v-if="failure" type="critical" :header="formatMessage(messages.loadFailed)">
 			{{ failure }}
 			<template #actions>
@@ -207,6 +209,8 @@ import {
 	type Ulid,
 	type UserRef,
 } from '@/api'
+import InvitationInbox from '@/components/InvitationInbox.vue'
+import { useInvitations } from '@/composables/invitations'
 import { useSession } from '@/composables/session'
 
 const POLL_INTERVAL_MS = 5_000
@@ -214,6 +218,7 @@ const POLL_INTERVAL_MS = 5_000
 const { formatMessage } = useVIntl()
 const formatBytes = useFormatBytes()
 const { user } = useSession()
+const invitations = useInvitations()
 
 const messages = defineMessages({
 	newServer: {
@@ -497,7 +502,7 @@ async function loadLoaderNames(): Promise<void> {
 }
 
 onMounted(() => {
-	void Promise.all([load(true), loadLoaderNames()])
+	void Promise.all([load(true), loadLoaderNames(), invitations.refresh()])
 })
 
 onBeforeUnmount(() => {

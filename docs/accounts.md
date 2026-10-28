@@ -59,7 +59,9 @@ can run code with the owner's rights on the machine. Share a server only with pe
 ### Invitations
 
 Members are added from the server's member list: search for an existing panel user by name and
-pick a role. The user then sees a pending invitation in the panel and accepts or declines it.
+pick a role. The user then sees the pending invitation at the top of their server list — the user
+menu shows how many are open — and accepts or declines it. An accepted server appears under
+"Shared with you" right away.
 Administrators cannot be invited; they already have every permission. Every membership change is
 recorded in the server's audit log.
 

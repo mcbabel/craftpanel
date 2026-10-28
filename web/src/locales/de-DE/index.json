@@ -2094,7 +2094,7 @@
     "defaultMessage": "In Google Drive öffnen"
   },
   "craftpanel.backups.quota-full": {
-    "defaultMessage": "Alle Plätze für manuelle Sicherungen sind belegt. Lösche eine oder ändere die Aufteilung in den Sicherungseinstellungen."
+    "defaultMessage": "Keine Sicherungsplätze mehr frei."
   },
   "craftpanel.backups.restore": {
     "defaultMessage": "Wiederherstellen"
@@ -2696,6 +2696,30 @@
   "panel.footer.source-code": {
     "defaultMessage": "Quellcode"
   },
+  "panel.invitations.accept": {
+    "defaultMessage": "Annehmen"
+  },
+  "panel.invitations.accepted": {
+    "defaultMessage": "{name} steht jetzt in deiner Serverliste"
+  },
+  "panel.invitations.decline": {
+    "defaultMessage": "Ablehnen"
+  },
+  "panel.invitations.declined": {
+    "defaultMessage": "Einladung abgelehnt"
+  },
+  "panel.invitations.failed": {
+    "defaultMessage": "Die Einladung konnte nicht beantwortet werden"
+  },
+  "panel.invitations.help": {
+    "defaultMessage": "Nimm eine Einladung an, um den Server zu sehen und zu verwalten."
+  },
+  "panel.invitations.invited-by": {
+    "defaultMessage": "Eingeladen von"
+  },
+  "panel.invitations.title": {
+    "defaultMessage": "Einladungen"
+  },
   "panel.menu.account": {
     "defaultMessage": "Dein Konto"
   },
@@ -2704,6 +2728,12 @@
   },
   "panel.menu.drive": {
     "defaultMessage": "Google Drive"
+  },
+  "panel.menu.invitations": {
+    "defaultMessage": "{count, plural, one {# Einladung} other {# Einladungen}}"
+  },
+  "panel.menu.label-with-invitations": {
+    "defaultMessage": "{name}, {count, plural, one {# offene Einladung} other {# offene Einladungen}}"
   },
   "panel.menu.mail": {
     "defaultMessage": "E-Mail"

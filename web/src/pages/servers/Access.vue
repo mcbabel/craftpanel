@@ -1,6 +1,6 @@
 <template>
 	<div class="flex flex-col gap-8">
-		<section class="flex flex-col gap-3">
+		<section class="members flex flex-col gap-3">
 			<div class="flex flex-wrap items-center justify-between gap-3">
 				<div class="flex flex-col gap-1">
 					<h1 class="m-0 text-2xl font-extrabold text-contrast">
@@ -37,7 +37,7 @@
 				:roles="roles"
 				:can-manage-users="canManageUsers"
 				:permission-denied-message="permissionDeniedMessage"
-				:user-profile-link="() => undefined"
+				:user-profile-link="noProfileLink"
 				@update-role="updateRole"
 				@resend-invite="resendInvite"
 				@cancel-invite="askRemove"
@@ -132,6 +132,7 @@ import {
 	type ServerAccessMember,
 	type ServerAccessRole,
 	type ServerAccessRoleOption,
+	type ServerAccessUserProfileLink,
 	type ServerAuditLogEntry,
 	type ServerAuditLogFilters,
 	type SortDirection,
@@ -151,6 +152,9 @@ import {
 	type ServerMember,
 } from '@/api'
 
+import { withoutProfileLinks } from './profile-links'
+import { roleMessages } from './roles'
+
 const PAGE_SIZE = 200
 
 const { formatMessage } = useVIntl()
@@ -165,17 +169,6 @@ const messages = defineMessages({
 		defaultMessage: 'Who may see and change this server. An invite has to be accepted first.',
 	},
 	addUser: { id: 'craftpanel.access.add-user', defaultMessage: 'Add user' },
-	ownerRole: { id: 'craftpanel.access.role-owner', defaultMessage: 'Owner' },
-	editorRole: { id: 'craftpanel.access.role-editor', defaultMessage: 'Editor' },
-	editorDescription: {
-		id: 'craftpanel.access.role-editor-description',
-		defaultMessage: 'Content, files, backups and settings — everything except deleting the server.',
-	},
-	viewerRole: { id: 'craftpanel.access.role-viewer', defaultMessage: 'Limited' },
-	viewerDescription: {
-		id: 'craftpanel.access.role-viewer-description',
-		defaultMessage: 'Watch the console and start or stop the server. No changes.',
-	},
 	auditTitle: { id: 'craftpanel.access.audit-title', defaultMessage: 'Audit log' },
 	auditHelp: {
 		id: 'craftpanel.access.audit-help',
@@ -194,16 +187,16 @@ const messages = defineMessages({
 })
 
 const roles: ServerAccessRoleOption[] = [
-	{ value: 'owner', label: formatMessage(messages.ownerRole) },
+	{ value: 'owner', label: formatMessage(roleMessages.ownerRole) },
 	{
 		value: 'editor',
-		label: formatMessage(messages.editorRole),
-		description: formatMessage(messages.editorDescription),
+		label: formatMessage(roleMessages.editorRole),
+		description: formatMessage(roleMessages.editorDescription),
 	},
 	{
 		value: 'viewer',
-		label: formatMessage(messages.viewerRole),
-		description: formatMessage(messages.viewerDescription),
+		label: formatMessage(roleMessages.viewerRole),
+		description: formatMessage(roleMessages.viewerDescription),
 	},
 ]
 
@@ -215,6 +208,12 @@ const knownUserIds = ref<string[]>([])
 
 const grantModal = ref<InstanceType<typeof GrantAccessModal>>()
 const removeModal = ref<InstanceType<typeof RemoveAccessModal>>()
+
+// AutoLink renders an object without a path as plain text; undefined would fall back to a
+// Modrinth profile.
+function noProfileLink(): ServerAccessUserProfileLink {
+	return {}
+}
 
 const manageTooltip = computed(() =>
 	canManageUsers.value ? undefined : permissionDeniedMessage.value,
@@ -417,7 +416,7 @@ function toAuditEntry(entry: AuditEntry): ServerAuditLogEntry {
 			avatarUrl: user?.avatar_url ?? undefined,
 		},
 		world: null,
-		event: parseAuditEvent(entry, lookups),
+		event: withoutProfileLinks(parseAuditEvent(entry, lookups)),
 		timestamp: entry.timestamp,
 	}
 }
@@ -473,6 +472,10 @@ onMounted(() => {
 </script>
 
 <style scoped>
+.members :deep(span.hover\:underline:hover) {
+	text-decoration: none;
+}
+
 @media (max-width: 639px) {
 	:deep([class*='grid-cols-[minmax(0,1.35fr)_7.75rem']) {
 		grid-template-columns: minmax(0, 1fr) auto 3rem;

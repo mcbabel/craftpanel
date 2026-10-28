@@ -16,10 +16,19 @@
 					size="lg"
 					interaction="none"
 					:icon-only="false"
-					:label="username"
+					:label="menuLabel"
 					:options="options"
 				>
-					<Avatar :src="user?.avatar_url" size="1.75rem" circle />
+					<span class="relative inline-flex">
+						<Avatar :src="user?.avatar_url" size="1.75rem" circle />
+						<span
+							v-if="invitationCount > 0"
+							class="absolute -right-1.5 -top-1.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-brand px-1 text-[0.625rem] font-bold leading-none text-brand-inverted"
+							aria-hidden="true"
+						>
+							{{ invitationCount }}
+						</span>
+					</span>
 					<span class="max-sm:hidden">{{ username }}</span>
 					<DropdownIcon class="size-5 text-secondary" />
 				</TeleportOverflowMenu>
@@ -69,6 +78,7 @@ import {
 	KeyIcon,
 	LanguagesIcon,
 	LogOutIcon,
+	MailIcon,
 	PaletteIcon,
 	ServerStackIcon,
 } from '@modrinth/assets'
@@ -86,12 +96,13 @@ import {
 } from '@modrinth/ui'
 import ThemeSelector from '@modrinth/ui/src/layouts/shared/appearance-settings/components/appearance-settings-theme-selector.vue'
 import LanguageSelector from '@modrinth/ui/src/layouts/wrapped/settings/language-settings/language-settings-selector.vue'
-import { computed, onScopeDispose, ref } from 'vue'
+import { computed, onMounted, onScopeDispose, ref } from 'vue'
 import { RouterLink, RouterView, useRouter } from 'vue-router'
 
 import { setCopyFailureHandler } from '@/clipboard'
 import CraftPanelLogo from '@/components/CraftPanelLogo.vue'
 import { isLocale, useLocale } from '@/composables/locale'
+import { useInvitations } from '@/composables/invitations'
 import { provideNotifications } from '@/composables/modrinth-host'
 import { useSession } from '@/composables/session'
 import { isChoice, themeChoices, useTheme } from '@/composables/theme'
@@ -104,6 +115,8 @@ const { choice, systemTheme, setTheme } = useTheme()
 const { locale, setLocale } = useLocale()
 
 const notifications = provideNotifications()
+const invitations = useInvitations()
+const invitationCount = invitations.count
 
 const themeModal = ref<InstanceType<typeof NewModal> | null>(null)
 const languageModal = ref<InstanceType<typeof NewModal> | null>(null)
@@ -132,6 +145,14 @@ const messages = defineMessages({
 		id: 'panel.copy.failed',
 		defaultMessage: 'Nothing was copied',
 	},
+	invitations: {
+		id: 'panel.menu.invitations',
+		defaultMessage: '{count, plural, one {# invitation} other {# invitations}}',
+	},
+	menuLabel: {
+		id: 'panel.menu.label-with-invitations',
+		defaultMessage: '{name}, {count, plural, one {# open invitation} other {# open invitations}}',
+	},
 	copyFailedHint: {
 		id: 'panel.copy.failed-hint',
 		defaultMessage:
@@ -149,8 +170,32 @@ setCopyFailureHandler(() =>
 onScopeDispose(() => setCopyFailureHandler(null))
 
 const username = computed(() => user.value?.username ?? '')
+const menuLabel = computed(() =>
+	invitationCount.value > 0
+		? formatMessage(messages.menuLabel, { name: username.value, count: invitationCount.value })
+		: username.value,
+)
+
+function refreshInvitations(): void {
+	if (document.visibilityState === 'visible') void invitations.refresh()
+}
+
+onMounted(() => {
+	void invitations.refresh()
+	window.addEventListener('focus', refreshInvitations)
+})
+onScopeDispose(() => window.removeEventListener('focus', refreshInvitations))
 
 const options = computed<ButtonMenuOption[]>(() => [
+	{
+		id: 'invitations',
+		type: 'link',
+		to: { name: 'servers' },
+		label: formatMessage(messages.invitations, { count: invitationCount.value }),
+		icon: MailIcon,
+		tone: 'brand',
+		shown: invitationCount.value > 0,
+	},
 	{
 		id: 'servers',
 		type: 'link',
@@ -212,6 +257,7 @@ const options = computed<ButtonMenuOption[]>(() => [
 
 async function leave() {
 	await signOut()
+	invitations.forget()
 	await router.push({ name: 'login' })
 }
 </script>
