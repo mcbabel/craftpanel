@@ -47,21 +47,16 @@ import {
 	useVIntl,
 } from '@modrinth/ui'
 import { computed, onMounted, useTemplateRef } from 'vue'
-import { useRoute, useRouter } from 'vue-router'
+import { useRouter } from 'vue-router'
 
 import { api, type Operation, type PropertiesFields } from '@/api'
 import ServerSetupFlow from '@/components/ServerSetupFlow.vue'
 import { useServerPage } from '@/composables/server-page'
 import { awaitOperation } from '@/providers/content-manager'
-import {
-	modpackFromQuery,
-	type SetupChoice,
-	withoutModpack,
-} from '@/providers/creation-catalog'
+import { type SetupChoice, takeModpackPick } from '@/providers/creation-catalog'
 import { useInstallationSettings } from '@/providers/installation-settings'
 
 const { formatMessage } = useVIntl()
-const route = useRoute()
 const router = useRouter()
 const client = injectModrinthClient()
 const { addNotification } = injectNotificationManager()
@@ -184,9 +179,8 @@ const installation = useInstallationSettings({
 })
 
 onMounted(() => {
-	const pick = modpackFromQuery(route.query)
+	const pick = takeModpackPick()
 	if (!pick) return
-	void router.replace({ query: withoutModpack(route.query) })
 	if (!resetDisabled.value) void setup.value?.showWithModpack(pick)
 })
 </script>

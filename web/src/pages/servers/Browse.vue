@@ -76,11 +76,11 @@ import {
 	useVIntl,
 } from '@modrinth/ui'
 import { computed } from 'vue'
-import { type RouteLocationRaw, useRoute } from 'vue-router'
+import { type HistoryState, type RouteLocationRaw, useRoute } from 'vue-router'
 
 import { useServerPage } from '@/composables/server-page'
 import { type BrowseManagerOptions, useBrowseManager } from '@/providers/browse-manager'
-import { modpackQuery } from '@/providers/creation-catalog'
+import { modpackState } from '@/providers/creation-catalog'
 
 const messages = defineMessages({
 	catalogueFailedTitle: {
@@ -106,7 +106,7 @@ function browseOptions(): BrowseManagerOptions {
 		return {
 			serverId: null,
 			back: { name: 'server-new' },
-			modpacks: { pick: (pick) => ({ name: 'server-new', query: modpackQuery(pick) }) },
+			modpacks: { pick: (pick) => ({ name: 'server-new', state: modpackState(pick) }) },
 		}
 	}
 
@@ -120,17 +120,17 @@ function browseOptions(): BrowseManagerOptions {
 		return { ...common, back: { name: 'server-content', params: { id: page.serverId } } }
 	}
 
-	const installation = (query: Record<string, string> = {}): RouteLocationRaw => ({
+	const installation = (state?: HistoryState): RouteLocationRaw => ({
 		name: 'server-settings',
 		params: { id: page.serverId, section: 'installation' },
-		query,
+		state,
 	})
 	const busyReasons = page.context.busyReasons
 	return {
 		...common,
 		back: installation(),
 		modpacks: {
-			pick: (pick) => installation(modpackQuery(pick)),
+			pick: (pick) => installation(modpackState(pick)),
 			busy: computed(() =>
 				busyReasons.value.length > 0 ? formatMessage(busyReasons.value[0].reason) : null,
 			),

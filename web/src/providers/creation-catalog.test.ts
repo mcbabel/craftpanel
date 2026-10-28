@@ -5,13 +5,12 @@ import type { GameVersionEntry, LoaderBuild, LoaderId, LoaderInfo } from '@/api'
 import {
 	type CatalogClient,
 	modpackFilter,
-	modpackFromQuery,
-	modpackQuery,
+	modpackFromState,
+	modpackState,
 	paperBuild,
 	runnableVersions,
 	toVersionTags,
 	useCreationCatalog,
-	withoutModpack,
 } from './creation-catalog'
 
 function loader(id: LoaderId, kind: LoaderInfo['kind'], wave: 1 | 2 = 1): LoaderInfo {
@@ -184,20 +183,20 @@ describe('modpacks for a server', () => {
 		])
 	})
 
-	it('carries a picked pack through the address and back', () => {
-		const query = modpackQuery({
+	it('carries a picked pack through the history state and back', () => {
+		const state = modpackState({
 			projectId: 'AAA',
 			name: 'Sky Pack',
 			iconUrl: 'https://cdn.example/icon.png',
 		})
-		expect(query).toEqual({ modpack: 'AAA', name: 'Sky Pack', icon: 'https://cdn.example/icon.png' })
-		expect(modpackFromQuery(query)).toEqual({
+		expect(modpackFromState(state)).toEqual({
 			projectId: 'AAA',
 			versionId: null,
 			name: 'Sky Pack',
 			iconUrl: 'https://cdn.example/icon.png',
 		})
-		expect(modpackFromQuery({ type: 'modpack' })).toBeNull()
-		expect(withoutModpack({ ...query, version: 'v1', so: 'true' })).toEqual({ so: 'true' })
+		expect(modpackFromState({ back: '/servers', position: 3 })).toBeNull()
+		expect(modpackFromState({ modpack: { projectId: 42 } })).toBeNull()
+		expect(modpackFromState(null)).toBeNull()
 	})
 })

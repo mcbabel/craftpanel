@@ -216,7 +216,7 @@ import {
 	useVIntl,
 } from '@modrinth/ui'
 import { computed, onBeforeUnmount, onMounted, ref, useTemplateRef, watch } from 'vue'
-import { useRoute, useRouter } from 'vue-router'
+import { useRouter } from 'vue-router'
 
 import {
 	api,
@@ -232,7 +232,7 @@ import {
 } from '@/api'
 import ServerSetupFlow from '@/components/ServerSetupFlow.vue'
 import { useSession } from '@/composables/session'
-import { modpackFromQuery, type SetupChoice } from '@/providers/creation-catalog'
+import { type SetupChoice, takeModpackPick } from '@/providers/creation-catalog'
 
 import { type HostState, memoryCeiling } from './memory-ceiling'
 import { keepDraft, takeDraft } from './new-server-draft'
@@ -244,7 +244,6 @@ const POLL_INTERVAL_MS = 5_000
 
 const { formatMessage } = useVIntl()
 const formatBytes = useFormatBytes()
-const route = useRoute()
 const router = useRouter()
 const { addNotification } = injectNotificationManager()
 const { user, isAdmin, refresh } = useSession()
@@ -684,9 +683,8 @@ onMounted(() => {
 	if (isAdmin.value) void loadHost()
 	else hostState.value = 'unavailable'
 
-	const pick = modpackFromQuery(route.query)
+	const pick = takeModpackPick()
 	if (pick) {
-		void router.replace({ name: 'server-new' })
 		if (submittable.value || (draft && draft.eula && draft.name.trim())) {
 			void setup.value?.showWithModpack(pick)
 		}

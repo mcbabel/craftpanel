@@ -1,6 +1,6 @@
 import type { Labrinth, LauncherMeta, Paper, Purpur } from '@modrinth/api-client'
 import { computed, type ComputedRef, ref, type Ref } from 'vue'
-import type { LocationQuery } from 'vue-router'
+import type { HistoryState } from 'vue-router'
 
 import {
 	api,
@@ -35,33 +35,44 @@ export type SetupChoice =
 	  }
 	| { kind: 'upload'; file: File; properties: PropertiesFields }
 
-function single(value: LocationQuery[string] | undefined): string | null {
-	const first = Array.isArray(value) ? value[0] : value
-	return typeof first === 'string' && first.length > 0 ? first : null
+// A picked pack travels in the navigation's history state rather than the address, so only a
+// click inside the panel can open the setup with it — never a link from elsewhere.
+const STATE_KEY = 'modpack'
+
+function text(value: unknown): string | null {
+	return typeof value === 'string' && value.length > 0 ? value : null
 }
 
-export function modpackFromQuery(query: LocationQuery): ModpackPick | null {
-	const projectId = single(query.modpack)
+export function modpackState(pick: ModpackPick): HistoryState {
+	return { [STATE_KEY]: { ...pick, versionId: pick.versionId ?? null } }
+}
+
+export function modpackFromState(state: unknown): ModpackPick | null {
+	if (typeof state !== 'object' || state === null) return null
+	const raw = (state as Record<string, unknown>)[STATE_KEY]
+	if (typeof raw !== 'object' || raw === null) return null
+	const fields = raw as Record<string, unknown>
+	const projectId = text(fields.projectId)
 	if (projectId === null) return null
 	return {
 		projectId,
-		versionId: single(query.version),
-		name: single(query.name) ?? projectId,
-		iconUrl: single(query.icon) ?? undefined,
+		versionId: text(fields.versionId),
+		name: text(fields.name) ?? projectId,
+		iconUrl: text(fields.iconUrl) ?? undefined,
 	}
 }
 
-export function modpackQuery(pick: ModpackPick): Record<string, string> {
-	const query: Record<string, string> = { modpack: pick.projectId, name: pick.name }
-	if (pick.versionId) query.version = pick.versionId
-	if (pick.iconUrl) query.icon = pick.iconUrl
-	return query
-}
-
-export function withoutModpack(query: LocationQuery): LocationQuery {
-	const rest = { ...query }
-	for (const key of ['modpack', 'version', 'name', 'icon']) delete rest[key]
-	return rest
+// Takes the pick out of the current history entry, so a reload or a step back does not open
+// the setup a second time.
+export function takeModpackPick(): ModpackPick | null {
+	const state: unknown = window.history.state
+	const pick = modpackFromState(state)
+	if (pick !== null) {
+		const rest = { ...(state as Record<string, unknown>) }
+		delete rest[STATE_KEY]
+		window.history.replaceState(rest, '')
+	}
+	return pick
 }
 
 const SUPPORTED_WAVE = 1
