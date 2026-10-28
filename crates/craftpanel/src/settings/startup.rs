@@ -61,6 +61,32 @@ const NOGUI: &[&str] = &["nogui"];
 const DASHED_NOGUI: &[&str] = &["--nogui"];
 const NOTHING: &[&str] = &[];
 
+pub fn args_file(dir: &std::path::Path, loader: Option<LoaderId>, loader_version: Option<&str>) -> Option<String> {
+    let homes: &[&str] = match loader? {
+        LoaderId::Forge => &["libraries/net/minecraftforge/forge"],
+        LoaderId::NeoForge => &["libraries/net/neoforged/neoforge", "libraries/net/neoforged/forge"],
+        _ => return None,
+    };
+    let mut found: Vec<String> = Vec::new();
+    for home in homes {
+        let Ok(entries) = std::fs::read_dir(dir.join(home)) else { continue };
+        for entry in entries.flatten() {
+            let Ok(name) = entry.file_name().into_string() else { continue };
+            let relative = format!("{home}/{name}/unix_args.txt");
+            if std::fs::symlink_metadata(dir.join(&relative)).is_ok_and(|meta| meta.is_file()) {
+                found.push(relative);
+            }
+        }
+    }
+    if let Some(wanted) = loader_version {
+        if let Some(exact) = found.iter().find(|path| path.split('/').nth(4).is_some_and(|name| name == wanted || name.ends_with(&format!("-{wanted}")))) {
+            return Some(exact.clone());
+        }
+    }
+    found.sort();
+    found.pop()
+}
+
 pub fn launch_of(loader: Option<LoaderId>) -> Launch {
     match loader {
         Some(LoaderId::Velocity) => Launch { jar: "server.jar", trailing: NOTHING },
@@ -456,5 +482,33 @@ mod tests {
         let shown = view(&a_server(LoaderId::Paper, &[]), &runtimes, 8192, false);
         assert_eq!(shown.java_path.as_deref(), Some("/usr/lib/jvm/temurin-21/bin/java"));
         assert!(shown.startup_command.starts_with("/usr/lib/jvm/temurin-21/bin/java -jar"));
+    }
+
+    #[test]
+    fn forge_and_neoforge_start_from_the_args_file_their_installer_wrote() {
+        let dir = std::env::temp_dir().join(format!("craftpanel-argsfile-{}", crate::model::Id::new()));
+        for version in ["1.20.1-47.2.0", "1.20.1-47.3.0"] {
+            let home = dir.join("libraries/net/minecraftforge/forge").join(version);
+            std::fs::create_dir_all(&home).unwrap();
+            std::fs::write(home.join("unix_args.txt"), "-cp x").unwrap();
+        }
+        assert_eq!(
+            args_file(&dir, Some(LoaderId::Forge), Some("47.2.0")).as_deref(),
+            Some("libraries/net/minecraftforge/forge/1.20.1-47.2.0/unix_args.txt")
+        );
+        assert_eq!(
+            args_file(&dir, Some(LoaderId::Forge), None).as_deref(),
+            Some("libraries/net/minecraftforge/forge/1.20.1-47.3.0/unix_args.txt")
+        );
+        assert_eq!(args_file(&dir, Some(LoaderId::Paper), None), None);
+        assert_eq!(args_file(&dir, Some(LoaderId::NeoForge), None), None);
+
+        let neo = dir.join("libraries/net/neoforged/neoforge/21.1.77");
+        std::fs::create_dir_all(&neo).unwrap();
+        std::fs::write(neo.join("unix_args.txt"), "-cp y").unwrap();
+        assert_eq!(
+            args_file(&dir, Some(LoaderId::NeoForge), Some("21.1.77")).as_deref(),
+            Some("libraries/net/neoforged/neoforge/21.1.77/unix_args.txt")
+        );
     }
 }

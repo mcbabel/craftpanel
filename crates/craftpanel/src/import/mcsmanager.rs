@@ -276,7 +276,18 @@ pub fn plan(instance: &Instance) -> Result<Planned, String> {
         .unwrap_or_default();
     Ok(Planned {
         instance: instance.clone(),
-        memory_mib: detect::memory_of(&instance.start_command),
+        memory_mib: detect::memory_of(&format!(
+            "{} {}",
+            instance.start_command,
+            detect::read_plain(&instance.dir.join("user_jvm_args.txt"))
+                .ok()
+                .flatten()
+                .unwrap_or_default()
+                .lines()
+                .filter(|line| !line.trim_start().starts_with('#'))
+                .collect::<Vec<_>>()
+                .join(" ")
+        )),
         flags,
         detected,
     })

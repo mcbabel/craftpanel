@@ -82,7 +82,8 @@ CraftPanel is a tool for **your own machine**, not a hosting business:
 - One machine — no nodes, agents or clusters.
 - Linux only — system accounts, cgroup v2 and systemd are load-bearing.
 - No billing, plans, subdomains, DNS or SFTP.
-- NeoForge, Quilt and Forge are listed but not supported yet. CraftPanel ships no server software
+- Forge and NeoForge servers run and can be imported, but cannot be installed fresh in the panel
+  yet; Quilt is not supported. CraftPanel ships no server software
   itself: every jar is downloaded by the panel from its project's own source. Bedrock is out of
   scope.
 

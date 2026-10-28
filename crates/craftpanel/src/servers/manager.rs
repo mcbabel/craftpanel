@@ -996,8 +996,8 @@ impl Manager {
 
     async fn power_row(&self, server: Id) -> Result<PowerRow> {
         sqlx::query_as::<_, PowerRow>(
-            "SELECT id, owner_id, status, memory_mib, loader, java_major, game_version,
-                    extra_flags
+            "SELECT id, owner_id, status, memory_mib, loader, loader_version, java_major,
+                    game_version, extra_flags
                FROM servers WHERE id = ?",
         )
         .bind(server)
@@ -1051,7 +1051,17 @@ impl Manager {
             server_id: row.id.to_string(),
             working_dir: crate::helper::in_servers(row.id),
             program,
-            args: argv(row.loader, row.memory_mib, &row.flags()),
+            args: argv(
+                row.loader,
+                row.memory_mib,
+                &row.flags(),
+                crate::settings::startup::args_file(
+                    &self.dir(row.owner_id, row.id),
+                    row.loader,
+                    row.loader_version.as_deref(),
+                )
+                .as_deref(),
+            ),
             env: Vec::new(),
             supervisor_socket: self.hub.socket().to_path_buf(),
             token,
@@ -1715,6 +1725,7 @@ struct PowerRow {
     status: ServerStatus,
     memory_mib: u32,
     loader: Option<LoaderId>,
+    loader_version: Option<String>,
     java_major: Option<u32>,
     game_version: Option<String>,
     extra_flags: String,
@@ -1832,7 +1843,7 @@ fn wire(state: RunState) -> PowerState {
     crate::ops::power_state_of(state).0
 }
 
-fn argv(loader: Option<LoaderId>, memory_mib: u32, extra: &[String]) -> Vec<String> {
+fn argv(loader: Option<LoaderId>, memory_mib: u32, extra: &[String], args_file: Option<&str>) -> Vec<String> {
     let mut args = vec![format!("-Xmx{memory_mib}M")];
     for flag in extra {
         let owned = ["-Xmx", "-Xms", "-XX:MaxRAM", "-XX:MaxHeapSize"];
@@ -1841,8 +1852,13 @@ fn argv(loader: Option<LoaderId>, memory_mib: u32, extra: &[String]) -> Vec<Stri
         }
         args.push(flag.clone());
     }
-    args.push("-jar".to_owned());
-    args.push(JAR.to_owned());
+    match args_file {
+        Some(file) => args.push(format!("@{file}")),
+        None => {
+            args.push("-jar".to_owned());
+            args.push(JAR.to_owned());
+        }
+    }
     let launch = crate::settings::startup::launch_of(loader);
     args.extend(launch.trailing.iter().map(|word| (*word).to_owned()));
     args
@@ -3886,18 +3902,26 @@ mod tests {
 
     #[test]
     fn the_start_command_carries_the_heap_and_a_proxy_carries_no_nogui() {
-        let ordinary = argv(Some(LoaderId::Paper), 4096, &[]);
+        let ordinary = argv(Some(LoaderId::Paper), 4096, &[], None);
         assert_eq!(ordinary, ["-Xmx4096M", "-jar", JAR, "nogui"]);
 
-        let proxy = argv(Some(LoaderId::Velocity), 512, &[]);
+        let proxy = argv(Some(LoaderId::Velocity), 512, &[], None);
         assert_eq!(proxy, ["-Xmx512M", "-jar", JAR]);
 
         let cheeky = argv(
             Some(LoaderId::Paper),
             1024,
             &["-Xmx64G".to_owned(), "-XX:+UseG1GC".to_owned(), "-Xms8G".to_owned()],
+            None,
         );
         assert_eq!(cheeky, ["-Xmx1024M", "-XX:+UseG1GC", "-jar", JAR, "nogui"]);
+
+        let limbo = argv(Some(LoaderId::Limbo), 512, &[], None);
+        assert_eq!(limbo, ["-Xmx512M", "-jar", JAR, "--nogui"]);
+
+        let file = "libraries/net/minecraftforge/forge/1.20.1-47.3.0/unix_args.txt";
+        let forge = argv(Some(LoaderId::Forge), 6144, &[], Some(file));
+        assert_eq!(forge, ["-Xmx6144M", &format!("@{file}"), "nogui"]);
     }
 
     #[test]

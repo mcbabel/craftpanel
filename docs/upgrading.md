@@ -236,7 +236,8 @@ For every instance the import:
 1. reads its name, folder and start command from `data/InstanceConfig/<uuid>.json`;
 2. tells the server type and version from the folder: Paper, Purpur, Folia and Leaf from
    `version_history.json` or the jar's name, Fabric from its launcher, Velocity from
-   `velocity.toml`, CraftBukkit and Limbo from the jar's name, Vanilla from the jar. A server on
+   `velocity.toml`, CraftBukkit and Limbo from the jar's name, Forge and NeoForge from the
+   `unix_args.txt` their installer wrote (older Forge from its jar), Vanilla from the jar. A server on
    the old Fabric launcher (`fabric-server-launch.jar` beside the Minecraft jar) keeps working: its
    Minecraft jar becomes `minecraft-server.jar` and `fabric-server-launcher.properties` points
    there;
@@ -248,7 +249,7 @@ For every instance the import:
    port pool and writes it into `server.properties` (or `velocity.toml`);
 6. hands the files to the owner's system account.
 
-Bedrock, Forge, NeoForge, BungeeCord and Waterfall instances are skipped with a reason. If a
+Bedrock, Quilt, BungeeCord and Waterfall instances are skipped with a reason. If a
 server's port had to change and a Velocity proxy points at it, update the proxy's `[servers]`
 section.
 

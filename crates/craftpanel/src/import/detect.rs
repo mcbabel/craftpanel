@@ -21,12 +21,8 @@ pub struct Detected {
 pub const LAUNCHER_PROPERTIES: &str = "fabric-server-launcher.properties";
 
 pub fn detect(dir: &Path, start_command: &str) -> Result<Detected, String> {
-    let libraries = dir.join("libraries").join("net");
-    if ["minecraftforge/forge", "neoforged/neoforge", "neoforged/forge"]
-        .iter()
-        .any(|loader| libraries.join(loader).is_dir())
-    {
-        return Err("Forge and NeoForge servers are not supported yet".to_owned());
+    if let Some(found) = installed_modloader(dir)? {
+        return Ok(found);
     }
 
     let jar = jar_of(dir, start_command)?;
@@ -36,6 +32,16 @@ pub fn detect(dir: &Path, start_command: &str) -> Result<Detected, String> {
     }
     if name == "fabric-server-launch.jar" {
         return old_fabric(dir, jar);
+    }
+    if let Some((game_version, loader_version)) = legacy_forge(&name) {
+        return Ok(Detected {
+            loader: LoaderId::Forge,
+            game_version,
+            loader_version: Some(loader_version),
+            port: port_of(dir, LoaderId::Forge),
+            jar,
+            vanilla_jar: None,
+        });
     }
 
     let loader = loader_of(dir, &name);
@@ -49,6 +55,41 @@ pub fn detect(dir: &Path, start_command: &str) -> Result<Detected, String> {
     };
 
     Ok(Detected { loader, game_version, loader_version, jar, port: port_of(dir, loader), vanilla_jar: None })
+}
+
+fn installed_modloader(dir: &Path) -> Result<Option<Detected>, String> {
+    for loader in [LoaderId::NeoForge, LoaderId::Forge] {
+        let Some(file) = crate::settings::startup::args_file(dir, Some(loader), None) else {
+            continue;
+        };
+        let text = read_plain(&dir.join(&file)).ok().flatten().unwrap_or_default();
+        let value = |key: &str| {
+            let mut words = text.split_whitespace();
+            words.find(|word| *word == key).and_then(|_| words.next()).map(str::to_owned)
+        };
+        let game_version = value("--fml.mcVersion");
+        let loader_version = value("--fml.neoForgeVersion").or_else(|| value("--fml.forgeVersion"));
+        let Some(game_version) = game_version.filter(|version| looks_like_game_version(version)) else {
+            return Err(format!("the Minecraft version cannot be read from {file}"));
+        };
+        return Ok(Some(Detected {
+            loader,
+            game_version,
+            loader_version,
+            port: port_of(dir, loader),
+            jar: "server.jar".to_owned(),
+            vanilla_jar: None,
+        }));
+    }
+    Ok(None)
+}
+
+fn legacy_forge(jar: &str) -> Option<(String, String)> {
+    let stem = jar.strip_suffix(".jar")?.strip_suffix("-universal").unwrap_or(jar.strip_suffix(".jar")?);
+    let rest = stem.strip_prefix("forge-")?;
+    let (game, loader) = rest.split_once('-')?;
+    (looks_like_game_version(game) && loader.chars().all(|c| c.is_ascii_digit() || c == '.'))
+        .then(|| (game.to_owned(), loader.to_owned()))
 }
 
 fn old_fabric(dir: &Path, jar: String) -> Result<Detected, String> {
@@ -470,7 +511,7 @@ mod tests {
     fn what_cannot_run_here_is_refused_with_a_reason() {
         let forge = folder();
         std::fs::create_dir_all(forge.join("libraries/net/minecraftforge/forge/1.20.1-47.3.0")).unwrap();
-        assert!(detect(&forge, "bash run.sh").unwrap_err().contains("Forge"));
+        assert!(detect(&forge, "bash run.sh").unwrap_err().contains("no server jar"));
 
         let bungee = folder();
         std::fs::write(bungee.join("BungeeCord.jar"), b"").unwrap();
@@ -539,6 +580,35 @@ mod tests {
         assert_eq!((found.loader, found.game_version.as_str()), (LoaderId::Limbo, "26.1.2"));
         assert_eq!(found.loader_version.as_deref(), Some("2026.0.1-ALPHA"));
         assert_eq!(found.port, Some(30000));
+    }
+
+    #[test]
+    fn forge_and_neoforge_are_read_from_the_args_their_installer_wrote() {
+        let forge = folder();
+        let home = forge.join("libraries/net/minecraftforge/forge/1.20.1-47.3.0");
+        std::fs::create_dir_all(&home).unwrap();
+        std::fs::write(home.join("unix_args.txt"), "-p libraries/x.jar --launchTarget forge_server --fml.forgeVersion 47.3.0 --fml.mcVersion 1.20.1 --fml.forgeGroup net.minecraftforge\n").unwrap();
+        std::fs::write(forge.join("server.properties"), "server-port=25570\n").unwrap();
+        let found = detect(&forge, "bash run.sh").unwrap();
+        assert_eq!((found.loader, found.game_version.as_str()), (LoaderId::Forge, "1.20.1"));
+        assert_eq!(found.loader_version.as_deref(), Some("47.3.0"));
+        assert_eq!(found.jar, "server.jar");
+        assert_eq!(found.port, Some(25570));
+
+        let neo = folder();
+        let home = neo.join("libraries/net/neoforged/neoforge/21.1.77");
+        std::fs::create_dir_all(&home).unwrap();
+        std::fs::write(home.join("unix_args.txt"), "--launchTarget forgeserver --fml.neoForgeVersion 21.1.77 --fml.fmlVersion 4.0.31 --fml.mcVersion 1.21.1\n").unwrap();
+        let found = detect(&neo, "bash run.sh").unwrap();
+        assert_eq!((found.loader, found.game_version.as_str()), (LoaderId::NeoForge, "1.21.1"));
+        assert_eq!(found.loader_version.as_deref(), Some("21.1.77"));
+
+        let old = folder();
+        std::fs::write(old.join("forge-1.12.2-14.23.5.2860.jar"), b"").unwrap();
+        let found = detect(&old, "java -Xmx4G -jar forge-1.12.2-14.23.5.2860.jar nogui").unwrap();
+        assert_eq!((found.loader, found.game_version.as_str()), (LoaderId::Forge, "1.12.2"));
+        assert_eq!(found.loader_version.as_deref(), Some("14.23.5.2860"));
+        assert_eq!(found.jar, "forge-1.12.2-14.23.5.2860.jar");
     }
 
     #[test]
