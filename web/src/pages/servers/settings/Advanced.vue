@@ -169,7 +169,7 @@ const messages = defineMessages({
 	memoryHelp: {
 		id: 'craftpanel.settings.advanced.memory-help',
 		defaultMessage:
-			'The slider ends at what this server may still be given: what is left of the owner’s memory budget, or what the machine can hand out if he has none.',
+			'The slider ends at what this server may still be given: what is left of the owner’s memory budget, or what the machine can hand out if they have none.',
 	},
 	noMemoryLeft: {
 		id: 'craftpanel.settings.advanced.no-memory-left',

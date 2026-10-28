@@ -294,7 +294,7 @@
     "defaultMessage": "Nobody has connected a Google account"
   },
   "admin.drive.accounts.empty-hint": {
-    "defaultMessage": "Whoever wants his backups in his own storage connects his Google account on his account page. There is nothing to do here for him."
+    "defaultMessage": "Users who want their backups in their own storage connect their Google account on their account page. There is nothing to do here."
   },
   "admin.drive.accounts.title": {
     "defaultMessage": "Connected accounts"
@@ -354,10 +354,10 @@
     "defaultMessage": "Disconnect"
   },
   "admin.drive.cut.body": {
-    "defaultMessage": "The panel gives its access to {user}’s Google account back and forgets it. He can connect again himself at any time."
+    "defaultMessage": "The panel gives its access to {user}’s Google account back and forgets it. They can connect again themselves at any time."
   },
   "admin.drive.cut.files": {
-    "defaultMessage": "His backups stay in his Drive. There is no button here that deletes files in somebody else’s storage, and that is on purpose: he can see them and throw them away himself."
+    "defaultMessage": "Their backups stay in their Drive. There is no button here that deletes files in somebody else’s storage, and that is on purpose: they can see them and throw them away themselves."
   },
   "admin.drive.day-value": {
     "defaultMessage": "{sent} of {limit}"
@@ -387,7 +387,7 @@
     "defaultMessage": "Google Drive only"
   },
   "admin.drive.policy.drive-only-hint": {
-    "defaultMessage": "Nothing is kept on this machine, and a user who has not connected a Drive cannot back up at all. That is deliberate: a silent fall back to this disk is how somebody ends up believing he is covered."
+    "defaultMessage": "Nothing is kept on this machine, and a user who has not connected a Drive cannot back up at all. That is deliberate: a silent fall back to this disk is how somebody ends up believing they are covered."
   },
   "admin.drive.policy.local-only": {
     "defaultMessage": "This machine only"
@@ -399,7 +399,7 @@
     "defaultMessage": "Let each server choose"
   },
   "admin.drive.policy.user-choice-hint": {
-    "defaultMessage": "Every server backs up here by default; whoever has connected a Drive can switch his servers over."
+    "defaultMessage": "Every server backs up here by default; users who have connected a Drive can switch their servers over."
   },
   "admin.drive.publish.body": {
     "defaultMessage": "While the consent screen is on “Testing”, Google hands out access that expires after seven days: every connection then breaks after a week, silently, and exactly when somebody needs a backup. The panel cannot ask Google for this setting; it can only tell you about it."
@@ -444,7 +444,7 @@
     "defaultMessage": "{used} of {limit}"
   },
   "admin.drive.subtitle": {
-    "defaultMessage": "Set up one Google project here; every user then connects his own account, and the backups go into his storage instead of onto this machine."
+    "defaultMessage": "Set up one Google project here; every user then connects their own account, and the backups go into their storage instead of onto this machine."
   },
   "admin.drive.title": {
     "defaultMessage": "Google Drive"
@@ -879,7 +879,7 @@
     "defaultMessage": "Disconnect"
   },
   "admin.playit.disconnect.body-user": {
-    "defaultMessage": "The tunnel service of {user} stops and the key is deleted from this machine. His servers stay up and stay reachable on the local network. He can connect an account again himself at any time."
+    "defaultMessage": "The tunnel service of {user} stops and the key is deleted from this machine. Their servers stay up and stay reachable on the local network. They can connect an account again themselves at any time."
   },
   "admin.playit.disconnect.delete": {
     "defaultMessage": "Delete addresses and disconnect"
@@ -942,7 +942,7 @@
     "defaultMessage": "Nobody has connected an account"
   },
   "admin.playit.nobody-hint": {
-    "defaultMessage": "A user who wants an address that works from outside connects his own playit.gg account on his account page. Nothing has to be set up here."
+    "defaultMessage": "A user who wants an address that works from outside connects their own playit.gg account on their account page. Nothing has to be set up here."
   },
   "admin.playit.not-configured": {
     "defaultMessage": "no key"
@@ -963,13 +963,13 @@
     "defaultMessage": "premium"
   },
   "admin.playit.quiet": {
-    "defaultMessage": "No server of his has an address, so nothing is running."
+    "defaultMessage": "None of their servers has an address, so nothing is running."
   },
   "admin.playit.restart": {
     "defaultMessage": "Restart tunnel service"
   },
   "admin.playit.subtitle-all": {
-    "defaultMessage": "Every user connects his own playit.gg account, and his ports are his. This is who has one — you can look, and you can cut somebody loose."
+    "defaultMessage": "Every user connects their own playit.gg account, and their ports are their own. This is who has one — you can look, and you can cut somebody loose."
   },
   "admin.playit.title-all": {
     "defaultMessage": "Public addresses (all users)"
@@ -2049,7 +2049,7 @@
     "defaultMessage": "This server backs up into a Google Drive, but the operator has taken the panel’s Google credentials away. Nothing can be uploaded or fetched back until they are entered again."
   },
   "craftpanel.backups.drive-broken.not-connected": {
-    "defaultMessage": "This server backs up into its owner’s Google Drive, and no Google account is connected. The owner can connect one on his account page; until then every backup of this server fails."
+    "defaultMessage": "This server backs up into its owner’s Google Drive, and no Google account is connected. The owner can connect one on their account page; until then every backup of this server fails."
   },
   "craftpanel.backups.drive-broken.not-connected-owner": {
     "defaultMessage": "You need to connect a Google account before this server can be backed up: its backups go into your Google Drive, and until one is connected every backup of this server fails."
@@ -2421,7 +2421,7 @@
     "defaultMessage": "{count, plural, one {One more address} other {# more addresses}} from playit"
   },
   "craftpanel.playit.owner-only-account": {
-    "defaultMessage": "Only the owner of this server can request one: it opens the server to the whole internet, and the address is handed out on his own playit.gg account."
+    "defaultMessage": "Only the owner of this server can request one: it opens the server to the whole internet, and the address is handed out on their own playit.gg account."
   },
   "craftpanel.playit.pending": {
     "defaultMessage": "The address is being set up at playit.gg…"
@@ -2490,7 +2490,7 @@
     "defaultMessage": "Memory"
   },
   "craftpanel.settings.advanced.memory-help": {
-    "defaultMessage": "The slider ends at what this server may still be given: what is left of the owner’s memory budget, or what the machine can hand out if he has none."
+    "defaultMessage": "The slider ends at what this server may still be given: what is left of the owner’s memory budget, or what the machine can hand out if they have none."
   },
   "craftpanel.settings.advanced.no-memory-left": {
     "defaultMessage": "There is not a whole gigabyte left for this server — the other servers on this account hold the rest of the memory budget."

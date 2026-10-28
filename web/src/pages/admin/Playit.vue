@@ -296,7 +296,7 @@ const messages = defineMessages({
 	subtitle: {
 		id: 'admin.playit.subtitle-all',
 		defaultMessage:
-			'Every user connects his own playit.gg account, and his ports are his. This is who has one — you can look, and you can cut somebody loose.',
+			'Every user connects their own playit.gg account, and their ports are their own. This is who has one — you can look, and you can cut somebody loose.',
 	},
 	loadFailed: { id: 'admin.playit.load-failed', defaultMessage: 'Could not load the playit status' },
 	unknownError: {
@@ -317,7 +317,7 @@ const messages = defineMessages({
 	nobodyHint: {
 		id: 'admin.playit.nobody-hint',
 		defaultMessage:
-			'A user who wants an address that works from outside connects his own playit.gg account on his account page. Nothing has to be set up here.',
+			'A user who wants an address that works from outside connects their own playit.gg account on their account page. Nothing has to be set up here.',
 	},
 	ownAccountHint: {
 		id: 'admin.playit.own-account-hint',
@@ -338,7 +338,7 @@ const messages = defineMessages({
 	notConfigured: { id: 'admin.playit.not-configured', defaultMessage: 'no key' },
 	quiet: {
 		id: 'admin.playit.quiet',
-		defaultMessage: 'No server of his has an address, so nothing is running.',
+		defaultMessage: 'None of their servers has an address, so nothing is running.',
 	},
 	portsValue: { id: 'admin.playit.fact.ports-value', defaultMessage: '{used} of {limit}' },
 	portsForOthers: {
@@ -355,7 +355,7 @@ const messages = defineMessages({
 	disconnectBody: {
 		id: 'admin.playit.disconnect.body-user',
 		defaultMessage:
-			'The tunnel service of {user} stops and the key is deleted from this machine. His servers stay up and stay reachable on the local network. He can connect an account again himself at any time.',
+			'The tunnel service of {user} stops and the key is deleted from this machine. Their servers stay up and stay reachable on the local network. They can connect an account again themselves at any time.',
 	},
 	disconnectTunnels: {
 		id: 'admin.playit.disconnect.tunnels',

@@ -440,7 +440,7 @@ const messages = defineMessages({
 	driveBrokenNotConnected: {
 		id: 'craftpanel.backups.drive-broken.not-connected',
 		defaultMessage:
-			'This server backs up into its owner’s Google Drive, and no Google account is connected. The owner can connect one on his account page; until then every backup of this server fails.',
+			'This server backs up into its owner’s Google Drive, and no Google account is connected. The owner can connect one on their account page; until then every backup of this server fails.',
 	},
 	driveBrokenNotConnectedOwner: {
 		id: 'craftpanel.backups.drive-broken.not-connected-owner',

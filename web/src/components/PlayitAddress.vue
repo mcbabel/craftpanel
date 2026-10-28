@@ -196,7 +196,7 @@ const messages = defineMessages({
 	ownerOnly: {
 		id: 'craftpanel.playit.owner-only-account',
 		defaultMessage:
-			'Only the owner of this server can request one: it opens the server to the whole internet, and the address is handed out on his own playit.gg account.',
+			'Only the owner of this server can request one: it opens the server to the whole internet, and the address is handed out on their own playit.gg account.',
 	},
 	pending: {
 		id: 'craftpanel.playit.pending',

@@ -82,75 +82,72 @@
 					:description="formatMessage(messages.credentialsDescription)"
 				/>
 
-				<label class="flex flex-col gap-1">
-					<span class="text-sm font-semibold text-contrast">
+				<div class="flex flex-col gap-1.5">
+					<label class="text-sm font-semibold text-contrast" for="drive-client-id">
 						{{ formatMessage(messages.clientId) }}
-					</span>
-					<input
+					</label>
+					<Input
+						id="drive-client-id"
 						v-model="draft.client_id"
-						class="w-full"
-						type="text"
 						autocomplete="off"
-						spellcheck="false"
+						:spellcheck="false"
 						:placeholder="formatMessage(messages.clientIdPlaceholder)"
+						wrapper-class="w-full"
 					/>
-				</label>
+				</div>
 
-				<label class="flex flex-col gap-1">
-					<span class="text-sm font-semibold text-contrast">
+				<div class="flex flex-col gap-1.5">
+					<label class="text-sm font-semibold text-contrast" for="drive-client-secret">
 						{{ formatMessage(messages.clientSecret) }}
-					</span>
-					<input
+					</label>
+					<Input
+						id="drive-client-secret"
 						v-model="draft.client_secret"
-						class="w-full"
 						type="password"
 						autocomplete="off"
-						spellcheck="false"
+						:spellcheck="false"
 						:placeholder="
 							overview.configured
 								? formatMessage(messages.clientSecretKeep)
 								: formatMessage(messages.clientSecretPlaceholder)
 						"
+						wrapper-class="w-full"
 					/>
 					<span class="text-xs text-secondary">
 						{{ formatMessage(messages.clientSecretHint) }}
 					</span>
-				</label>
+				</div>
 
-				<label class="flex flex-col gap-1">
-					<span class="text-sm font-semibold text-contrast">
+				<div class="flex flex-col gap-1.5">
+					<label class="text-sm font-semibold text-contrast" for="drive-folder-name">
 						{{ formatMessage(messages.folderName) }}
-					</span>
-					<input v-model="draft.folder_name" class="w-full" type="text" spellcheck="false" />
-					<span class="text-xs text-secondary">{{ formatMessage(messages.folderHint) }}</span>
-				</label>
-
-				<fieldset class="m-0 flex flex-col gap-2 border-0 p-0">
-					<legend class="mb-1 p-0 text-sm font-semibold text-contrast">
-						{{ formatMessage(messages.policy) }}
-					</legend>
-					<label
-						v-for="option in POLICIES"
-						:key="option"
-						class="flex cursor-pointer items-start gap-2"
-					>
-						<input
-							v-model="draft.target_policy"
-							class="mt-1"
-							type="radio"
-							name="drive-policy"
-							:value="option"
-						/>
-						<span class="flex flex-col">
-							<span class="font-semibold text-contrast">
-								{{ formatMessage(POLICY_LABELS[option]) }}
-							</span>
-							<span class="text-sm text-secondary">
-								{{ formatMessage(POLICY_HINTS[option]) }}
-							</span>
-						</span>
 					</label>
-				</fieldset>
+					<Input
+						id="drive-folder-name"
+						v-model="draft.folder_name"
+						:spellcheck="false"
+						wrapper-class="w-full"
+					/>
+					<span class="text-xs text-secondary">{{ formatMessage(messages.folderHint) }}</span>
+				</div>
+
+				<div class="flex flex-col gap-1.5">
+					<span class="text-sm font-semibold text-contrast">
+						{{ formatMessage(messages.policy) }}
+					</span>
+					<RadioButtons v-model="draft.target_policy" :items="[...POLICIES]">
+						<template #default="{ item }">
+							<span class="flex flex-col items-start text-left">
+								<span class="font-semibold text-contrast">
+									{{ formatMessage(POLICY_LABELS[item]) }}
+								</span>
+								<span class="text-sm font-normal text-secondary">
+									{{ formatMessage(POLICY_HINTS[item]) }}
+								</span>
+							</span>
+						</template>
+					</RadioButtons>
+				</div>
 
 				<Admonition v-if="saveFailure" type="critical" :body="saveFailure" />
 				<Admonition v-if="saved" type="success" :body="formatMessage(messages.savedBody)" />
@@ -314,8 +311,10 @@ import {
 	commonMessages,
 	defineMessages,
 	EmptyState,
+	Input,
 	LoadingIndicator,
 	NewModal,
+	RadioButtons,
 	SettingsLabel,
 	type TableColumn,
 	Table,
@@ -351,7 +350,7 @@ const messages = defineMessages({
 	subtitle: {
 		id: 'admin.drive.subtitle',
 		defaultMessage:
-			'Set up one Google project here; every user then connects his own account, and the backups go into his storage instead of onto this machine.',
+			'Set up one Google project here; every user then connects their own account, and the backups go into their storage instead of onto this machine.',
 	},
 	loadFailed: { id: 'admin.drive.load-failed', defaultMessage: 'Could not load the Drive settings' },
 	unknownError: {
@@ -431,13 +430,13 @@ const messages = defineMessages({
 	policyUserChoiceHint: {
 		id: 'admin.drive.policy.user-choice-hint',
 		defaultMessage:
-			'Every server backs up here by default; whoever has connected a Drive can switch his servers over.',
+			'Every server backs up here by default; users who have connected a Drive can switch their servers over.',
 	},
 	policyDriveOnly: { id: 'admin.drive.policy.drive-only', defaultMessage: 'Google Drive only' },
 	policyDriveOnlyHint: {
 		id: 'admin.drive.policy.drive-only-hint',
 		defaultMessage:
-			'Nothing is kept on this machine, and a user who has not connected a Drive cannot back up at all. That is deliberate: a silent fall back to this disk is how somebody ends up believing he is covered.',
+			'Nothing is kept on this machine, and a user who has not connected a Drive cannot back up at all. That is deliberate: a silent fall back to this disk is how somebody ends up believing they are covered.',
 	},
 	policyLocalOnly: { id: 'admin.drive.policy.local-only', defaultMessage: 'This machine only' },
 	policyLocalOnlyHint: {
@@ -469,7 +468,7 @@ const messages = defineMessages({
 	accountsEmptyHint: {
 		id: 'admin.drive.accounts.empty-hint',
 		defaultMessage:
-			'Whoever wants his backups in his own storage connects his Google account on his account page. There is nothing to do here for him.',
+			'Users who want their backups in their own storage connect their Google account on their account page. There is nothing to do here.',
 	},
 	columnUser: { id: 'admin.drive.column.user', defaultMessage: 'User' },
 	columnState: { id: 'admin.drive.column.state', defaultMessage: 'State' },
@@ -491,12 +490,12 @@ const messages = defineMessages({
 	cutBody: {
 		id: 'admin.drive.cut.body',
 		defaultMessage:
-			'The panel gives its access to {user}’s Google account back and forgets it. He can connect again himself at any time.',
+			'The panel gives its access to {user}’s Google account back and forgets it. They can connect again themselves at any time.',
 	},
 	cutFiles: {
 		id: 'admin.drive.cut.files',
 		defaultMessage:
-			'His backups stay in his Drive. There is no button here that deletes files in somebody else’s storage, and that is on purpose: he can see them and throw them away himself.',
+			'Their backups stay in their Drive. There is no button here that deletes files in somebody else’s storage, and that is on purpose: they can see them and throw them away themselves.',
 	},
 })
 
@@ -552,12 +551,12 @@ const rows = computed<DriveRow[]>(() =>
 const columns = computed<TableColumn<DriveColumn>[]>(() =>
 	wide.value
 		? [
-				{ key: 'user', label: formatMessage(messages.columnUser), width: '18rem' },
-				{ key: 'state', label: formatMessage(messages.columnState), width: '12rem' },
-				{ key: 'storage', label: formatMessage(messages.columnStorage), width: '12rem' },
-				{ key: 'day', label: formatMessage(messages.columnDay), width: '12rem' },
-				{ key: 'backups', label: formatMessage(messages.columnBackups), width: '10rem' },
-				{ key: 'checked', label: formatMessage(messages.columnChecked), width: '10rem' },
+				{ key: 'user', label: formatMessage(messages.columnUser), width: '16rem' },
+				{ key: 'state', label: formatMessage(messages.columnState), width: '10rem' },
+				{ key: 'storage', label: formatMessage(messages.columnStorage), width: '10rem' },
+				{ key: 'day', label: formatMessage(messages.columnDay), width: '9rem' },
+				{ key: 'backups', label: formatMessage(messages.columnBackups), width: '8rem' },
+				{ key: 'checked', label: formatMessage(messages.columnChecked), width: '9rem' },
 				{
 					key: 'actions',
 					label: formatMessage(messages.columnActions),
