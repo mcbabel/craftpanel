@@ -1,6 +1,7 @@
 use serde::{Deserialize, Serialize};
 
 use super::http::{Http, Result};
+use super::store::TunnelKind;
 use super::Secret;
 
 const LOCAL_IP: &str = "127.0.0.1";
@@ -53,13 +54,14 @@ pub async fn create(
     agent_id: &str,
     name: &str,
     local_port: u16,
+    kind: TunnelKind,
 ) -> Result<String> {
     #[derive(Deserialize)]
     struct ObjectId {
         id: String,
     }
 
-    let body = create_body(form, agent_id, name, local_port);
+    let body = create_body(form, agent_id, name, local_port, kind);
     let created: ObjectId = http.call("/v1/tunnels/create", &body, Some(secret)).await?;
     Ok(created.id)
 }
@@ -124,8 +126,20 @@ impl AccountStatus {
     }
 }
 
-pub fn create_body(form: Form, agent_id: &str, name: &str, local_port: u16) -> serde_json::Value {
-    let protocol = serde_json::json!({ "type": "tunnel-type", "details": "minecraft-java" });
+pub fn create_body(
+    form: Form,
+    agent_id: &str,
+    name: &str,
+    local_port: u16,
+    kind: TunnelKind,
+) -> serde_json::Value {
+    let protocol = match kind {
+        TunnelKind::MinecraftJava | TunnelKind::MinecraftBedrock => {
+            serde_json::json!({ "type": "tunnel-type", "details": kind.as_str() })
+        }
+        TunnelKind::Tcp => serde_json::json!({ "type": "custom-tcp", "details": 1 }),
+        TunnelKind::Udp => serde_json::json!({ "type": "custom-udp", "details": 1 }),
+    };
     let endpoint = serde_json::json!({
         "type": "region",
         "details": { "region": "global", "port": null },
@@ -316,6 +330,7 @@ mod tests {
             "11112222-3333-4444-5555-666677778888",
             "survival",
             25565,
+            TunnelKind::MinecraftJava,
         );
 
         assert_eq!(ours, theirs);
@@ -323,8 +338,8 @@ mod tests {
 
     #[test]
     fn the_fallback_body_moves_two_field_names_and_nothing_else() {
-        let rust = create_body(Form::Rust, "a", "survival", 25565);
-        let java = create_body(Form::Java, "a", "survival", 25565);
+        let rust = create_body(Form::Rust, "a", "survival", 25565, TunnelKind::MinecraftJava);
+        let java = create_body(Form::Java, "a", "survival", 25565, TunnelKind::MinecraftJava);
 
         assert_eq!(java["protocol"], rust["ports"]);
         assert_eq!(java["endpoint"], rust["alloc"]);
@@ -335,13 +350,26 @@ mod tests {
 
     #[test]
     fn the_body_points_at_this_machine_and_at_the_port_we_were_given() {
-        let body = create_body(Form::Rust, "agent", "survival", 25571);
+        let body = create_body(Form::Rust, "agent", "survival", 25571, TunnelKind::MinecraftJava);
         let fields = &body["origin"]["data"]["config"]["fields"];
 
         assert_eq!(fields[0], serde_json::json!({ "name": "local_ip", "value": "127.0.0.1" }));
         assert_eq!(fields[1], serde_json::json!({ "name": "local_port", "value": "25571" }));
         assert_eq!(body["alloc"]["details"]["region"], "global");
         assert_eq!(body["ports"]["details"], "minecraft-java");
+    }
+
+    #[test]
+    fn voice_chat_and_bedrock_ask_playit_for_the_shapes_its_api_names() {
+        let udp = create_body(Form::Rust, "agent", "survival voice", 25600, TunnelKind::Udp);
+        assert_eq!(udp["ports"], serde_json::json!({ "type": "custom-udp", "details": 1 }));
+        assert_eq!(udp["origin"]["data"]["config"]["fields"][1]["value"], "25600");
+
+        let tcp = create_body(Form::Rust, "agent", "survival map", 25601, TunnelKind::Tcp);
+        assert_eq!(tcp["ports"], serde_json::json!({ "type": "custom-tcp", "details": 1 }));
+
+        let bedrock = create_body(Form::Java, "agent", "survival", 19132, TunnelKind::MinecraftBedrock);
+        assert_eq!(bedrock["protocol"], serde_json::json!({ "type": "tunnel-type", "details": "minecraft-bedrock" }));
     }
 
     #[test]

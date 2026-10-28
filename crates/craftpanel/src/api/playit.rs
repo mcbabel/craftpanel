@@ -7,9 +7,10 @@ use axum::{Extension, Json, Router};
 use serde::Deserialize;
 
 use crate::auth::error::{Failure, Result};
-use crate::auth::{access, extract, Admin, Caller, Params};
+use crate::auth::{access, extract, Admin, Caller, JsonBody, Params};
 use crate::model::{Id, Permission};
-use crate::playit::{Playit, PlayitClaim, PlayitOverview, PlayitStatus, ServerTunnel, Tunnels};
+use crate::playit::store::{Slot, TunnelKind};
+use crate::playit::{Playit, PlayitClaim, PlayitOverview, PlayitStatus, PublishedPort, ServerTunnel, Tunnels};
 use crate::settings::allocations;
 use crate::AppState;
 
@@ -24,6 +25,8 @@ pub fn router(playit: Arc<Playit>) -> Router<AppState> {
             "/servers/{server}/playit",
             get(tunnel).post(request_tunnel).delete(drop_tunnel),
         )
+        .route("/servers/{server}/playit/ports", get(published).post(publish))
+        .route("/servers/{server}/playit/ports/{tunnel}", delete(unpublish))
         .layer(Extension(playit))
         .layer(axum::middleware::from_fn(extract::same_origin))
 }
@@ -192,6 +195,93 @@ async fn drop_tunnel(
     Ok(StatusCode::NO_CONTENT)
 }
 
+#[derive(Debug, Deserialize)]
+struct PublishRequest {
+    kind: TunnelKind,
+    port: u16,
+    #[serde(default)]
+    label: Option<String>,
+}
+
+async fn published(
+    State(state): State<AppState>,
+    Extension(playit): Extension<Arc<Playit>>,
+    caller: Caller,
+    OfServer(server): OfServer,
+) -> Result<Json<Vec<PublishedPort>>> {
+    access::require(&state.pool, &caller, server, Permission::BaseRead).await?;
+    Ok(Json(playit.published(server).await?))
+}
+
+async fn publish(
+    State(state): State<AppState>,
+    Extension(playit): Extension<Arc<Playit>>,
+    caller: Caller,
+    OfServer(server): OfServer,
+    JsonBody(body): JsonBody<PublishRequest>,
+) -> Result<(StatusCode, Json<Vec<PublishedPort>>)> {
+    access::of(&state.pool, &caller, server).await?.require_ownership(&caller)?;
+
+    let row: Option<(String, Id)> =
+        sqlx::query_as("SELECT name, owner_id FROM servers WHERE id = ?")
+            .bind(server)
+            .fetch_optional(&state.pool)
+            .await?;
+    let (name, owner) = row.ok_or_else(unknown_server)?;
+
+    if body.kind == TunnelKind::MinecraftJava {
+        return Err(Failure::bad_request(
+            "playit_kind_is_main",
+            "the Minecraft Java address of a server is requested on its overview page",
+        ));
+    }
+    let primary = allocations::primary(&state.pool, server).await?;
+    let held = primary == Some(body.port)
+        || allocations::list(&state.pool, server).await?.iter().any(|allocation| allocation.port == body.port);
+    if !held {
+        return Err(Failure::bad_request(
+            "playit_port_not_held",
+            format!("port {} does not belong to this server; add it on the network tab first", body.port),
+        ));
+    }
+    if primary == Some(body.port) && !body.kind.is_udp() {
+        return Err(Failure::bad_request(
+            "playit_primary_is_main",
+            "the primary port is published through the server's own address on the overview page",
+        ));
+    }
+    let label = match body.label.as_deref().map(str::trim).filter(|label| !label.is_empty()) {
+        Some(label) if label.chars().count() <= 32 && !label.chars().any(char::is_control) => Some(label),
+        Some(_) => {
+            return Err(Failure::bad_request("invalid_label", "a label has at most 32 characters"))
+        }
+        None => None,
+    };
+
+    let slot = Slot { id: Id::new(), server, kind: body.kind, local_port: body.port, label };
+    let tunnel_name = match label {
+        Some(label) => format!("{name} {label}"),
+        None => format!("{name} {}", body.kind.as_str()),
+    };
+    playit.of(owner).request(&slot, &tunnel_name).await?;
+    Ok((StatusCode::ACCEPTED, Json(playit.published(server).await?)))
+}
+
+async fn unpublish(
+    State(state): State<AppState>,
+    Extension(playit): Extension<Arc<Playit>>,
+    caller: Caller,
+    Path((server, tunnel)): Path<(String, String)>,
+) -> Result<StatusCode> {
+    let server: Id = server.parse().map_err(|_| unknown_server())?;
+    let tunnel: Id = tunnel
+        .parse()
+        .map_err(|_| Failure::not_found("playit_tunnel_not_found", "no such published port"))?;
+    access::of(&state.pool, &caller, server).await?.require_ownership(&caller)?;
+    playit.unpublish(server, tunnel).await?;
+    Ok(StatusCode::NO_CONTENT)
+}
+
 fn unknown_server() -> Failure {
     Failure::not_found("server_not_found", "no such server")
 }
@@ -263,7 +353,7 @@ mod tests {
 
         let body = body_json(mine).await;
         assert_eq!(body["configured"], false);
-        assert_eq!(body["ports"], serde_json::json!({ "used": 0, "limit": 4, "for_others": 0 }));
+        assert_eq!(body["ports"], serde_json::json!({ "used": 0, "udp_used": 0, "limit": 4, "for_others": 0 }));
         assert_eq!(body["claim"], serde_json::Value::Null);
         assert_eq!(body["agent"]["state"], "absent");
 
@@ -337,7 +427,7 @@ mod tests {
         assert_eq!(line["user_id"], anna.to_string());
         assert_eq!(line["username"], "anna");
         assert_eq!(line["configured"], true);
-        assert_eq!(line["ports"], serde_json::json!({ "used": 1, "limit": 4, "for_others": 0 }));
+        assert_eq!(line["ports"], serde_json::json!({ "used": 1, "udp_used": 0, "limit": 4, "for_others": 0 }));
         assert_eq!(line["agent"]["state"], "absent");
 
         let fields: Vec<&String> = line.as_object().unwrap().keys().collect();
@@ -691,6 +781,109 @@ mod tests {
         assert_eq!(row.user_id, anna, "the tunnel went on the administrator's account");
         assert_eq!(store::used(&panel.pool, anna).await.unwrap(), 1);
         assert_eq!(store::used(&panel.pool, root).await.unwrap(), 0);
+    }
+
+    async fn an_extra_port(pool: &SqlitePool, server: Id, port: u16) {
+        sqlx::query(
+            "INSERT INTO allocations (port, server_id, name, is_primary, created_at) \
+             VALUES (?, ?, 'extra', 0, ?)",
+        )
+        .bind(port)
+        .bind(server)
+        .bind(Timestamp::now())
+        .execute(pool)
+        .await
+        .unwrap();
+    }
+
+    fn publish(server: Id, body: serde_json::Value) -> Request<Body> {
+        Request::builder()
+            .method("POST")
+            .uri(format!("/api/v1/servers/{server}/playit/ports"))
+            .header("content-type", "application/json")
+            .body(Body::from(body.to_string()))
+            .unwrap()
+    }
+
+    #[tokio::test]
+    async fn a_voice_chat_port_is_published_as_udp_next_to_the_game_address() {
+        let panel = panel().await;
+        let anna = a_user(&panel.pool, "anna").await;
+        let server = a_server(&panel.pool, anna, "survival", 1024).await;
+        with_a_primary_port(&panel.pool, server).await;
+        an_extra_port(&panel.pool, server, 25600).await;
+        panel.playit.of(anna).write_secret(&Secret::parse("aaaaaaaa").unwrap()).await.unwrap();
+        let cookie = sign_in(&panel.pool, anna).await;
+
+        let accepted = send(
+            &panel,
+            as_user(publish(server, serde_json::json!({ "kind": "udp", "port": 25600, "label": "Voice chat" })), &cookie),
+        )
+        .await;
+        assert_eq!(accepted.status(), StatusCode::ACCEPTED);
+        let listed = body_json(accepted).await;
+        assert_eq!(listed[0]["kind"], "udp");
+        assert_eq!(listed[0]["label"], "Voice chat");
+        assert_eq!(listed[0]["local_port"], 25600);
+        assert_eq!(listed[0]["state"], "pending");
+        assert_eq!(store::used_udp(&panel.pool, anna).await.unwrap(), 1);
+        assert_eq!(store::used(&panel.pool, anna).await.unwrap(), 0, "UDP does not eat a TCP port");
+
+        let again = send(&panel, as_user(publish(server, serde_json::json!({ "kind": "udp", "port": 25600 })), &cookie)).await;
+        assert_eq!(again.status(), StatusCode::CONFLICT);
+        assert_eq!(body_json(again).await["error"], "playit_tunnel_exists");
+
+        for (body, code) in [
+            (serde_json::json!({ "kind": "udp", "port": 30000 }), "playit_port_not_held"),
+            (serde_json::json!({ "kind": "tcp", "port": 25565 }), "playit_primary_is_main"),
+            (serde_json::json!({ "kind": "minecraft-java", "port": 25600 }), "playit_kind_is_main"),
+        ] {
+            let refused = send(&panel, as_user(publish(server, body.clone()), &cookie)).await;
+            assert_eq!(refused.status(), StatusCode::BAD_REQUEST, "{body}");
+            assert_eq!(body_json(refused).await["error"], code, "{body}");
+        }
+        let bedrock = send(&panel, as_user(publish(server, serde_json::json!({ "kind": "minecraft-bedrock", "port": 25565 })), &cookie)).await;
+        assert_eq!(bedrock.status(), StatusCode::ACCEPTED, "Geyser may share the primary port number over UDP");
+
+        let viewer = a_user(&panel.pool, "ben").await;
+        let viewer_cookie = sign_in(&panel.pool, viewer).await;
+        sqlx::query(
+            "INSERT INTO server_members (id, server_id, user_id, role, invited_at, joined_at) \
+             VALUES (?, ?, ?, 'viewer', ?, ?)",
+        )
+        .bind(Id::new())
+        .bind(server)
+        .bind(viewer)
+        .bind(Timestamp::now())
+        .bind(Timestamp::now())
+        .execute(&panel.pool)
+        .await
+        .unwrap();
+        let read = send(&panel, as_user(empty("GET", &format!("/api/v1/servers/{server}/playit/ports")), &viewer_cookie)).await;
+        assert_eq!(body_json(read).await.as_array().unwrap().len(), 2, "a viewer sees the addresses");
+        let not_his = send(&panel, as_user(publish(server, serde_json::json!({ "kind": "tcp", "port": 25600 })), &viewer_cookie)).await;
+        assert_eq!(not_his.status(), StatusCode::FORBIDDEN);
+
+        let id = listed[0]["id"].as_str().unwrap().to_owned();
+        let gone = send(&panel, as_user(empty("DELETE", &format!("/api/v1/servers/{server}/playit/ports/{id}")), &cookie)).await;
+        assert_eq!(gone.status(), StatusCode::NO_CONTENT);
+        let main = send(&panel, as_user(empty("DELETE", &format!("/api/v1/servers/{server}/playit/ports/{server}")), &cookie)).await;
+        assert_eq!(main.status(), StatusCode::NOT_FOUND, "the game address is not one of the extra ports");
+    }
+
+    #[tokio::test]
+    async fn udp_and_tcp_each_count_against_their_own_four() {
+        let panel = panel().await;
+        let anna = a_user(&panel.pool, "anna").await;
+        let mut servers = Vec::new();
+        for index in 0..5u16 {
+            let server = a_server(&panel.pool, anna, &format!("s{index}"), 1024).await;
+            let slot = store::Slot { id: Id::new(), server, kind: store::TunnelKind::Udp, local_port: 25600 + index, label: None };
+            servers.push(server);
+            let claimed = store::claim(&panel.pool, anna, &slot, 4).await.unwrap();
+            assert_eq!(matches!(claimed, store::Claimed::Full), index == 4, "UDP tunnel {index}");
+        }
+        assert!(matches!(store::claim_slot(&panel.pool, anna, servers[0], 25565, 4).await.unwrap(), store::Claimed::Ok));
     }
 
     #[tokio::test]

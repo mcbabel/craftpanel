@@ -378,6 +378,12 @@ async fn drop_allocation(
 ) -> Result<StatusCode> {
     let (access, row) = seen(&state, &caller, server, Permission::Advanced).await?;
     ports_open(&state, &caller, row.owner_id).await?;
+    if crate::playit::store::on_port(&state.pool, server, port).await? {
+        return Err(Failure::conflict(
+            "port_published",
+            "this port is published through playit.gg; take it off there first",
+        ));
+    }
     operations.guard_write(server).await.map_err(crate::settings::from_fault)?;
     allocations::remove(&state.pool, server, port).await?;
 
@@ -1432,6 +1438,34 @@ mod tests {
         let boss = sign_in(&world.pool, crate::auth::harness::an_admin(&world.pool, "boss").await).await;
         let admin = body_json(world.call(policy(), &boss).await).await;
         assert_eq!((admin["may_change_ports"].as_bool(), admin["may_choose_port"].as_bool()), (Some(true), Some(true)));
+    }
+
+    #[tokio::test]
+    async fn a_port_published_through_playit_stays_until_it_is_taken_off_there() {
+        let world = world().await;
+        let secret = world.as_owner().await;
+        an_allocation(&world.pool, world.server, 25565, "game", true).await;
+        an_allocation(&world.pool, world.server, 25600, "voice", false).await;
+        let slot = crate::playit::store::Slot {
+            id: Id::new(),
+            server: world.server,
+            kind: crate::playit::store::TunnelKind::Udp,
+            local_port: 25600,
+            label: None,
+        };
+        crate::playit::store::claim(&world.pool, world.owner, &slot, 4).await.unwrap();
+
+        let refused = world
+            .call(empty("DELETE", &format!("/servers/{}/allocations/25600", world.server)), &secret)
+            .await;
+        assert_eq!(refused.status(), StatusCode::CONFLICT);
+        assert_eq!(body_json(refused).await["error"], "port_published");
+
+        crate::playit::store::forget(&world.pool, slot.id).await.unwrap();
+        let gone = world
+            .call(empty("DELETE", &format!("/servers/{}/allocations/25600", world.server)), &secret)
+            .await;
+        assert_eq!(gone.status(), StatusCode::NO_CONTENT);
     }
 
     #[tokio::test]

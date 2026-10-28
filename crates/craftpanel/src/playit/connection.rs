@@ -10,7 +10,7 @@ use crate::model::{Id, Timestamp};
 use super::agent::{Agent, AgentStatus};
 use super::claim::{ClaimState, Step};
 use super::http::{Http, PlayitError};
-use super::store::{self, Claimed, TunnelState};
+use super::store::{self, Claimed, TunnelKind, TunnelState};
 use super::tunnels::{self, Form};
 use super::{
     claim, expires, limit_of, not_configured, upstream, view_of, PlayitClaim, PlayitStatus, Ports,
@@ -99,6 +99,7 @@ impl Connection {
     pub async fn ports(&self, has_premium: bool) -> Result<Ports> {
         Ok(Ports {
             used: store::used(&self.pool, self.user).await?,
+            udp_used: store::used_udp(&self.pool, self.user).await?,
             limit: limit_of(has_premium),
             for_others: store::for_others(&self.pool, self.user).await?,
         })
@@ -301,7 +302,7 @@ impl Connection {
 
         let wanted = self.secret().await.is_some()
             && self.external_on().await
-            && store::used(&self.pool, self.user).await.is_ok_and(|used| used > 0);
+            && store::any(&self.pool, self.user).await.unwrap_or(false);
 
         if wanted {
             self.agent.start().await;
@@ -361,7 +362,7 @@ impl Connection {
     }
 
     async fn owes_anything(&self) -> bool {
-        store::used(&self.pool, self.user).await.is_ok_and(|used| used > 0)
+        store::any(&self.pool, self.user).await.unwrap_or(false)
             || store::released(&self.pool, self.user).await.is_ok_and(|owed| !owed.is_empty())
     }
 
@@ -397,7 +398,7 @@ impl Connection {
                 ),
             };
             let _ =
-                store::set_state(&self.pool, row.server_id, state, &addresses, detail.as_deref())
+                store::set_state(&self.pool, row.id, state, &addresses, detail.as_deref())
                     .await;
         }
 
@@ -424,6 +425,13 @@ impl Connection {
         name: &str,
         local_port: u16,
     ) -> Result<ServerTunnel> {
+        let slot =
+            store::Slot { id: server, server, kind: TunnelKind::MinecraftJava, local_port, label: None };
+        self.request(&slot, name).await?;
+        self.tunnel(server).await
+    }
+
+    pub async fn request(self: &Arc<Self>, slot: &store::Slot<'_>, name: &str) -> Result<()> {
         self.require_external().await?;
         if self.secret().await.is_none() {
             return Err(not_configured());
@@ -431,18 +439,23 @@ impl Connection {
 
         let account = store::account(&self.pool, self.user).await?.unwrap_or_default();
         let limit = limit_of(account.has_premium);
-        match store::claim_slot(&self.pool, self.user, server, local_port, limit).await? {
+        match store::claim(&self.pool, self.user, slot, limit).await? {
             Claimed::Taken => {
                 return Err(Failure::conflict(
                     "playit_tunnel_exists",
-                    "this server already has a public address",
+                    if slot.kind == TunnelKind::MinecraftJava && slot.id == slot.server {
+                        "this server already has a public address".to_owned()
+                    } else {
+                        format!("port {} is already published as {}", slot.local_port, slot.kind.as_str())
+                    },
                 ))
             }
             Claimed::Full => {
+                let family = if slot.kind.is_udp() { "UDP" } else { "TCP" };
                 return Err(Failure::conflict(
                     "playit_port_limit",
                     format!(
-                        "your playit.gg account has no free port left ({limit} of {limit} in use)"
+                        "your playit.gg account has no free {family} port left ({limit} of {limit} in use)"
                     ),
                 ))
             }
@@ -451,8 +464,8 @@ impl Connection {
 
         self.engage().await;
 
-        tokio::spawn(Arc::clone(self).build(server, name.to_owned(), local_port));
-        self.tunnel(server).await
+        tokio::spawn(Arc::clone(self).build(slot.id, slot.kind, name.to_owned(), slot.local_port));
+        Ok(())
     }
 
     pub async fn tunnel(&self, server: Id) -> Result<ServerTunnel> {
@@ -461,30 +474,30 @@ impl Connection {
             .map_or_else(ServerTunnel::none, Into::into))
     }
 
-    pub async fn drop_tunnel(self: &Arc<Self>, server: Id) -> Result<()> {
+    pub async fn drop_tunnel(self: &Arc<Self>, id: Id) -> Result<()> {
         self.require_external().await?;
 
-        let Some(row) = store::tunnel(&self.pool, server).await? else {
+        let Some(row) = store::tunnel(&self.pool, id).await? else {
             return Err(Failure::not_found(
                 "playit_tunnel_not_found",
                 "this server has no public address",
             ));
         };
 
-        if let Some(id) = row.tunnel_id.as_deref() {
+        if let Some(tunnel_id) = row.tunnel_id.as_deref() {
             let secret = self.secret().await.ok_or_else(not_configured)?;
-            tunnels::delete(&self.http, &secret, id).await.map_err(upstream)?;
-            store::forget(&self.pool, server).await?;
-            store::settled(&self.pool, id).await?;
+            tunnels::delete(&self.http, &secret, tunnel_id).await.map_err(upstream)?;
+            store::forget(&self.pool, id).await?;
+            store::settled(&self.pool, tunnel_id).await?;
         } else {
-            store::forget(&self.pool, server).await?;
+            store::forget(&self.pool, id).await?;
         }
 
         self.tune_agent().await;
         Ok(())
     }
 
-    async fn build(self: Arc<Self>, server: Id, name: String, local_port: u16) {
+    async fn build(self: Arc<Self>, server: Id, kind: TunnelKind, name: String, local_port: u16) {
         let Some(secret) = self.secret().await else {
             self.give_up(server, "you are not signed in to playit.gg").await;
             return;
@@ -498,7 +511,7 @@ impl Connection {
             }
         };
 
-        let id = match self.create(&secret, &agent_id, &name, local_port).await {
+        let id = match self.create(&secret, &agent_id, &name, local_port, kind).await {
             Ok(id) => id,
             Err(err) => {
                 self.give_up(server, &err.to_string()).await;
@@ -523,9 +536,10 @@ impl Connection {
         agent_id: &str,
         name: &str,
         local_port: u16,
+        kind: TunnelKind,
     ) -> std::result::Result<String, PlayitError> {
         let form = *self.form.lock().expect("the create form lock");
-        let first = tunnels::create(&self.http, secret, form, agent_id, name, local_port).await;
+        let first = tunnels::create(&self.http, secret, form, agent_id, name, local_port, kind).await;
 
         let Err(err) = first else { return first };
 
@@ -541,7 +555,7 @@ impl Connection {
         }
 
         let second =
-            tunnels::create(&self.http, secret, Form::Java, agent_id, name, local_port).await;
+            tunnels::create(&self.http, secret, Form::Java, agent_id, name, local_port, kind).await;
         if second.is_ok() {
             tracing::info!("playit.gg wants the older create body; keeping to it");
             *self.form.lock().expect("the create form lock") = Form::Java;
@@ -621,25 +635,24 @@ impl Connection {
     }
 
     pub async fn hand_back_one(&self, server: Id) {
-        let Ok(Some(row)) = store::tunnel(&self.pool, server).await else { return };
-        if row.user_id != self.user {
-            return;
-        }
-        let Some(id) = row.tunnel_id.clone() else {
-            let _ = store::forget(&self.pool, server).await;
-            return;
-        };
+        let Ok(rows) = store::of_server(&self.pool, server).await else { return };
+        for row in rows.into_iter().filter(|row| row.user_id == self.user) {
+            let Some(tunnel_id) = row.tunnel_id.clone() else {
+                let _ = store::forget(&self.pool, row.id).await;
+                continue;
+            };
 
-        let handed = match self.secret().await {
-            Some(secret) if self.external_on().await => {
-                tunnels::delete(&self.http, &secret, &id).await.is_ok()
+            let handed = match self.secret().await {
+                Some(secret) if self.external_on().await => {
+                    tunnels::delete(&self.http, &secret, &tunnel_id).await.is_ok()
+                }
+                _ => false,
+            };
+
+            let _ = store::forget(&self.pool, row.id).await;
+            if handed {
+                let _ = store::settled(&self.pool, &tunnel_id).await;
             }
-            _ => false,
-        };
-
-        let _ = store::forget(&self.pool, server).await;
-        if handed {
-            let _ = store::settled(&self.pool, &id).await;
         }
     }
 

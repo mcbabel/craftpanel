@@ -38,6 +38,54 @@ impl TunnelState {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, serde::Deserialize)]
+pub enum TunnelKind {
+    #[serde(rename = "minecraft-java")]
+    MinecraftJava,
+    #[serde(rename = "minecraft-bedrock")]
+    MinecraftBedrock,
+    #[serde(rename = "tcp")]
+    Tcp,
+    #[serde(rename = "udp")]
+    Udp,
+}
+
+impl TunnelKind {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::MinecraftJava => "minecraft-java",
+            Self::MinecraftBedrock => "minecraft-bedrock",
+            Self::Tcp => "tcp",
+            Self::Udp => "udp",
+        }
+    }
+
+    pub fn parse(text: &str) -> Option<Self> {
+        match text {
+            "minecraft-java" => Some(Self::MinecraftJava),
+            "minecraft-bedrock" => Some(Self::MinecraftBedrock),
+            "tcp" => Some(Self::Tcp),
+            "udp" => Some(Self::Udp),
+            _ => None,
+        }
+    }
+
+    pub fn is_udp(self) -> bool {
+        matches!(self, Self::MinecraftBedrock | Self::Udp)
+    }
+
+    const TCP_KINDS: &'static str = "('minecraft-java', 'tcp')";
+    const UDP_KINDS: &'static str = "('minecraft-bedrock', 'udp')";
+
+    fn family(self) -> &'static str {
+        if self.is_udp() {
+            Self::UDP_KINDS
+        } else {
+            Self::TCP_KINDS
+        }
+    }
+}
+
 #[derive(Debug, Clone, Default)]
 pub struct Account {
     pub agent_id: Option<String>,
@@ -58,6 +106,9 @@ pub struct Claim {
 
 #[derive(Debug, Clone)]
 pub struct Tunnel {
+    pub id: Id,
+    pub kind: TunnelKind,
+    pub label: Option<String>,
     pub server_id: Id,
     pub user_id: Id,
     pub tunnel_id: Option<String>,
@@ -78,6 +129,7 @@ pub struct Connected {
     pub is_self_managed: bool,
     pub has_premium: bool,
     pub used: u32,
+    pub udp_used: u32,
     pub for_others: u32,
     pub last_error: Option<String>,
     pub checked_at: Option<Timestamp>,
@@ -140,14 +192,18 @@ pub async fn overview(pool: &SqlitePool) -> sqlx::Result<Vec<Connected>> {
         Option<Timestamp>,
         i64,
         i64,
+        i64,
     );
 
     let rows: Vec<OverviewRow> = sqlx::query_as(
         "SELECT a.user_id, u.username, a.agent_id, a.account_status, a.is_self_managed, \
                 a.has_premium, a.last_error, a.checked_at, \
-                (SELECT count(*) FROM playit_tunnels t WHERE t.user_id = a.user_id), \
+                (SELECT count(*) FROM playit_tunnels t WHERE t.user_id = a.user_id \
+                    AND t.kind IN ('minecraft-java', 'tcp')), \
                 (SELECT count(*) FROM playit_tunnels t JOIN servers s ON s.id = t.server_id \
-                  WHERE t.user_id = a.user_id AND s.owner_id <> a.user_id) \
+                  WHERE t.user_id = a.user_id AND s.owner_id <> a.user_id), \
+                (SELECT count(*) FROM playit_tunnels t WHERE t.user_id = a.user_id \
+                    AND t.kind IN ('minecraft-bedrock', 'udp')) \
            FROM playit_accounts a LEFT JOIN users u ON u.id = a.user_id \
           ORDER BY u.username",
     )
@@ -166,6 +222,7 @@ pub async fn overview(pool: &SqlitePool) -> sqlx::Result<Vec<Connected>> {
             last_error: row.6,
             checked_at: row.7,
             used: row.8 as u32,
+            udp_used: row.10 as u32,
             for_others: row.9 as u32,
         })
         .collect())
@@ -283,6 +340,9 @@ pub async fn forget_account(pool: &SqlitePool, user: Id) -> sqlx::Result<()> {
 
 type TunnelRow = (
     Id,
+    String,
+    Option<String>,
+    Id,
     Id,
     Option<String>,
     i64,
@@ -293,16 +353,25 @@ type TunnelRow = (
     Option<Timestamp>,
 );
 
-const SELECT: &str = "SELECT server_id, user_id, tunnel_id, local_port, state, addresses, detail, \
+const SELECT: &str = "SELECT id, kind, label, server_id, user_id, tunnel_id, local_port, state, addresses, detail, \
                              created_at, checked_at \
                         FROM playit_tunnels";
 
-pub async fn tunnel(pool: &SqlitePool, server: Id) -> sqlx::Result<Option<Tunnel>> {
-    let row: Option<TunnelRow> = sqlx::query_as(&format!("{SELECT} WHERE server_id = ?"))
-        .bind(server)
+pub async fn tunnel(pool: &SqlitePool, id: Id) -> sqlx::Result<Option<Tunnel>> {
+    let row: Option<TunnelRow> = sqlx::query_as(&format!("{SELECT} WHERE id = ?"))
+        .bind(id)
         .fetch_optional(pool)
         .await?;
     Ok(row.map(read))
+}
+
+pub async fn of_server(pool: &SqlitePool, server: Id) -> sqlx::Result<Vec<Tunnel>> {
+    let rows: Vec<TunnelRow> =
+        sqlx::query_as(&format!("{SELECT} WHERE server_id = ? ORDER BY local_port, kind"))
+            .bind(server)
+            .fetch_all(pool)
+            .await?;
+    Ok(rows.into_iter().map(read).collect())
 }
 
 pub async fn tunnels(pool: &SqlitePool, user: Id) -> sqlx::Result<Vec<Tunnel>> {
@@ -315,9 +384,12 @@ pub async fn tunnels(pool: &SqlitePool, user: Id) -> sqlx::Result<Vec<Tunnel>> {
 }
 
 fn read(row: TunnelRow) -> Tunnel {
-    let (server_id, user_id, tunnel_id, local_port, state, addresses, detail, created, checked) =
+    let (id, kind, label, server_id, user_id, tunnel_id, local_port, state, addresses, detail, created, checked) =
         row;
     Tunnel {
+        id,
+        kind: TunnelKind::parse(&kind).unwrap_or(TunnelKind::MinecraftJava),
+        label,
         server_id,
         user_id,
         tunnel_id,
@@ -331,11 +403,29 @@ fn read(row: TunnelRow) -> Tunnel {
 }
 
 pub async fn used(pool: &SqlitePool, user: Id) -> sqlx::Result<u32> {
-    let count: i64 = sqlx::query_scalar("SELECT count(*) FROM playit_tunnels WHERE user_id = ?")
+    used_by(pool, user, TunnelKind::Tcp).await
+}
+
+pub async fn used_udp(pool: &SqlitePool, user: Id) -> sqlx::Result<u32> {
+    used_by(pool, user, TunnelKind::Udp).await
+}
+
+async fn used_by(pool: &SqlitePool, user: Id, kind: TunnelKind) -> sqlx::Result<u32> {
+    let count: i64 = sqlx::query_scalar(&format!(
+        "SELECT count(*) FROM playit_tunnels WHERE user_id = ? AND kind IN {}",
+        kind.family()
+    ))
+    .bind(user)
+    .fetch_one(pool)
+    .await?;
+    Ok(count as u32)
+}
+
+pub async fn any(pool: &SqlitePool, user: Id) -> sqlx::Result<bool> {
+    sqlx::query_scalar("SELECT EXISTS (SELECT 1 FROM playit_tunnels WHERE user_id = ?)")
         .bind(user)
         .fetch_one(pool)
-        .await?;
-    Ok(count as u32)
+        .await
 }
 
 pub async fn for_others(pool: &SqlitePool, user: Id) -> sqlx::Result<u32> {
@@ -356,6 +446,14 @@ pub enum Claimed {
     Full,
 }
 
+pub struct Slot<'a> {
+    pub id: Id,
+    pub server: Id,
+    pub kind: TunnelKind,
+    pub local_port: u16,
+    pub label: Option<&'a str>,
+}
+
 pub async fn claim_slot(
     pool: &SqlitePool,
     user: Id,
@@ -363,31 +461,49 @@ pub async fn claim_slot(
     local_port: u16,
     limit: u32,
 ) -> sqlx::Result<Claimed> {
+    let slot = Slot { id: server, server, kind: TunnelKind::MinecraftJava, local_port, label: None };
+    claim(pool, user, &slot, limit).await
+}
+
+pub async fn claim(pool: &SqlitePool, user: Id, slot: &Slot<'_>, limit: u32) -> sqlx::Result<Claimed> {
     let mut tx = pool.begin().await?;
 
-    let used: i64 = sqlx::query_scalar("SELECT count(*) FROM playit_tunnels WHERE user_id = ?")
-        .bind(user)
-        .fetch_one(&mut *tx)
-        .await?;
+    let used: i64 = sqlx::query_scalar(&format!(
+        "SELECT count(*) FROM playit_tunnels WHERE user_id = ? AND kind IN {}",
+        slot.kind.family()
+    ))
+    .bind(user)
+    .fetch_one(&mut *tx)
+    .await?;
     if used as u32 >= limit {
         return Ok(Claimed::Full);
     }
 
-    let taken: i64 = sqlx::query_scalar("SELECT count(*) FROM playit_tunnels WHERE server_id = ?")
-        .bind(server)
-        .fetch_one(&mut *tx)
-        .await?;
+    let taken: i64 = sqlx::query_scalar(
+        "SELECT count(*) FROM playit_tunnels \
+          WHERE id = ? OR (server_id = ? AND kind = ? AND local_port = ?)",
+    )
+    .bind(slot.id)
+    .bind(slot.server)
+    .bind(slot.kind.as_str())
+    .bind(slot.local_port)
+    .fetch_one(&mut *tx)
+    .await?;
     if taken > 0 {
         return Ok(Claimed::Taken);
     }
 
     sqlx::query(
-        "INSERT INTO playit_tunnels (server_id, user_id, local_port, state, addresses, created_at) \
-         VALUES (?, ?, ?, 'pending', '[]', ?)",
+        "INSERT INTO playit_tunnels (id, server_id, user_id, kind, label, local_port, state, \
+                                     addresses, created_at) \
+         VALUES (?, ?, ?, ?, ?, ?, 'pending', '[]', ?)",
     )
-    .bind(server)
+    .bind(slot.id)
+    .bind(slot.server)
     .bind(user)
-    .bind(local_port)
+    .bind(slot.kind.as_str())
+    .bind(slot.label)
+    .bind(slot.local_port)
     .bind(Timestamp::now())
     .execute(&mut *tx)
     .await?;
@@ -396,12 +512,12 @@ pub async fn claim_slot(
     Ok(Claimed::Ok)
 }
 
-pub async fn attach(pool: &SqlitePool, server: Id, tunnel_id: &str) -> sqlx::Result<bool> {
+pub async fn attach(pool: &SqlitePool, id: Id, tunnel_id: &str) -> sqlx::Result<bool> {
     let done = sqlx::query(
-        "UPDATE playit_tunnels SET tunnel_id = ? WHERE server_id = ? AND tunnel_id IS NULL",
+        "UPDATE playit_tunnels SET tunnel_id = ? WHERE id = ? AND tunnel_id IS NULL",
     )
     .bind(tunnel_id)
-    .bind(server)
+    .bind(id)
     .execute(pool)
     .await?;
 
@@ -410,32 +526,42 @@ pub async fn attach(pool: &SqlitePool, server: Id, tunnel_id: &str) -> sqlx::Res
 
 pub async fn set_state(
     pool: &SqlitePool,
-    server: Id,
+    id: Id,
     state: TunnelState,
     addresses: &[Address],
     detail: Option<&str>,
 ) -> sqlx::Result<()> {
     sqlx::query(
         "UPDATE playit_tunnels SET state = ?, addresses = ?, detail = ?, checked_at = ? \
-          WHERE server_id = ?",
+          WHERE id = ?",
     )
     .bind(state.as_str())
     .bind(serde_json::to_string(addresses).unwrap_or_else(|_| "[]".to_owned()))
     .bind(detail)
     .bind(Timestamp::now())
-    .bind(server)
+    .bind(id)
     .execute(pool)
     .await
     .map(drop)
 }
 
-pub async fn forget(pool: &SqlitePool, server: Id) -> sqlx::Result<bool> {
-    let done = sqlx::query("DELETE FROM playit_tunnels WHERE server_id = ?")
-        .bind(server)
+pub async fn forget(pool: &SqlitePool, id: Id) -> sqlx::Result<bool> {
+    let done = sqlx::query("DELETE FROM playit_tunnels WHERE id = ?")
+        .bind(id)
         .execute(pool)
         .await?;
 
     Ok(done.rows_affected() == 1)
+}
+
+pub async fn on_port(pool: &SqlitePool, server: Id, local_port: u16) -> sqlx::Result<bool> {
+    sqlx::query_scalar(
+        "SELECT EXISTS (SELECT 1 FROM playit_tunnels WHERE server_id = ? AND local_port = ?)",
+    )
+    .bind(server)
+    .bind(local_port)
+    .fetch_one(pool)
+    .await
 }
 
 pub async fn forget_all(pool: &SqlitePool, user: Id) -> sqlx::Result<()> {

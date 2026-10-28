@@ -98,6 +98,7 @@ pub struct PlayitOverview {
 #[derive(Debug, Clone, Copy, Serialize)]
 pub struct Ports {
     pub used: u32,
+    pub udp_used: u32,
     pub limit: u32,
     pub for_others: u32,
 }
@@ -145,6 +146,15 @@ impl From<store::Tunnel> for ServerTunnel {
             checked_at: row.checked_at,
         }
     }
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct PublishedPort {
+    pub id: Id,
+    pub kind: store::TunnelKind,
+    pub label: Option<String>,
+    #[serde(flatten)]
+    pub tunnel: ServerTunnel,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -260,6 +270,7 @@ impl Playit {
                 agent: connection.agent_status(),
                 ports: Ports {
                     used: row.used,
+                    udp_used: row.udp_used,
                     limit: limit_of(row.has_premium),
                     for_others: row.for_others,
                 },
@@ -292,8 +303,30 @@ impl Playit {
     }
 
     pub async fn release_tunnel(&self, server: Id) {
-        let Ok(Some(row)) = store::tunnel(&self.pool, server).await else { return };
-        self.of(row.user_id).hand_back_one(server).await;
+        let Ok(rows) = store::of_server(&self.pool, server).await else { return };
+        let mut owners: Vec<Id> = rows.iter().map(|row| row.user_id).collect();
+        owners.sort();
+        owners.dedup();
+        for owner in owners {
+            self.of(owner).hand_back_one(server).await;
+        }
+    }
+
+    pub async fn published(&self, server: Id) -> Result<Vec<PublishedPort>> {
+        Ok(store::of_server(&self.pool, server)
+            .await?
+            .into_iter()
+            .filter(|row| row.id != server)
+            .map(|row| PublishedPort { id: row.id, kind: row.kind, label: row.label.clone(), tunnel: row.into() })
+            .collect())
+    }
+
+    pub async fn unpublish(&self, server: Id, id: Id) -> Result<()> {
+        let row = store::tunnel(&self.pool, id)
+            .await?
+            .filter(|row| row.server_id == server && row.id != server)
+            .ok_or_else(|| Failure::not_found("playit_tunnel_not_found", "no such published port"))?;
+        self.of(row.user_id).drop_tunnel(id).await
     }
 }
 
