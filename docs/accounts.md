@@ -65,6 +65,26 @@ menu shows how many are open — and accepts or declines it. An accepted server 
 Administrators cannot be invited; they already have every permission. Every membership change is
 recorded in the server's audit log.
 
+### Handing a server to another account
+
+The owner of a stopped server can offer it to another user under **Settings → General →
+Transfer to another account**. The offer appears at the top of the receiver's server list, and the
+server only moves once they accept. Until then the owner can withdraw it, and the receiver can
+decline it. An administrator moves a server straight away, without asking.
+
+Either way the receiver's memory and disk budget must have room for the server; if it does not,
+the offer is refused before it is sent, and an acceptance is refused as well. On the move the
+server folder goes into the receiver's account, its files are handed to their system account, and
+a playit.gg address of the old owner is released. Members keep their roles; a receiver who was a
+member becomes the owner instead.
+
+### Groups and the server list
+
+Everyone can sort the servers they see into their own groups, and select several servers to start,
+stop, restart or kill them together or to move them into a group. Groups are personal: nobody else
+sees them, and deleting a group never deletes a server. Administrators can switch on **Show the
+servers of every user** to list all servers on the machine, sorted by owner.
+
 ## Self sign-up
 
 By default only administrators create accounts. Under **Administration → Panel settings → Sign-ups**

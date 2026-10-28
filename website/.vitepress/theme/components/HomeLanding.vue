@@ -198,6 +198,7 @@ const groups = [
 		title: 'Run servers',
 		items: [
 			'Vanilla, Paper, Folia, Purpur, Leaf, Fabric, Forge, NeoForge, Velocity, CraftBukkit and Limbo',
+			'Groups, a running-first list and start or stop many servers at once',
 			'Live console with search and log sharing',
 			'CPU, memory and storage at a glance',
 			'The right Java runtime per Minecraft version',
@@ -206,6 +207,7 @@ const groups = [
 	{
 		title: 'Manage files',
 		items: [
+			'Mods and plugins from Modrinth, even ones put there by hand, kept up to date',
 			'Browse, edit, upload and move files in the browser',
 			'Pack folders into a ZIP, unpack archives',
 			'Server properties as a form',
@@ -224,6 +226,7 @@ const groups = [
 		items: [
 			'Owner, editor and limited roles per server',
 			'Invitations, sign-up with approval, audit log',
+			'Hand a server to another account once they accept',
 			'English and German, on desktop and phone',
 		],
 	},

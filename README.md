@@ -19,14 +19,17 @@ and installing mods and plugins feels the way it does on Modrinth.
 ## Features
 
 - **Server management** — create, start, stop, restart and kill servers, with a live console and
-  live CPU, memory and storage metrics.
+  live CPU, memory and storage metrics. The server list shows which servers run, sorts running or
+  recently started ones first, sorts servers into your own groups and starts, stops or restarts a
+  whole selection at once.
 - **Loaders** — Vanilla, Paper, Folia, Purpur, Leaf, Fabric, Forge, NeoForge, Velocity, CraftBukkit
   and Limbo, each downloaded and checksum-verified. Forge and NeoForge are set up by their own
   official installer, run as the server's account. CraftBukkit comes from
   [GetBukkit](https://getbukkit.org), which builds it with SpigotMC's BuildTools; Limbo comes from
   Modrinth.
 - **Content** — search, install, update and remove mods and plugins straight from Modrinth, one at a
-  time or in bulk.
+  time or in bulk. Jars that were put into `mods/` or `plugins/` by hand are recognised by their
+  hash and linked to their Modrinth project, so they get updates too.
 - **Modpacks** — start a server from a Modrinth modpack or an uploaded `.mrpack`, switch its
   version later or unlink it. Packs for Fabric are supported; the pack's loader and game version
   are installed with it.
@@ -36,7 +39,10 @@ and installing mods and plugins feels the way it does on Modrinth.
 - **Backups** — manual and scheduled backups that save the world consistently, with optional
   off-site copies in each user's own Google Drive.
 - **Users and access** — admin and user roles, per-server roles (owner, editor, viewer),
-  invitations and an audit log.
+  invitations and an audit log. A server can be handed to another account, which has to accept and
+  have room in its budget; an administrator moves it directly and can list every user's servers.
+- **Moving in** — `craftpanel import mcsmanager` takes over the servers of an MCSManager daemon on
+  the same machine, with their names, ports and memory.
 - **Sign-up** — off, open, or open with admin approval, always with e-mail verification.
 - **Resource limits** — memory, CPU, process and disk limits per user, enforced with cgroups.
 - **Public addresses** — one [playit.gg](https://playit.gg) tunnel per server, no port forwarding
