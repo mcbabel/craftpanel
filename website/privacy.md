@@ -12,7 +12,7 @@ for and how you can have it deleted. It also covers this website.
 
 ## Who is responsible
 
-Marlian, contact: [gdpr@mcbabel.de](mailto:gdpr@mcbabel.de)
+Contact: [gdpr@mcbabel.de](mailto:gdpr@mcbabel.de)
 
 This policy applies to the Google Cloud app "CraftPanel" that Marlian registered with Google, and
 to the CraftPanel panels that use it. CraftPanel is open-source software that anyone can run on
