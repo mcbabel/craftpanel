@@ -2687,6 +2687,9 @@
   "panel.copy.failed-hint": {
     "defaultMessage": "This browser would not put the text on the clipboard. Select it and copy it by hand."
   },
+  "panel.footer.source-code": {
+    "defaultMessage": "Source code"
+  },
   "panel.menu.account": {
     "defaultMessage": "Your account"
   },

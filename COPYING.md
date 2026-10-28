@@ -2,17 +2,31 @@
 
 Copyright © 2026 the CraftPanel authors.
 
-CraftPanel is licensed under the **GNU General Public License, Version 3 only**
-([LICENSE](./LICENSE)).
+CraftPanel's own code is licensed under the **GNU Affero General Public License, version 3
+only** (AGPL-3.0-only, see [LICENSE](./LICENSE)).
 
-The choice is not ours to make freely. The user interface is built on Modrinth's UI library,
-which is GPL-3.0-**only**, not "or later". Anything derived from it inherits that, which rules
-out AGPL and GPL-2 as well.
+In short: you may use CraftPanel for any purpose, including commercially, and you may modify it.
+If you distribute it, or if you let other people use a **modified** version over a network — for
+example by running it as a hosted service — you must offer those people the complete source code
+of your version under the same licence. Modifications you only run for yourself do not have to be
+published. The licence text is authoritative; this paragraph is only a summary.
 
-**Two things this licence does not cover**, and both are further down. One is Modrinth's brand —
+The user interface includes Modrinth's UI library, which is licensed under GPL-3.0-only. Section 13
+of the GPL-3.0 explicitly permits combining such code with AGPL-3.0 code: the Modrinth parts keep
+their GPL-3.0-only licence, and the network-interaction requirement of AGPL-3.0 section 13 applies
+to the combined work. Because of these GPL terms, CraftPanel cannot carry any further restriction
+such as a non-commercial clause.
+
+**Two things these licences do not cover**, and both are further down. One is Modrinth's brand —
 the logo, the wordmark, the Rinthbot mascot and the Modrinth Servers icon. It is trademarked, was
 deleted from this repository and may not come back. The other is `vendor/modrinth/api-client`,
 which is LGPL-3.0.
+
+### Running a modified version
+
+The interface shows a link to its source code (`web/src/source.ts`). If you deploy a modified
+version, point that link at the source of your version, so that everyone using your panel can get
+it, as AGPL-3.0 section 13 requires.
 
 ## Third-party code in this repository
 

@@ -92,5 +92,5 @@ look up the SHA of the tag (`git ls-remote --tags <repo>`) and update the commen
 ## License
 
 By contributing you agree that your contributions are licensed under the
-[GPL-3.0-only](LICENSE) license. Please report security issues privately as described in
+[AGPL-3.0-only](LICENSE) license. Please report security issues privately as described in
 [SECURITY.md](SECURITY.md).

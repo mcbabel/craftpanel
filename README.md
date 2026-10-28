@@ -5,7 +5,7 @@
 <p align="center">
   <a href="https://github.com/MCbabel/craftpanel/actions/workflows/ci.yml"><img src="https://github.com/MCbabel/craftpanel/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
   <a href="https://github.com/MCbabel/craftpanel/releases/latest"><img src="https://img.shields.io/github/v/release/MCbabel/craftpanel?sort=semver" alt="Latest release"></a>
-  <a href="LICENSE"><img src="https://img.shields.io/badge/license-GPL--3.0--only-blue" alt="License: GPL-3.0-only"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-AGPL--3.0--only-blue" alt="License: AGPL-3.0-only"></a>
 </p>
 
 **CraftPanel** is a web panel for running Minecraft servers on a single Linux machine. It installs
@@ -98,7 +98,10 @@ be reported privately as described in [SECURITY.md](SECURITY.md).
 
 ## License
 
-CraftPanel is licensed under the **GNU General Public License v3.0 only** — see [LICENSE](LICENSE).
+CraftPanel is licensed under the **GNU Affero General Public License v3.0 only** — see
+[LICENSE](LICENSE). You may use it for any purpose, including commercially. If you offer a modified
+version to others, including as a hosted service, you must make its source code available to them.
+
 The interface includes code from Modrinth's UI library (GPL-3.0-only) and API client
 (LGPL-3.0-only); details and the list of changes are in [COPYING.md](COPYING.md).
 

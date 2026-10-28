@@ -2687,6 +2687,9 @@
   "panel.copy.failed-hint": {
     "defaultMessage": "Dieser Browser wollte den Text nicht in die Zwischenablage legen. Markiere ihn und kopiere ihn von Hand."
   },
+  "panel.footer.source-code": {
+    "defaultMessage": "Quellcode"
+  },
   "panel.menu.account": {
     "defaultMessage": "Dein Konto"
   },
