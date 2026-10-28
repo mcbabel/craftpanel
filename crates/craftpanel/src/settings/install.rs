@@ -134,6 +134,7 @@ pub struct Runner {
     helper: Helper,
     data_dir: PathBuf,
     cache_dir: PathBuf,
+    installer: Option<Arc<crate::servers::manager::Manager>>,
 }
 
 impl Runner {
@@ -144,8 +145,9 @@ impl Runner {
         helper: Helper,
         data_dir: PathBuf,
         cache_dir: PathBuf,
+        installer: Option<Arc<crate::servers::manager::Manager>>,
     ) -> Arc<Self> {
-        Arc::new(Self { pool, operations, catalog, helper, data_dir, cache_dir })
+        Arc::new(Self { pool, operations, catalog, helper, data_dir, cache_dir, installer })
     }
 
     pub async fn start(
@@ -284,7 +286,12 @@ impl Runner {
         }
 
         self.step(id, OperationPhase::Verifying, 0.70, None).await;
-        let jar = super::startup::launch_of(Some(plan.loader)).jar;
+        let installs = crate::servers::installer::needed(plan.loader);
+        let jar = if installs {
+            crate::servers::installer::INSTALLER
+        } else {
+            super::startup::launch_of(Some(plan.loader)).jar
+        };
         super::disk::copy(&dir, jar, &cached).map_err(filesystem)?;
 
         self.step(id, OperationPhase::WritingConfig, 0.90, None).await;
@@ -296,6 +303,23 @@ impl Runner {
             .map_err(|err| {
                 error("loader_install_failed", err.to_string(), OperationErrorStep::Filesystem)
             })?;
+
+        if installs {
+            let manager = self.installer.as_ref().ok_or_else(|| {
+                error(
+                    "loader_install_failed",
+                    "the installer cannot run from here",
+                    OperationErrorStep::Modloader,
+                )
+            })?;
+            let major = server
+                .java_major
+                .or(build.java_major)
+                .or_else(|| super::runtimes::default_major(&plan.game_version));
+            self.step(id, OperationPhase::RunningInstaller, 0.92, None).await;
+            manager.provide_java(id, major).await;
+            manager.run_installer(server.owner_id, server.id, plan.loader, major).await?;
+        }
 
         record(&self.pool, server.id, &plan, &build.id).await.map_err(|err| {
             error("loader_install_failed", err.to_string(), OperationErrorStep::Internal)

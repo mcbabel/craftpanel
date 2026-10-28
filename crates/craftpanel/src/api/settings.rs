@@ -30,7 +30,11 @@ use crate::settings::store::{self, ServerProperties, ServerPropertiesPatch};
 use crate::settings::{load_server, ServerRow};
 use crate::AppState;
 
-pub fn router(operations: Arc<Operations>, live: LiveServers) -> Router<AppState> {
+pub fn router(
+    operations: Arc<Operations>,
+    live: LiveServers,
+    installer: Option<Arc<crate::servers::manager::Manager>>,
+) -> Router<AppState> {
     Router::new()
         .route("/servers/{server}/properties", get(read_properties).patch(write_properties))
         .route("/servers/{server}/startup", get(read_startup).patch(write_startup))
@@ -50,6 +54,7 @@ pub fn router(operations: Arc<Operations>, live: LiveServers) -> Router<AppState
         .route("/servers/{server}/reset-to-setup", post(reset_to_setup))
         .layer(Extension(operations))
         .layer(Extension(live))
+        .layer(Extension(installer))
         .layer(axum::middleware::from_fn(extract::same_origin))
 }
 
@@ -464,6 +469,7 @@ fn read_loader(name: &str) -> Result<LoaderId> {
 async fn install(
     State(state): State<AppState>,
     Extension(operations): Extension<Arc<Operations>>,
+    Extension(installer): Extension<Installer>,
     Extension(live): Extension<LiveServers>,
     caller: Caller,
     Path(server): Path<Id>,
@@ -484,7 +490,7 @@ async fn install(
     };
     let game_version = plan.game_version.clone();
     let build = plan.build.clone();
-    let started = runner(&state, &operations)?
+    let started = runner(&state, &operations, &installer)?
         .start(&row, caller.id(), Job::Install { plan, wipe_everything: false })
         .await?;
 
@@ -506,6 +512,7 @@ async fn install(
 async fn repair(
     State(state): State<AppState>,
     Extension(operations): Extension<Arc<Operations>>,
+    Extension(installer): Extension<Installer>,
     Extension(live): Extension<LiveServers>,
     caller: Caller,
     Path(server): Path<Id>,
@@ -513,7 +520,7 @@ async fn repair(
     let (access, row) = seen(&state, &caller, server, Permission::Setup).await?;
     refuse_while_running(&live, server).await?;
 
-    let started = runner(&state, &operations)?.start(&row, caller.id(), Job::Repair).await?;
+    let started = runner(&state, &operations, &installer)?.start(&row, caller.id(), Job::Repair).await?;
     audit::record(&state.pool, access, &caller, Event::ServerRepaired).await;
     Ok((
         StatusCode::ACCEPTED,
@@ -524,6 +531,7 @@ async fn repair(
 async fn reset(
     State(state): State<AppState>,
     Extension(operations): Extension<Arc<Operations>>,
+    Extension(installer): Extension<Installer>,
     Extension(live): Extension<LiveServers>,
     caller: Caller,
     Path(server): Path<Id>,
@@ -545,7 +553,7 @@ async fn reset(
         build,
         policy: ContentPolicy::WipeMods,
     };
-    let started = runner(&state, &operations)?
+    let started = runner(&state, &operations, &installer)?
         .start(&row, caller.id(), Job::Install { plan, wipe_everything: true })
         .await?;
 
@@ -640,7 +648,9 @@ fn helper(state: &AppState) -> Helper {
     Helper::new(&state.config.helper_socket)
 }
 
-fn runner(state: &AppState, operations: &Arc<Operations>) -> Result<Arc<Runner>> {
+type Installer = Option<Arc<crate::servers::manager::Manager>>;
+
+fn runner(state: &AppState, operations: &Arc<Operations>, installer: &Installer) -> Result<Arc<Runner>> {
     Ok(Runner::new(
         state.pool.clone(),
         Arc::clone(operations),
@@ -648,6 +658,7 @@ fn runner(state: &AppState, operations: &Arc<Operations>) -> Result<Arc<Runner>>
         helper(state),
         state.config.data_dir.clone(),
         state.config.cache_dir(),
+        installer.clone(),
     ))
 }
 
@@ -780,7 +791,7 @@ mod tests {
             if running { LiveServers::fixed([server]) } else { LiveServers::none() };
 
         let operations = Operations::new(pool.clone(), dir.path());
-        let app = router(operations, live).with_state(state_with(&pool, config));
+        let app = router(operations, live, None).with_state(state_with(&pool, config));
 
         std::fs::create_dir_all(crate::settings::server_dir(dir.path(), owner, server)).unwrap();
         World { app, pool, dir, server, owner, _helper: helper }
@@ -1976,6 +1987,7 @@ mod tests {
             Helper::new(&std::path::PathBuf::from("/nonexistent")),
             world.dir.path().to_path_buf(),
             world.dir.path().join("cache"),
+            None,
         );
         let plan = Plan {
             loader: LoaderId::Paper,

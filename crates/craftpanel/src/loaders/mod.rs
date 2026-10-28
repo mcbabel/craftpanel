@@ -5,9 +5,12 @@ mod craftbukkit;
 mod error;
 mod fabric;
 mod fill;
+mod forge;
 pub(crate) mod http;
 mod leaf;
 mod limbo;
+mod maven;
+mod neoforge;
 mod purpur;
 mod vanilla;
 
@@ -32,10 +35,12 @@ pub enum Loader {
     Velocity,
     CraftBukkit,
     Limbo,
+    Forge,
+    NeoForge,
 }
 
 impl Loader {
-    pub const ALL: [Self; 9] = [
+    pub const ALL: [Self; 11] = [
         Self::Vanilla,
         Self::Paper,
         Self::Folia,
@@ -45,6 +50,8 @@ impl Loader {
         Self::Velocity,
         Self::CraftBukkit,
         Self::Limbo,
+        Self::Forge,
+        Self::NeoForge,
     ];
 
     pub fn id(self) -> &'static str {
@@ -58,6 +65,8 @@ impl Loader {
             Self::Velocity => "velocity",
             Self::CraftBukkit => "craftbukkit",
             Self::Limbo => "limbo",
+            Self::Forge => "forge",
+            Self::NeoForge => "neoforge",
         }
     }
 
@@ -72,6 +81,8 @@ impl Loader {
             Self::Velocity => "Velocity",
             Self::CraftBukkit => "CraftBukkit",
             Self::Limbo => "Limbo",
+            Self::Forge => "Forge",
+            Self::NeoForge => "NeoForge",
         }
     }
 
@@ -157,6 +168,8 @@ impl Sources {
             Loader::Fabric => fabric::versions(&self.http).await,
             Loader::CraftBukkit => craftbukkit::versions(&self.http).await,
             Loader::Limbo => limbo::versions(&self.http).await,
+            Loader::Forge => forge::versions(&self.http).await,
+            Loader::NeoForge => neoforge::versions(&self.http).await,
         }
     }
 
@@ -177,15 +190,26 @@ impl Sources {
             Loader::Fabric => fabric::builds(&self.http, version).await,
             Loader::CraftBukkit => craftbukkit::builds(&self.http, version).await,
             Loader::Limbo => limbo::builds(&self.http, version).await,
+            Loader::Forge => forge::builds(&self.http, version).await,
+            Loader::NeoForge => neoforge::builds(&self.http, version).await,
         }
     }
 
     pub async fn resolve(&self, loader: Loader, version: &str, wanted: &Wanted) -> Result<Build> {
-        let build = if loader == Loader::Purpur {
+        let mut build = if loader == Loader::Purpur {
             purpur::resolve(&self.http, version, wanted).await?
         } else {
             pick(self.builds(loader, version).await?, loader, version, wanted)?
         };
+        if build.checksum.is_none() && matches!(loader, Loader::Forge | Loader::NeoForge) {
+            build.checksum = maven::checksum_of(&self.http, loader.label(), &build.url).await?;
+            if build.checksum.is_none() {
+                return Err(LoaderError::Unreadable {
+                    service: loader.label(),
+                    reason: format!("{} has no checksum to verify it against", build.filename),
+                });
+            }
+        }
         if !sane(&build) {
             return Err(LoaderError::Unreadable {
                 service: loader.label(),
@@ -281,7 +305,7 @@ mod tests {
             assert_eq!(Loader::from_id(loader.id()), Some(loader));
         }
         assert_eq!(Loader::from_id("spigot"), None);
-        assert_eq!(Loader::ALL.len(), 9);
+        assert_eq!(Loader::ALL.len(), 11);
     }
 
     #[test]

@@ -1803,11 +1803,11 @@ mod tests {
     }
 
     #[test]
-    fn the_loader_catalogue_has_twelve_entries_and_nine_sources() {
+    fn the_loader_catalogue_has_twelve_entries_and_eleven_sources() {
         assert_eq!(LoaderId::ALL.len(), 12);
         let with_source = LoaderId::ALL.iter().filter(|l| l.source().is_some()).count();
-        assert_eq!(with_source, 9);
-        assert!(LoaderId::Forge.source().is_none());
+        assert_eq!(with_source, 11);
+        assert!(LoaderId::Quilt.source().is_none());
         assert_eq!(LoaderId::Paper.source(), Some(crate::loaders::Loader::Paper));
     }
 

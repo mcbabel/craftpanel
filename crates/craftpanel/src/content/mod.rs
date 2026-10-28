@@ -59,6 +59,7 @@ pub struct Content {
     checking: Arc<std::sync::Mutex<BTreeSet<Id>>>,
     disks: Disks,
     builds: std::sync::OnceLock<Arc<dyn Builds>>,
+    installer: std::sync::OnceLock<std::sync::Weak<crate::servers::manager::Manager>>,
 }
 
 impl Content {
@@ -90,7 +91,12 @@ impl Content {
             checking: Arc::default(),
             disks,
             builds: std::sync::OnceLock::new(),
+            installer: std::sync::OnceLock::new(),
         })
+    }
+
+    pub fn use_installer(&self, manager: &Arc<crate::servers::manager::Manager>) {
+        let _ = self.installer.set(Arc::downgrade(manager));
     }
 
     pub fn use_builds(&self, builds: Arc<dyn Builds>) {
@@ -1475,6 +1481,10 @@ impl Content {
             install::place(&staged, &root, relative).map_err(filesystem)?;
         }
 
+        let installing = switch
+            .as_ref()
+            .filter(|target| crate::servers::installer::needed(target.loader))
+            .map(|target| crate::settings::runtimes::default_major(&target.game_version));
         let facts = match (switch, loader_jar) {
             (Some(target), Some((build, staged))) => {
                 self.put_loader(facts, &root, &target, &build, &staged).await?
@@ -1486,6 +1496,17 @@ impl Content {
         }
 
         self.hand_back(&facts).await?;
+        if let Some(major) = installing {
+            let manager = self.installer.get().and_then(std::sync::Weak::upgrade).ok_or_else(|| {
+                OperationError {
+                    code: "loader_install_failed".to_owned(),
+                    message: "the installer cannot run from here".to_owned(),
+                    step: OperationErrorStep::Modloader,
+                }
+            })?;
+            manager.provide_java(operation, major).await;
+            manager.run_installer(facts.owner_id, facts.id, facts.loader, major).await?;
+        }
         self.record_pack(&facts, &files, &omitted, &card, &title, &version_number).await?;
         self.drop_what_the_pack_no_longer_has(&facts, &root, &kept).await?;
         let _ = std::fs::remove_dir_all(&work);
@@ -1557,7 +1578,11 @@ impl Content {
         build: &crate::loaders::Build,
         staged: &Path,
     ) -> std::result::Result<ServerFacts, OperationError> {
-        let jar = crate::settings::startup::launch_of(Some(target.loader)).jar;
+        let jar = if crate::servers::installer::needed(target.loader) {
+            crate::servers::installer::INSTALLER
+        } else {
+            crate::settings::startup::launch_of(Some(target.loader)).jar
+        };
         install::place(staged, root, jar).map_err(filesystem)?;
 
         let loader_version = (target.loader != LoaderId::Vanilla).then(|| build.id.clone());

@@ -1189,7 +1189,7 @@ mod tests {
         let panel = Panel::new().await;
         let mut version =
             harness::a_release("f1", "FPACK", "2026-01-01T00:00:00Z", "https://cdn.invalid/f", b"f");
-        version.loaders = vec!["forge".to_owned()];
+        version.loaders = vec!["quilt".to_owned()];
         panel.upstream.set_versions("FPACK", vec![version]);
         let session = sign_in(&panel.pool, panel.owner).await;
 

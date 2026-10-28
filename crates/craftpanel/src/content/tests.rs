@@ -1931,9 +1931,9 @@ async fn a_pack_for_a_loader_the_panel_cannot_install_changes_nothing() {
     let panel = Panel::new("paper", "1.21.8").await;
     let shelf = shelf_for(&panel);
     panel.write("plugins/keep.jar", b"a plugin");
-    let archive = a_pack_for(serde_json::json!({ "minecraft": "1.20.1", "forge": "47.3.0" }));
+    let archive = a_pack_for(serde_json::json!({ "minecraft": "1.20.1", "quilt-loader": "0.26.0" }));
 
-    let run = upload(&panel, &archive, "forge.mrpack").await;
+    let run = upload(&panel, &archive, "quilt.mrpack").await;
 
     assert_eq!(run.state, OperationState::Failed);
     assert_eq!(run.error.expect("an error").code, "modpack_loader_unsupported");

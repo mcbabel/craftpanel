@@ -725,12 +725,19 @@ impl Manager {
             .await
             .map_err(disk)?;
         }
-        tokio::fs::rename(&jar, dir.join(JAR)).await.map_err(disk)?;
+        let installs = super::installer::needed(loader);
+        let placed = if installs { super::installer::INSTALLER } else { JAR };
+        tokio::fs::rename(&jar, dir.join(placed)).await.map_err(disk)?;
 
         self.helper
             .chown_tree(&owner.to_string(), crate::helper::in_servers(server))
             .await
             .map_err(|err| internal_error(Failure::internal(err)))?;
+
+        if installs {
+            self.step(id, OperationPhase::RunningInstaller, 0.97, None, None).await;
+            self.run_installer(owner, server, loader, wanted).await?;
+        }
 
         sqlx::query(
             "UPDATE servers SET status = 'available', loader = ?, loader_version = ?,
@@ -816,6 +823,48 @@ impl Manager {
             tracing::debug!("the first update check of {server} stopped: {failure}");
         }
         Ok(())
+    }
+
+    pub(crate) async fn run_installer(
+        &self,
+        owner: Id,
+        server: Id,
+        loader: LoaderId,
+        major: Option<u32>,
+    ) -> std::result::Result<(), OperationError> {
+        let failed = |message: String| OperationError {
+            code: "loader_install_failed".to_owned(),
+            message,
+            step: OperationErrorStep::Modloader,
+        };
+        let java = self.java_for(major);
+        super::installer::run(&self.hub, &self.helper, owner, server, java).await.map_err(failed)?;
+
+        let dir = self.dir(owner, server);
+        tokio::task::spawn_blocking(move || super::installer::tidy_up(&dir, loader))
+            .await
+            .map_err(|err| failed(err.to_string()))?
+            .map_err(|err| failed(format!("the installer's leftovers could not be cleared: {err}")))?;
+        self.helper
+            .chown_tree(&owner.to_string(), crate::helper::in_servers(server))
+            .await
+            .map(|_| ())
+            .map_err(|err| internal_error(Failure::internal(err)))
+    }
+
+    fn java_for(&self, major: Option<u32>) -> PathBuf {
+        let Some(major) = major else { return system_java() };
+        if let Some(managed) = self.runtimes.present(major).and_then(|found| found.path) {
+            return PathBuf::from(managed);
+        }
+        let here = crate::settings::runtimes::cached(&self.config.data_dir, &self.config.java_search);
+        binary_of(&here, |found| found == major)
+            .or_else(|| binary_of(&here, |found| crate::settings::runtimes::stands_in_for(found, major)))
+            .unwrap_or_else(system_java)
+    }
+
+    pub(crate) async fn provide_java(&self, id: Id, major: Option<u32>) {
+        self.java_before_the_first_start(id, major).await;
     }
 
     async fn java_before_the_first_start(&self, id: Id, major: Option<u32>) {
@@ -2766,9 +2815,9 @@ mod tests {
         let fixture = Fixture::new().await;
         let max = a_user(&fixture.pool, "max").await;
         let caller = fixture.caller(max).await;
-        let mut wish = fixture.loader_wish("forge", max, 1024);
+        let mut wish = fixture.loader_wish("quilt", max, 1024);
         wish.content = CreateContent::Loader {
-            loader: LoaderId::Forge,
+            loader: LoaderId::Quilt,
             game_version: "1.20.1".to_owned(),
             loader_version: None,
         };

@@ -145,9 +145,9 @@ pub const LOADERS: &[LoaderInfo] = &[
     loader!(Leaf, "Leaf", Server, Download, true, true, Leafmc, 1),
     loader!(Fabric, "Fabric", Modloader, Download, true, true, Fabricmc, 1),
     loader!(Velocity, "Velocity", Proxy, Download, true, false, Papermc, 1),
-    loader!(NeoForge, "NeoForge", Modloader, Installer, true, true, Neoforged, 2),
+    loader!(NeoForge, "NeoForge", Modloader, Installer, true, true, Neoforged, 1),
     loader!(Quilt, "Quilt", Modloader, Installer, true, true, Quiltmc, 2),
-    loader!(Forge, "Forge", Modloader, Installer, true, true, Minecraftforge, 2),
+    loader!(Forge, "Forge", Modloader, Installer, true, true, Minecraftforge, 1),
     loader!(CraftBukkit, "CraftBukkit", Server, Download, true, true, Getbukkit, 1),
     loader!(Limbo, "Limbo", Server, Download, true, true, Modrinth, 1, without content),
 ];
@@ -494,8 +494,8 @@ mod tests {
             assert_eq!(entry.id.family() == crate::model::LoaderFamily::Proxy, !entry.supports_properties);
             assert_eq!(
                 entry.wave == 2,
-                entry.install_kind == InstallKind::Installer,
-                "{} — the second wave is exactly the installers",
+                entry.id.source().is_none(),
+                "{} — the second wave is exactly what has no source yet",
                 entry.id
             );
         }
@@ -505,9 +505,9 @@ mod tests {
 
     #[test]
     fn a_second_wave_loader_names_its_source_rather_than_pretending_to_be_empty() {
-        let refusal = wired(LoaderId::NeoForge).unwrap_err();
+        let refusal = wired(LoaderId::Quilt).unwrap_err();
         assert_eq!(refusal.code(), "upstream_unavailable");
-        assert!(refusal.to_string().contains("maven.neoforged.net"), "{refusal}");
+        assert!(refusal.to_string().contains("meta.quiltmc.org"), "{refusal}");
 
         assert!(wired(LoaderId::Paper).is_ok());
     }

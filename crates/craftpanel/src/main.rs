@@ -189,6 +189,7 @@ async fn serve() -> Result<()> {
     )
     .context("setting up the content service")?;
     manager.use_content(Arc::clone(&content));
+    content.use_installer(&manager);
     let backups = backups::Backups::new(
         pool.clone(),
         config.data_dir.clone(),
@@ -232,13 +233,13 @@ async fn serve() -> Result<()> {
         ))
         .merge(ops::api::router(Arc::clone(&operations)))
         .merge(api::ws::router(Arc::clone(&operations)))
-        .merge(api::servers::router(manager))
+        .merge(api::servers::router(Arc::clone(&manager)))
         .merge(api::files::router(Arc::clone(&operations), disks.clone()))
         .merge(api::content::router(Arc::clone(&content), live.clone()))
         .merge(api::registration::with_live(Arc::clone(&sign_ups), live.clone(), disks.clone()))
         .merge(api::recovery::router(Arc::clone(&recovery)))
         .merge(api::runtimes::router(Arc::clone(&inventory), live.clone()))
-        .merge(api::settings::router(Arc::clone(&operations), live))
+        .merge(api::settings::router(Arc::clone(&operations), live, Some(manager)))
         .merge(api::backups::router(Arc::clone(&backups)))
         .merge(api::access::router())
         .merge(api::playit::router(Arc::clone(&playit)))

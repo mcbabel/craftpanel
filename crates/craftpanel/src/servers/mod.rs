@@ -1,4 +1,5 @@
 mod hub;
+pub mod installer;
 pub mod manager;
 mod state;
 
