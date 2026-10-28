@@ -112,6 +112,9 @@ show a scrollbar or cut off a field. Those are corrected in place, one class at 
   and `ui/src/layouts/shared/browse-tab/composables/install-logic.ts` let it take Bukkit and Spigot
   plugins (not Paper's).
 
+- `ui/src/components/base/AutoLink.vue`: a link to another site opens in a new tab, so a click on a
+  project in the catalogue does not take the panel away.
+
 A new copy of Modrinth's code overwrites these as well; check each one again after an update.
 
 ## Mail templates

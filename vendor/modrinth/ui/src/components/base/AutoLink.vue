@@ -13,6 +13,8 @@
 	<a
 		v-else-if="typeof to === 'string' && to?.startsWith('http')"
 		:href="to"
+		target="_blank"
+		rel="noopener noreferrer"
 		v-bind="$attrs"
 		:class="linkClass"
 	>
