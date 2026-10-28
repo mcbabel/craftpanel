@@ -15,13 +15,16 @@ pub struct Detected {
     pub loader_version: Option<String>,
     pub jar: String,
     pub port: Option<u16>,
+    pub vanilla_jar: Option<String>,
 }
+
+pub const LAUNCHER_PROPERTIES: &str = "fabric-server-launcher.properties";
 
 pub fn detect(dir: &Path, start_command: &str) -> Result<Detected, String> {
     let libraries = dir.join("libraries").join("net");
-    if libraries.join("minecraftforge").is_dir()
-        || libraries.join("neoforged").is_dir()
-        || dir.join("user_jvm_args.txt").is_file()
+    if ["minecraftforge/forge", "neoforged/neoforge", "neoforged/forge"]
+        .iter()
+        .any(|loader| libraries.join(loader).is_dir())
     {
         return Err("Forge and NeoForge servers are not supported yet".to_owned());
     }
@@ -32,7 +35,7 @@ pub fn detect(dir: &Path, start_command: &str) -> Result<Detected, String> {
         return Err("BungeeCord and Waterfall are not supported; Velocity is".to_owned());
     }
     if name == "fabric-server-launch.jar" {
-        return Err("this is the old Fabric launcher; install Fabric fresh in the panel".to_owned());
+        return old_fabric(dir, jar);
     }
 
     let loader = loader_of(dir, &name);
@@ -43,7 +46,54 @@ pub fn detect(dir: &Path, start_command: &str) -> Result<Detected, String> {
         _ => paper_version(dir, &jar, loader)?,
     };
 
-    Ok(Detected { loader, game_version, loader_version, jar, port: port_of(dir, loader) })
+    Ok(Detected { loader, game_version, loader_version, jar, port: port_of(dir, loader), vanilla_jar: None })
+}
+
+fn old_fabric(dir: &Path, jar: String) -> Result<Detected, String> {
+    let vanilla = read_plain(&dir.join(LAUNCHER_PROPERTIES))
+        .ok()
+        .flatten()
+        .and_then(|text| {
+            text.lines()
+                .find_map(|line| line.strip_prefix("serverJar="))
+                .map(|value| value.trim().to_owned())
+        })
+        .unwrap_or_else(|| "server.jar".to_owned());
+    if vanilla.contains('/') || vanilla.starts_with('.') {
+        return Err(format!("the old Fabric launcher points at {vanilla}, outside its folder"));
+    }
+    if !std::fs::symlink_metadata(dir.join(&vanilla)).is_ok_and(|meta| meta.is_file()) {
+        return Err(format!("the Minecraft jar {vanilla} the old Fabric launcher needs is missing"));
+    }
+    let game_version = version_in_jar(&dir.join(&vanilla))
+        .ok_or_else(|| format!("the Minecraft version cannot be read from {vanilla}"))?;
+    let loader_version = fabric_loader_in(dir, &jar);
+    Ok(Detected {
+        loader: LoaderId::Fabric,
+        game_version,
+        loader_version,
+        port: port_of(dir, LoaderId::Fabric),
+        jar,
+        vanilla_jar: Some(vanilla),
+    })
+}
+
+fn fabric_loader_in(dir: &Path, jar: &str) -> Option<String> {
+    let from_manifest = entry_in_jar(&dir.join(jar), "META-INF/MANIFEST.MF").and_then(|manifest| {
+        let joined = manifest.replace("\r\n ", "").replace("\n ", "");
+        let start = joined.find("fabric-loader-")? + "fabric-loader-".len();
+        let rest = &joined[start..];
+        rest.find(".jar").map(|end| rest[..end].to_owned())
+    });
+    from_manifest.or_else(|| {
+        let folder = dir.join("libraries/net/fabricmc/fabric-loader");
+        let mut versions: Vec<String> = std::fs::read_dir(folder)
+            .ok()?
+            .filter_map(|entry| entry.ok()?.file_name().into_string().ok())
+            .collect();
+        versions.sort();
+        versions.pop()
+    })
 }
 
 pub fn memory_of(start_command: &str) -> u32 {
@@ -391,7 +441,7 @@ mod tests {
     #[test]
     fn what_cannot_run_here_is_refused_with_a_reason() {
         let forge = folder();
-        std::fs::create_dir_all(forge.join("libraries/net/minecraftforge")).unwrap();
+        std::fs::create_dir_all(forge.join("libraries/net/minecraftforge/forge/1.20.1-47.3.0")).unwrap();
         assert!(detect(&forge, "bash run.sh").unwrap_err().contains("Forge"));
 
         let bungee = folder();
@@ -416,6 +466,35 @@ mod tests {
         std::fs::hard_link(&elsewhere, hard.join("server.properties")).unwrap();
         assert!(set_port(&hard, LoaderId::Paper, 25601).is_err());
         assert_eq!(std::fs::read_to_string(&elsewhere).unwrap(), "untouched\n");
+    }
+
+    #[test]
+    fn paper_with_neoforged_libraries_is_still_paper() {
+        let dir = folder();
+        std::fs::create_dir_all(dir.join("libraries/net/neoforged/AutoRenamingTool/2.0.3")).unwrap();
+        std::fs::write(dir.join("paper-1.21.11-39.jar"), b"").unwrap();
+        let found = detect(&dir, "java -jar paper-1.21.11-39.jar nogui").unwrap();
+        assert_eq!((found.loader, found.game_version.as_str()), (LoaderId::Paper, "1.21.11"));
+    }
+
+    #[test]
+    fn the_old_fabric_launcher_is_read_with_its_minecraft_jar() {
+        let dir = folder();
+        jar_with(&dir.join("fabric-server-launch.jar"), &[(
+            "META-INF/MANIFEST.MF",
+            "Manifest-Version: 1.0\nClass-Path: libraries/net/fabricmc/fabric-loader/0.16.14/fabric-l\n oader-0.16.14.jar libraries/x.jar\n",
+        )]);
+        jar_with(&dir.join("server.jar"), &[("version.json", r#"{"id":"1.21.10"}"#)]);
+        std::fs::write(dir.join(LAUNCHER_PROPERTIES), "serverJar=server.jar\n").unwrap();
+
+        let found = detect(&dir, "java -Xmx4G -jar fabric-server-launch.jar nogui").unwrap();
+        assert_eq!((found.loader, found.game_version.as_str()), (LoaderId::Fabric, "1.21.10"));
+        assert_eq!(found.loader_version.as_deref(), Some("0.16.14"));
+        assert_eq!(found.jar, "fabric-server-launch.jar");
+        assert_eq!(found.vanilla_jar.as_deref(), Some("server.jar"));
+
+        std::fs::remove_file(dir.join("server.jar")).unwrap();
+        assert!(detect(&dir, "java -jar fabric-server-launch.jar").unwrap_err().contains("missing"));
     }
 
     #[test]

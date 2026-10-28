@@ -13,6 +13,7 @@ use crate::model::{Id, LoaderId, SystemUserState, Timestamp};
 
 const GLOBAL_INSTANCE: &str = "global0001";
 const JAR: &str = "server.jar";
+const MINECRAFT_JAR: &str = "minecraft-server.jar";
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Instance {
@@ -408,6 +409,21 @@ async fn settle(
     detect::set_port(dir, found.loader, port)?;
     tx.commit().await?;
 
+    if let Some(vanilla) = &found.vanilla_jar {
+        if vanilla != MINECRAFT_JAR {
+            std::fs::rename(dir.join(vanilla), dir.join(MINECRAFT_JAR))?;
+        }
+        let properties = dir.join(detect::LAUNCHER_PROPERTIES);
+        let kept: Vec<String> = detect::read_plain(&properties)?
+            .unwrap_or_default()
+            .lines()
+            .filter(|line| !line.starts_with("serverJar="))
+            .map(str::to_owned)
+            .collect();
+        let mut text = kept.join("\n");
+        text.push_str(&format!("\nserverJar={MINECRAFT_JAR}\n"));
+        detect::write_plain(&properties, text.trim_start())?;
+    }
     if found.jar != JAR {
         let existing = dir.join(JAR);
         if std::fs::symlink_metadata(&existing).is_ok() {
@@ -686,6 +702,41 @@ mod tests {
         assert_eq!((row.4, row.5, row.6.as_str()), (6144, 0, "available"));
         assert_eq!(row.7, r#"["-XX:+UseG1GC"]"#);
         assert_eq!(helper_fake.calls().len(), 1, "the files were handed to the owner");
+    }
+
+    #[tokio::test]
+    async fn the_old_fabric_launcher_becomes_server_jar_beside_its_minecraft() {
+        let setup = setup();
+        let pool = test_pool().await;
+        let owner = an_admin(&pool, "admin").await;
+        let config = setup.config();
+        std::fs::create_dir_all(config.users_dir().join(owner.to_string()).join("servers")).unwrap();
+        let helper_fake = FakeHelper::obliging().await;
+        let helper = Helper::new(helper_fake.socket());
+        let guard = Guard { daemon: &setup.daemon, data_dir: &config.data_dir, allow_outside: false };
+
+        let dir = setup.folder("oldfabric");
+        std::fs::write(dir.join("fabric-server-launch.jar"), b"launcher").unwrap();
+        let vanilla = std::fs::File::create(dir.join("server.jar")).unwrap();
+        let mut zip = zip::ZipWriter::new(vanilla);
+        zip.start_file("version.json", zip::write::SimpleFileOptions::default()).unwrap();
+        std::io::Write::write_all(&mut zip, br#"{"id":"1.21.10"}"#).unwrap();
+        zip.finish().unwrap();
+        std::fs::write(dir.join("fabric-server-launcher.properties"), "#Fabric\nserverJar=server.jar\n").unwrap();
+        setup.instance("oldfabric", serde_json::json!({
+            "nickname": "VP", "cwd": dir.display().to_string(), "type": "minecraft/java",
+            "startCommand": "java -Xmx4G -jar fabric-server-launch.jar nogui"
+        }));
+
+        let planned = plan(&instances(&setup.daemon).unwrap()[0]).unwrap();
+        let done = import(&pool, &config, &helper, &guard, owner, &planned, false).await.unwrap();
+        let target = crate::files::server_dir(&config, owner, done.server);
+
+        assert_eq!(std::fs::read(target.join("server.jar")).unwrap(), b"launcher");
+        assert!(target.join("minecraft-server.jar").is_file());
+        let properties = std::fs::read_to_string(target.join("fabric-server-launcher.properties")).unwrap();
+        assert!(properties.contains("#Fabric") && properties.contains("serverJar=minecraft-server.jar"));
+        assert!(!properties.contains("serverJar=server.jar"));
     }
 
     #[tokio::test]

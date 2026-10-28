@@ -236,7 +236,9 @@ For every instance the import:
 1. reads its name, folder and start command from `data/InstanceConfig/<uuid>.json`;
 2. tells the server type and version from the folder: Paper, Purpur, Folia and Leaf from
    `version_history.json` or the jar's name, Fabric from its launcher, Velocity from
-   `velocity.toml`, Vanilla from the jar;
+   `velocity.toml`, Vanilla from the jar. A server on the old Fabric launcher
+   (`fabric-server-launch.jar` beside the Minecraft jar) keeps working: its Minecraft jar becomes
+   `minecraft-server.jar` and `fabric-server-launcher.properties` points there;
 3. **moves** the folder into the panel's data directory. On the same disk that takes no extra space
    and no time. Use `--copy` to keep the original, which needs the space twice;
 4. renames the server jar to `server.jar`, keeps `-Xmx` as the server's memory and other JVM flags
