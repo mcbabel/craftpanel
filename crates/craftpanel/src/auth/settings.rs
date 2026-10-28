@@ -2,7 +2,7 @@ use sqlx::SqlitePool;
 
 use super::error::{Failure, Result};
 use super::limits;
-use crate::model::{CpuMode, PanelSettings, PortRange, Timestamp, UserLimits};
+use crate::model::{CpuMode, PanelSettings, PortRange, Timestamp, UserLimits, UserPorts};
 
 const MIN_PORT: u16 = 1024;
 const MAX_BACKUPS: u32 = 50;
@@ -25,6 +25,8 @@ struct Row {
     registration_enabled: bool,
     registration_requires_approval: bool,
     java_auto_install: bool,
+    user_ports: UserPorts,
+    network_needs_playit: bool,
 }
 
 pub async fn load(pool: &SqlitePool) -> sqlx::Result<PanelSettings> {
@@ -33,7 +35,8 @@ pub async fn load(pool: &SqlitePool) -> sqlx::Result<PanelSettings> {
          default_cpu_mode, default_cpu_cores, default_pids_max, default_disk_mib, \
          max_upload_bytes, max_backups_per_server, external_services_enabled, \
          max_concurrent_operations, stop_grace_seconds, registration_enabled, \
-         registration_requires_approval, java_auto_install FROM panel_settings WHERE id = 1",
+         registration_requires_approval, java_auto_install, user_ports, network_needs_playit \
+         FROM panel_settings WHERE id = 1",
     )
     .fetch_one(pool)
     .await?;
@@ -56,6 +59,8 @@ pub async fn load(pool: &SqlitePool) -> sqlx::Result<PanelSettings> {
         registration_enabled: row.registration_enabled,
         registration_requires_approval: row.registration_requires_approval,
         java_auto_install: row.java_auto_install,
+        user_ports: row.user_ports,
+        network_needs_playit: row.network_needs_playit,
     })
 }
 
@@ -69,7 +74,7 @@ pub async fn save(pool: &SqlitePool, settings: &PanelSettings) -> Result<()> {
          max_backups_per_server = ?, \
          external_services_enabled = ?, max_concurrent_operations = ?, stop_grace_seconds = ?, \
          registration_enabled = ?, registration_requires_approval = ?, \
-         java_auto_install = ?, updated_at = ? WHERE id = 1",
+         java_auto_install = ?, user_ports = ?, network_needs_playit = ?, updated_at = ? WHERE id = 1",
     )
     .bind(settings.public_address.as_deref())
     .bind(settings.port_pool.from)
@@ -87,6 +92,8 @@ pub async fn save(pool: &SqlitePool, settings: &PanelSettings) -> Result<()> {
     .bind(settings.registration_enabled)
     .bind(settings.registration_requires_approval)
     .bind(settings.java_auto_install)
+    .bind(settings.user_ports)
+    .bind(settings.network_needs_playit)
     .bind(Timestamp::now())
     .execute(pool)
     .await?;
@@ -149,6 +156,8 @@ mod tests {
             max_concurrent_operations: 4,
             stop_grace_seconds: 30,
             java_auto_install: false,
+            user_ports: UserPorts::Locked,
+            network_needs_playit: true,
             ..base.clone()
         }
     }

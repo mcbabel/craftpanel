@@ -1340,6 +1340,39 @@
   "admin.settings.port-to": {
     "defaultMessage": "Bis"
   },
+  "admin.settings.ports.choose": {
+    "defaultMessage": "Nummer wählen"
+  },
+  "admin.settings.ports.choose-hint": {
+    "defaultMessage": "Nutzer können auch die gewünschte Portnummer eintippen, solange sie frei ist und im Bereich liegt."
+  },
+  "admin.settings.ports.description": {
+    "defaultMessage": "Was Nutzer im Netzwerk-Tab ihrer Server tun dürfen. Administratoren dürfen immer alles."
+  },
+  "admin.settings.ports.locked": {
+    "defaultMessage": "Gesperrt"
+  },
+  "admin.settings.ports.locked-hint": {
+    "defaultMessage": "Nutzer können keine Ports hinzufügen, entfernen, umbenennen oder tauschen. Jeder Server behält die Ports, die er hat."
+  },
+  "admin.settings.ports.needs-playit": {
+    "defaultMessage": "Netzwerk-Tab nur mit playit.gg"
+  },
+  "admin.settings.ports.needs-playit-hint": {
+    "defaultMessage": "Blendet den Netzwerk-Tab für Nutzer aus, hinter deren Servern kein playit.gg-Konto steht, zum Beispiel wenn von außerhalb deines Netzwerks ohnehin niemand die Portnummern erreicht."
+  },
+  "admin.settings.ports.pool": {
+    "defaultMessage": "Aus dem Bereich"
+  },
+  "admin.settings.ports.pool-hint": {
+    "defaultMessage": "Nutzer können weitere Ports hinzufügen, etwa für eine Karte oder einen Voice-Chat; das Panel nimmt den nächsten freien aus dem Bereich."
+  },
+  "admin.settings.ports.title": {
+    "defaultMessage": "Ports und der Netzwerk-Tab"
+  },
+  "admin.settings.ports.user-ports": {
+    "defaultMessage": "Nutzer und Ports"
+  },
   "admin.settings.public-address": {
     "defaultMessage": "Öffentliche Adresse"
   },
@@ -2476,6 +2509,9 @@
   },
   "craftpanel.installation.versions-failed": {
     "defaultMessage": "Die Versionen konnten nicht von Modrinth geladen werden"
+  },
+  "craftpanel.network.ports-locked": {
+    "defaultMessage": "Ein Administrator hat die Ports der Server in diesem Panel gesperrt."
   },
   "craftpanel.operations.helper-unavailable": {
     "defaultMessage": "Der Hilfsdienst des Panels läuft nicht, deshalb ging das nicht. Prüfe craftpanel-helper.service auf dem Rechner."

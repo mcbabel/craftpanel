@@ -21,5 +21,7 @@ export function blankSettings(): PanelSettings {
 		registration_enabled: false,
 		registration_requires_approval: true,
 		java_auto_install: true,
+		user_ports: 'pool',
+		network_needs_playit: false,
 	}
 }

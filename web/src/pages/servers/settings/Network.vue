@@ -43,22 +43,22 @@
 					v-tooltip="advancedTooltip"
 					wrapper-class="grow max-w-[400px]"
 					:maxlength="32"
-					:disabled="!canUseAdvancedSettings"
+					:disabled="!canEditPorts"
 					:placeholder="formatMessage(messages.namePlaceholder)"
 				/>
 				<Input
-					v-if="isAdmin"
+					v-if="mayChoosePort"
 					v-model="newPort"
 					type="number"
 					wrapper-class="w-[9rem]"
-					:disabled="!canUseAdvancedSettings"
+					:disabled="!canEditPorts"
 					:placeholder="formatMessage(messages.portPlaceholder)"
 				/>
 				<Button
 					v-tooltip="createTooltip"
 					type="colored"
 					color="brand"
-					:disabled="!newName || creating || !canUseAdvancedSettings"
+					:disabled="!newName || creating || !canEditPorts"
 					@click="createAllocation"
 				>
 					<PlusIcon />
@@ -98,7 +98,7 @@
 								v-tooltip="promoteTooltip"
 								type="quiet"
 								:label="formatMessage(messages.makePrimary)"
-								:disabled="!canUseAdvancedSettings || tunnelHolds"
+								:disabled="!canEditPorts || tunnelHolds"
 								@click="makePrimary(rowAt(index).port)"
 							>
 								<StarIcon />
@@ -107,7 +107,7 @@
 								v-tooltip="advancedTooltip"
 								type="quiet"
 								:label="formatMessage(messages.rename)"
-								:disabled="!canUseAdvancedSettings"
+								:disabled="!canEditPorts"
 								@click="startRename(rowAt(index).port, rowAt(index).name)"
 							>
 								<EditIcon />
@@ -116,7 +116,7 @@
 								v-tooltip="advancedTooltip"
 								type="quiet"
 								:label="formatMessage(commonMessages.deleteLabel)"
-								:disabled="!canUseAdvancedSettings"
+								:disabled="!canEditPorts"
 								class="!text-red [&>svg]:!text-red"
 								@click="startDelete(rowAt(index).port)"
 							>
@@ -203,7 +203,7 @@ import {
 } from '@modrinth/ui'
 import { computed, onMounted, ref, watch } from 'vue'
 
-import { type Allocation, api } from '@/api'
+import { type Allocation, api, type NetworkPolicy } from '@/api'
 import { shareAddress } from '@/api/playit'
 import { actionsColumnWidth, ICON_BUTTON_REM } from '@/components/table-widths'
 import { useServerTunnel } from '@/composables/playit'
@@ -264,6 +264,10 @@ const messages = defineMessages({
 	actions: { id: 'craftpanel.settings.network.column-actions', defaultMessage: 'Actions' },
 	primary: { id: 'craftpanel.settings.network.primary', defaultMessage: 'Primary' },
 	makePrimary: { id: 'craftpanel.settings.network.make-primary', defaultMessage: 'Make primary' },
+	portsLocked: {
+		id: 'craftpanel.network.ports-locked',
+		defaultMessage: 'An administrator has locked the ports of servers on this panel.',
+	},
 	swapBlocked: {
 		id: 'craftpanel.settings.network.swap-blocked',
 		defaultMessage: 'The public address holds the primary port',
@@ -346,16 +350,23 @@ const tunnelHolds = computed(() => tunnelHoldsPrimaryPort(tunnel.value, playitAv
 const published = computed(() => publishedPort(tunnel.value, primaryPort.value))
 const publicAddress = computed(() => shareAddress(tunnel.value)?.address ?? null)
 
-const advancedTooltip = computed(() =>
-	canUseAdvancedSettings.value ? undefined : permissionDeniedMessage.value,
+const policy = ref<NetworkPolicy | null>(null)
+const canEditPorts = computed(
+	() => canUseAdvancedSettings.value && (policy.value?.may_change_ports ?? true),
 )
+const mayChoosePort = computed(() => isAdmin.value || policy.value?.may_choose_port === true)
+const lockedReason = computed(() =>
+	canUseAdvancedSettings.value ? formatMessage(messages.portsLocked) : permissionDeniedMessage.value,
+)
+
+const advancedTooltip = computed(() => (canEditPorts.value ? undefined : lockedReason.value))
 const promoteTooltip = computed(() => {
-	if (!canUseAdvancedSettings.value) return permissionDeniedMessage.value
+	if (!canEditPorts.value) return lockedReason.value
 	if (tunnelHolds.value) return formatMessage(messages.swapBlocked)
 	return formatMessage(messages.makePrimary)
 })
 const createTooltip = computed(() => {
-	if (!canUseAdvancedSettings.value) return permissionDeniedMessage.value
+	if (!canEditPorts.value) return lockedReason.value
 	if (!newName.value) return formatMessage(messages.createHint)
 	return undefined
 })
@@ -384,7 +395,12 @@ async function load(): Promise<void> {
 	loading.value = true
 	error.value = null
 	try {
-		allocations.value = await api.settings.allocations(serverId)
+		const [list, rules] = await Promise.all([
+			api.settings.allocations(serverId),
+			api.settings.networkPolicy(serverId).catch(() => null),
+		])
+		allocations.value = list
+		policy.value = rules
 	} catch (cause) {
 		error.value = cause instanceof Error ? cause.message : String(cause)
 	} finally {
@@ -408,10 +424,10 @@ async function copy(text: string): Promise<void> {
 }
 
 async function createAllocation(): Promise<void> {
-	if (!canUseAdvancedSettings.value || !newName.value) return
+	if (!canEditPorts.value || !newName.value) return
 	creating.value = true
 	try {
-		const port = Number.parseInt(newPort.value, 10)
+		const port = mayChoosePort.value ? Number.parseInt(newPort.value, 10) : Number.NaN
 		await api.settings.createAllocation(serverId, {
 			name: newName.value,
 			...(Number.isFinite(port) ? { port } : {}),
@@ -467,7 +483,7 @@ async function deleteAllocation(): Promise<void> {
 }
 
 async function makePrimary(port: number): Promise<void> {
-	if (!canUseAdvancedSettings.value || tunnelHolds.value) return
+	if (!canEditPorts.value || tunnelHolds.value) return
 	try {
 		const result = await api.settings.setPrimaryAllocation(serverId, port)
 		allocations.value = result.allocations

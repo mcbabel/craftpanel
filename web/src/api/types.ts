@@ -192,6 +192,16 @@ export interface UpdateServerGroupRequest {
 	position?: number
 }
 
+export type UserPorts = 'locked' | 'pool' | 'choose'
+
+export interface NetworkPolicy {
+	user_ports: UserPorts
+	owner_has_playit: boolean
+	network_visible: boolean
+	may_change_ports: boolean
+	may_choose_port: boolean
+}
+
 export interface BrandingView {
 	name: string
 	custom_name: boolean
@@ -1376,6 +1386,8 @@ export interface PanelSettings {
 	registration_enabled: boolean
 	registration_requires_approval: boolean
 	java_auto_install: boolean
+	user_ports: UserPorts
+	network_needs_playit: boolean
 }
 
 export interface WsServerMessage {

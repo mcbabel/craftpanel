@@ -1340,6 +1340,39 @@
   "admin.settings.port-to": {
     "defaultMessage": "To"
   },
+  "admin.settings.ports.choose": {
+    "defaultMessage": "Pick a number"
+  },
+  "admin.settings.ports.choose-hint": {
+    "defaultMessage": "Users can also type the port number they want, as long as it is free and inside the range."
+  },
+  "admin.settings.ports.description": {
+    "defaultMessage": "What users may do on the network tab of their servers. Administrators may always do everything."
+  },
+  "admin.settings.ports.locked": {
+    "defaultMessage": "Locked"
+  },
+  "admin.settings.ports.locked-hint": {
+    "defaultMessage": "Users cannot add, remove, rename or swap ports. Each server keeps the ports it has."
+  },
+  "admin.settings.ports.needs-playit": {
+    "defaultMessage": "Network tab only with playit.gg"
+  },
+  "admin.settings.ports.needs-playit-hint": {
+    "defaultMessage": "Hide the network tab from users whose servers have no playit.gg account behind them, for example when nobody outside your network can reach the port numbers anyway."
+  },
+  "admin.settings.ports.pool": {
+    "defaultMessage": "From the range"
+  },
+  "admin.settings.ports.pool-hint": {
+    "defaultMessage": "Users can add more ports, for a map or a voice chat; the panel picks the next free one from the range."
+  },
+  "admin.settings.ports.title": {
+    "defaultMessage": "Ports and the network tab"
+  },
+  "admin.settings.ports.user-ports": {
+    "defaultMessage": "Users and ports"
+  },
   "admin.settings.public-address": {
     "defaultMessage": "Public address"
   },
@@ -2476,6 +2509,9 @@
   },
   "craftpanel.installation.versions-failed": {
     "defaultMessage": "Failed to load versions from Modrinth"
+  },
+  "craftpanel.network.ports-locked": {
+    "defaultMessage": "An administrator has locked the ports of servers on this panel."
   },
   "craftpanel.operations.helper-unavailable": {
     "defaultMessage": "The panel's helper service is not running, so this could not be done. Check craftpanel-helper.service on the machine."

@@ -39,9 +39,10 @@ import {
 	type ServerSettingsTabId,
 	serverSettingsTabDefinitions,
 } from '@modrinth/ui'
-import { type Component, computed, ref, watch } from 'vue'
+import { type Component, computed, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 
+import { api, type NetworkPolicy } from '@/api'
 import { useSession } from '@/composables/session'
 
 import AdvancedSection from './settings/Advanced.vue'
@@ -90,6 +91,20 @@ watch(
 )
 
 const isProxy = computed(() => server.value?.loader?.toLowerCase() === 'velocity')
+const networkPolicy = ref<NetworkPolicy | null>(null)
+
+onMounted(async () => {
+	networkPolicy.value = await api.settings.networkPolicy(serverId).catch(() => null)
+})
+
+watch(
+	() => [networkPolicy.value?.network_visible, section.value] as const,
+	([visible, current]) => {
+		if (visible === false && current === 'network') {
+			void router.replace({ name: 'server-settings', params: { section: 'general' } })
+		}
+	},
+)
 
 const vendorTabs = computed(() =>
 	serverSettingsTabDefinitions.filter((tab) => isSection(tab.id)).map((tab) => ({
@@ -107,7 +122,8 @@ const vendorTabs = computed(() =>
 				isOwner: server.value?.owner_id === user.value?.id,
 				isAdmin: isAdmin.value,
 			}) ?? true) &&
-			(tab.id !== 'properties' || !isProxy.value),
+			(tab.id !== 'properties' || !isProxy.value) &&
+			(tab.id !== 'network' || networkPolicy.value?.network_visible !== false),
 	})),
 )
 

@@ -1,4 +1,5 @@
 import type {
+	NetworkPolicy,
 	BrandingView,
 	AdminStatistics,
 	ServerTransferList,
@@ -944,6 +945,12 @@ const settings = {
 		requestJson<JavaRuntimeList>('/java-runtimes', {
 			method: 'GET',
 			query,
+			signal: options.signal,
+		}),
+
+	networkPolicy: (serverId: Ulid, options: Cancellable = {}) =>
+		requestJson<NetworkPolicy>(serverPath(serverId, '/network-policy'), {
+			method: 'GET',
 			signal: options.signal,
 		}),
 

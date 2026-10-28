@@ -1415,6 +1415,24 @@ pub struct PanelSettings {
     pub registration_enabled: bool,
     pub registration_requires_approval: bool,
     pub java_auto_install: bool,
+    #[serde(default)]
+    pub user_ports: UserPorts,
+    #[serde(default)]
+    pub network_needs_playit: bool,
+}
+
+wire_enum! {
+    pub enum UserPorts {
+        Locked = "locked",
+        Pool = "pool",
+        Choose = "choose",
+    }
+}
+
+impl Default for UserPorts {
+    fn default() -> Self {
+        Self::Pool
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -2202,6 +2220,8 @@ mod tests {
             registration_enabled: false,
             registration_requires_approval: true,
             java_auto_install: true,
+            user_ports: UserPorts::Choose,
+            network_needs_playit: true,
         });
         assert_round_trip(&ContentModpack {
             source_kind: ModpackSourceKind::ModrinthModpack,

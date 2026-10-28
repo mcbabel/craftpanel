@@ -5,14 +5,14 @@ use axum::http::request::Parts;
 use axum::http::StatusCode;
 use axum::routing::{delete, get, post, put};
 use axum::{Extension, Json, Router};
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 
 use crate::audit::{self, Event};
 use crate::auth::access::Access;
 use crate::auth::error::{Failure, Result};
 use crate::auth::{access, extract, users, Caller, JsonBody, LiveServers, Params};
 use crate::helper::Helper;
-use crate::model::{Allocation, Id, LoaderId, Permission};
+use crate::model::{Allocation, Id, LoaderId, Permission, UserPorts};
 use crate::ops::Operations;
 use crate::settings::allocations::{
     self, CreateAllocationRequest, RenameAllocationRequest, SetPrimaryResponse,
@@ -45,6 +45,7 @@ pub fn router(
             delete(drop_allocation).patch(rename_allocation),
         )
         .route("/servers/{server}/allocations/{port}/primary", put(make_primary))
+        .route("/servers/{server}/network-policy", get(read_network_policy))
         .route("/loaders", get(loaders))
         .route("/loaders/{loader}/game-versions", get(game_versions))
         .route("/loaders/{loader}/game-versions/{game_version}/builds", get(builds))
@@ -331,7 +332,15 @@ async fn add_allocation(
     Path(server): Path<Id>,
     JsonBody(request): JsonBody<CreateAllocationRequest>,
 ) -> Result<(StatusCode, Json<Allocation>)> {
-    let (access, _) = seen(&state, &caller, server, Permission::Advanced).await?;
+    let (access, row) = seen(&state, &caller, server, Permission::Advanced).await?;
+    let policy = ports_open(&state, &caller, row.owner_id).await?;
+    if request.port.is_some() && !policy.may_choose_port {
+        return Err(Failure::new(
+            StatusCode::FORBIDDEN,
+            "port_choice_off",
+            "an administrator decides which port numbers servers get here",
+        ));
+    }
     operations.guard_write(server).await.map_err(crate::settings::from_fault)?;
 
     let settings = crate::auth::settings::load(&state.pool).await?;
@@ -352,7 +361,8 @@ async fn rename_allocation(
     Path((server, port)): Path<(Id, u16)>,
     JsonBody(request): JsonBody<RenameAllocationRequest>,
 ) -> Result<Json<Allocation>> {
-    seen(&state, &caller, server, Permission::Advanced).await?;
+    let (_, row) = seen(&state, &caller, server, Permission::Advanced).await?;
+    ports_open(&state, &caller, row.owner_id).await?;
     operations.guard_write(server).await.map_err(crate::settings::from_fault)?;
     let renamed = allocations::rename(&state.pool, server, port, &request.name).await?;
 
@@ -366,7 +376,8 @@ async fn drop_allocation(
     caller: Caller,
     Path((server, port)): Path<(Id, u16)>,
 ) -> Result<StatusCode> {
-    let (access, _) = seen(&state, &caller, server, Permission::Advanced).await?;
+    let (access, row) = seen(&state, &caller, server, Permission::Advanced).await?;
+    ports_open(&state, &caller, row.owner_id).await?;
     operations.guard_write(server).await.map_err(crate::settings::from_fault)?;
     allocations::remove(&state.pool, server, port).await?;
 
@@ -383,6 +394,7 @@ async fn make_primary(
     Path((server, port)): Path<(Id, u16)>,
 ) -> Result<Json<SetPrimaryResponse>> {
     let (access, row) = seen(&state, &caller, server, Permission::Advanced).await?;
+    ports_open(&state, &caller, row.owner_id).await?;
     operations.guard_write(server).await.map_err(crate::settings::from_fault)?;
     allocations::set_primary(&state.pool, server, port).await?;
 
@@ -621,6 +633,57 @@ async fn resolve(
         ));
     }
     Ok(Some(build.to_owned()))
+}
+
+#[derive(Debug, Serialize)]
+struct NetworkPolicy {
+    user_ports: UserPorts,
+    owner_has_playit: bool,
+    network_visible: bool,
+    may_change_ports: bool,
+    may_choose_port: bool,
+}
+
+async fn network_policy(state: &AppState, caller: &Caller, owner: Id) -> Result<NetworkPolicy> {
+    let settings = crate::auth::settings::load(&state.pool).await?;
+    let owner_has_playit: bool = sqlx::query_scalar(
+        "SELECT EXISTS (SELECT 1 FROM playit_accounts WHERE user_id = ? AND agent_id IS NOT NULL)",
+    )
+    .bind(owner)
+    .fetch_one(&state.pool)
+    .await?;
+    let admin = caller.is_admin();
+    let network_visible = admin || !settings.network_needs_playit || owner_has_playit;
+    let may_change_ports = admin || (network_visible && settings.user_ports != UserPorts::Locked);
+    let may_choose_port = admin || (may_change_ports && settings.user_ports == UserPorts::Choose);
+    Ok(NetworkPolicy {
+        user_ports: settings.user_ports,
+        owner_has_playit,
+        network_visible,
+        may_change_ports,
+        may_choose_port,
+    })
+}
+
+async fn ports_open(state: &AppState, caller: &Caller, owner: Id) -> Result<NetworkPolicy> {
+    let policy = network_policy(state, caller, owner).await?;
+    if !policy.may_change_ports {
+        return Err(Failure::new(
+            StatusCode::FORBIDDEN,
+            "ports_locked",
+            "an administrator has locked the ports of servers on this panel",
+        ));
+    }
+    Ok(policy)
+}
+
+async fn read_network_policy(
+    State(state): State<AppState>,
+    caller: Caller,
+    Path(server): Path<Id>,
+) -> Result<Json<NetworkPolicy>> {
+    let (_, row) = seen(&state, &caller, server, Permission::BaseRead).await?;
+    Ok(Json(network_policy(&state, &caller, row.owner_id).await?))
 }
 
 async fn seen(
@@ -1308,6 +1371,67 @@ mod tests {
             .await;
         assert_eq!(missing.status(), StatusCode::NOT_FOUND);
         assert_eq!(body_json(missing).await["error"], "allocation_not_found");
+    }
+
+    #[tokio::test]
+    async fn the_administrator_decides_how_far_users_may_touch_ports() {
+        let world = world().await;
+        let secret = world.as_owner().await;
+        an_allocation(&world.pool, world.server, 25565, "game", true).await;
+        let add = |body: serde_json::Value| {
+            send("POST", &format!("/servers/{}/allocations", world.server), body)
+        };
+        let policy = || fetch(&format!("/servers/{}/network-policy", world.server));
+        let set = |ports: &str, needs: bool| {
+            let pool = world.pool.clone();
+            let ports = ports.to_owned();
+            async move {
+                sqlx::query("UPDATE panel_settings SET user_ports = ?, network_needs_playit = ? WHERE id = 1")
+                    .bind(ports)
+                    .bind(needs)
+                    .execute(&pool)
+                    .await
+                    .unwrap();
+            }
+        };
+
+        let seen = body_json(world.call(policy(), &secret).await).await;
+        assert_eq!(seen["user_ports"], "pool");
+        assert_eq!((seen["may_change_ports"].as_bool(), seen["may_choose_port"].as_bool()), (Some(true), Some(false)));
+        let refused = world.call(add(serde_json::json!({ "name": "Voice", "port": 25600 })), &secret).await;
+        assert_eq!(refused.status(), StatusCode::FORBIDDEN);
+        assert_eq!(body_json(refused).await["error"], "port_choice_off");
+        assert_eq!(world.call(add(serde_json::json!({ "name": "Map" })), &secret).await.status(), StatusCode::CREATED);
+
+        set("choose", false).await;
+        let chosen = world.call(add(serde_json::json!({ "name": "Voice", "port": 25600 })), &secret).await;
+        assert_eq!(chosen.status(), StatusCode::CREATED);
+        assert_eq!(body_json(chosen).await["port"], 25600);
+
+        set("locked", false).await;
+        let locked = world.call(add(serde_json::json!({ "name": "More" })), &secret).await;
+        assert_eq!(locked.status(), StatusCode::FORBIDDEN);
+        assert_eq!(body_json(locked).await["error"], "ports_locked");
+        let gone = world.call(empty("DELETE", &format!("/servers/{}/allocations/25600", world.server)), &secret).await;
+        assert_eq!(gone.status(), StatusCode::FORBIDDEN);
+
+        set("choose", true).await;
+        let hidden = body_json(world.call(policy(), &secret).await).await;
+        assert_eq!(hidden["network_visible"], false, "max has not connected playit.gg");
+        assert_eq!(hidden["may_change_ports"], false);
+        sqlx::query("INSERT INTO playit_accounts (user_id, agent_id, updated_at) VALUES (?, 'agent', ?)")
+            .bind(world.owner)
+            .bind(Timestamp::now())
+            .execute(&world.pool)
+            .await
+            .unwrap();
+        let shown = body_json(world.call(policy(), &secret).await).await;
+        assert_eq!((shown["network_visible"].as_bool(), shown["may_choose_port"].as_bool()), (Some(true), Some(true)));
+
+        set("locked", true).await;
+        let boss = sign_in(&world.pool, crate::auth::harness::an_admin(&world.pool, "boss").await).await;
+        let admin = body_json(world.call(policy(), &boss).await).await;
+        assert_eq!((admin["may_change_ports"].as_bool(), admin["may_choose_port"].as_bool()), (Some(true), Some(true)));
     }
 
     #[tokio::test]
