@@ -1994,3 +1994,71 @@ async fn a_reset_to_a_pack_clears_the_server_and_writes_the_world_settings() {
     assert!(panel.listed().await.items.is_empty());
     let _ = std::fs::remove_file(&archive);
 }
+
+#[tokio::test]
+async fn a_plugin_put_there_by_hand_is_linked_to_its_project_by_its_hash() {
+    let panel = Panel::new("paper", "1.21.1").await;
+    panel.write("plugins/FastAsyncWorldEdit-Paper-2.15.2.jar", b"the faster worldedit");
+    let installed = panel.publish("FAWE", "v1", "FastAsyncWorldEdit-Paper-2.15.2.jar", b"the faster worldedit");
+    let newer = panel.publish("FAWE", "v2", "FastAsyncWorldEdit-Paper-2.15.3.jar", b"even faster");
+    panel.upstream.set_versions("FAWE", vec![installed, newer]);
+    panel.upstream.set_project(
+        "FAWE",
+        serde_json::json!({ "id": "FAWE", "slug": "fastasyncworldedit", "title": "FastAsyncWorldEdit" }),
+    );
+    panel.write("plugins/my-own-plugin.jar", b"nobody published this");
+
+    let before = panel.listed().await;
+    assert!(before.items.iter().all(|item| item.project.is_none()));
+
+    panel.content.check_updates(panel.server).await.expect("a check");
+    let listed = panel.listed().await;
+    let fawe = listed
+        .items
+        .iter()
+        .find(|item| item.file_name.starts_with("FastAsync"))
+        .expect("the plugin");
+    assert_eq!(fawe.project.as_ref().map(|project| project.title.as_str()), Some("FastAsyncWorldEdit"));
+    assert_eq!(fawe.version.as_ref().map(|version| version.id.as_str()), Some("v1"));
+    assert!(fawe.has_update);
+    assert_eq!(fawe.update_version_id.as_deref(), Some("v2"));
+    assert_eq!(fawe.source_kind, ContentSourceKind::Local, "the panel did not put it there");
+
+    let own = listed.items.iter().find(|item| item.file_name == "my-own-plugin.jar").expect("the other");
+    assert!(own.project.is_none());
+    assert!(own.project_id.is_none());
+}
+
+#[tokio::test]
+async fn a_file_modrinth_does_not_know_is_asked_about_only_once() {
+    let panel = Panel::new("paper", "1.21.1").await;
+    panel.write("plugins/my-own-plugin.jar", b"nobody published this");
+    panel.listed().await;
+
+    panel.content.check_updates(panel.server).await.expect("a check");
+    let after_first = panel.upstream.calls();
+    assert!(after_first > 0);
+    panel.content.check_updates(panel.server).await.expect("a second check");
+    assert_eq!(panel.upstream.calls(), after_first, "its hash is written down and not sent again");
+}
+
+#[tokio::test]
+async fn a_replaced_file_loses_the_link_and_is_looked_up_again() {
+    let panel = Panel::new("paper", "1.21.1").await;
+    panel.write("plugins/tool.jar", b"tool one");
+    let first = panel.publish("TOOL", "v1", "tool.jar", b"tool one");
+    panel.upstream.set_versions("TOOL", vec![first]);
+    panel.listed().await;
+    panel.content.check_updates(panel.server).await.expect("a check");
+    assert_eq!(panel.listed().await.items[0].project_id.as_deref(), Some("TOOL"));
+
+    panel.write("plugins/tool.jar", b"a different tool altogether");
+    let listed = panel.listed().await;
+    assert!(listed.items[0].project_id.is_none(), "the old link no longer fits the file");
+    assert!(!listed.items[0].has_update);
+
+    let other = panel.publish("OTHER", "o1", "tool.jar", b"a different tool altogether");
+    panel.upstream.set_versions("OTHER", vec![other]);
+    panel.content.check_updates(panel.server).await.expect("a check");
+    assert_eq!(panel.listed().await.items[0].project_id.as_deref(), Some("OTHER"));
+}

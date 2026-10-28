@@ -8,7 +8,7 @@ use std::sync::{Arc, Mutex};
 use axum::extract::{Path as RoutePath, Query, State};
 use axum::http::{HeaderMap, StatusCode};
 use axum::response::{IntoResponse, Response};
-use axum::routing::get;
+use axum::routing::{get, post};
 use axum::Router;
 use sqlx::SqlitePool;
 
@@ -165,6 +165,7 @@ pub async fn fake_modrinth() -> FakeModrinth {
         .route("/v2/project/{project}", get(project))
         .route("/v2/projects", get(projects))
         .route("/v2/version/{version}", get(version))
+        .route("/v2/version_files", post(version_files))
         .route("/v2/team/{team}/members", get(members))
         .route("/v2/search", get(search))
         .route("/v2/tag/game_version", get(game_versions))
@@ -293,6 +294,31 @@ async fn version(
         Some(version) => axum::Json(version).into_response(),
         None => (StatusCode::NOT_FOUND, "no such version").into_response(),
     }
+}
+
+async fn version_files(
+    State(state): State<Arc<Fake>>,
+    headers: HeaderMap,
+    axum::Json(asked): axum::Json<serde_json::Value>,
+) -> Response {
+    if let Some(early) = gate(&state, &headers) {
+        return early;
+    }
+    let hashes: Vec<String> = asked
+        .get("hashes")
+        .and_then(|hashes| serde_json::from_value(hashes.clone()).ok())
+        .unwrap_or_default();
+    let versions = state.versions.lock().unwrap();
+    let mut found = serde_json::Map::new();
+    for hash in hashes {
+        let owner = versions.values().flatten().find(|version| {
+            version.files.iter().any(|file| file.hashes.sha512.as_deref() == Some(hash.as_str()))
+        });
+        if let Some(version) = owner {
+            found.insert(hash, serde_json::to_value(version).unwrap());
+        }
+    }
+    axum::Json(serde_json::Value::Object(found)).into_response()
 }
 
 async fn members(

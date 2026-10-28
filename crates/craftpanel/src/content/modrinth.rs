@@ -1,4 +1,4 @@
-use std::collections::BTreeSet;
+use std::collections::{BTreeSet, HashMap};
 use std::path::Path;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
@@ -31,6 +31,7 @@ const OWNER_TTL: Duration = Duration::from_secs(7 * 24 * 60 * 60);
 const TAGS_TTL: Duration = Duration::from_secs(24 * 60 * 60);
 
 const PROJECT_BITE: usize = 100;
+const HASHES_PER_CALL: usize = 100;
 
 const CONNECT_TIMEOUT: Duration = Duration::from_secs(5);
 const READ_TIMEOUT: Duration = Duration::from_secs(30);
@@ -379,6 +380,20 @@ impl Modrinth {
         row.map(|(payload,)| parse(payload.as_bytes())).transpose()
     }
 
+    pub async fn versions_by_hash(&self, hashes: &[String]) -> Result<HashMap<String, MrVersion>> {
+        let mut found = HashMap::new();
+        for chunk in hashes.chunks(HASHES_PER_CALL) {
+            let body = serde_json::json!({ "hashes": chunk, "algorithm": "sha512" });
+            let answer = self.send("POST", "/v2/version_files", None, None, Some(&body)).await?;
+            if answer.status == 404 {
+                continue;
+            }
+            let page: HashMap<String, MrVersion> = parse(&answer.body)?;
+            found.extend(page);
+        }
+        Ok(found)
+    }
+
     pub async fn project(&self, project_id: &str) -> Result<MrProject> {
         if let Some(project) = self.cached_project(project_id).await? {
             return Ok(project);
@@ -632,6 +647,17 @@ impl Modrinth {
         query: Option<&str>,
         etag: Option<&str>,
     ) -> Result<Answer> {
+        self.send(method, path, query, etag, None).await
+    }
+
+    async fn send(
+        &self,
+        method: &str,
+        path: &str,
+        query: Option<&str>,
+        etag: Option<&str>,
+        body: Option<&serde_json::Value>,
+    ) -> Result<Answer> {
         let mut url = format!("{}{}", self.base, path);
         if let Some(query) = query.filter(|query| !query.is_empty()) {
             url.push('?');
@@ -650,6 +676,9 @@ impl Modrinth {
             );
             if let Some(etag) = etag {
                 request = request.header(reqwest::header::IF_NONE_MATCH, etag);
+            }
+            if let Some(body) = body {
+                request = request.json(body);
             }
 
             match request.send().await {

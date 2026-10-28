@@ -4,6 +4,7 @@ mod channels;
 mod compat;
 #[cfg(test)]
 pub mod harness;
+mod identify;
 mod install;
 mod modrinth;
 mod mrpack;
@@ -325,6 +326,7 @@ impl Content {
                 Ok(()) => {
                     let mut row = self.row_for(&facts, &root, &relative).await?;
                     row.size_bytes = size as i64;
+                    identify::forget_link(&mut row);
                     store::upsert(&self.pool, &row).await?;
                     placed = true;
                     results.push(ContentUploadResult {
@@ -714,6 +716,14 @@ impl Content {
     async fn run_check(&self, server: Id, pace: Pace) -> Result<()> {
         let facts = self.facts(server).await?;
         let target = facts.target();
+        if pace == Pace::Behind {
+            self.modrinth.pace_background().await;
+        }
+        match identify::identify(&self.pool, &self.modrinth, server, &self.server_dir(&facts)).await {
+            Ok(_) => {}
+            Err(identify::Failed::Database(err)) => return Err(err.into()),
+            Err(identify::Failed::Upstream(err)) => return Err(upstream(err)),
+        }
         let rows = store::list(&self.pool, server).await?;
         let pack = store::modpack(&self.pool, server).await?;
 

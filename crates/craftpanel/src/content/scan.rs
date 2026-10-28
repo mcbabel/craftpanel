@@ -108,6 +108,13 @@ pub async fn reconcile(
             }
         };
 
+        if existing.is_some()
+            && row.size_bytes != file.size as i64
+            && row.source_kind != crate::model::ContentSourceKind::ModrinthModpack
+        {
+            super::identify::forget_link(&mut row);
+        }
+
         let changed = row.file_path != file.path
             || row.size_bytes != file.size as i64
             || row.enabled != enabled;
