@@ -7,11 +7,11 @@ export default defineConfig({
 	description:
 		'A self-hosted panel for running Minecraft servers on your own Linux machine. One install command, no containers.',
 	lang: 'en-US',
-	base: '/craftpanel/',
+	base: '/',
 	cleanUrls: true,
 	lastUpdated: true,
 	head: [
-		['link', { rel: 'icon', type: 'image/svg+xml', href: '/craftpanel/favicon.svg' }],
+		['link', { rel: 'icon', type: 'image/svg+xml', href: '/favicon.svg' }],
 		['meta', { name: 'theme-color', content: '#16a34a' }],
 		['meta', { property: 'og:title', content: 'CraftPanel' }],
 		[
@@ -70,7 +70,7 @@ export default defineConfig({
 		},
 		outline: { level: [2, 3] },
 		footer: {
-			message: `Released under the <a href="${repository}/blob/main/LICENSE">AGPL-3.0</a>. <a href="/craftpanel/privacy">Privacy</a> · <a href="/craftpanel/terms">Terms</a>`,
+			message: `Released under the <a href="${repository}/blob/main/LICENSE">AGPL-3.0</a>. <a href="/privacy">Privacy</a> · <a href="/terms">Terms</a>`,
 			copyright:
 				'Not affiliated with Mojang Studios, Microsoft or Rinth, Inc. Minecraft is a trademark of Mojang Studios.',
 		},
