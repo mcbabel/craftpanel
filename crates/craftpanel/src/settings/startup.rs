@@ -105,16 +105,14 @@ const ARGS_FILE_LIMIT: u64 = 256 * 1024;
 pub fn args_from_file(dir: &std::path::Path, relative: &str) -> Option<Vec<String>> {
     use std::io::Read;
     use std::os::unix::fs::OpenOptionsExt;
-    let path = dir.join(relative);
-    if !path.canonicalize().ok()?.starts_with(dir.canonicalize().ok()?) {
-        return None;
-    }
+    let home = dir.canonicalize().ok()?;
     let file = std::fs::OpenOptions::new()
         .read(true)
         .custom_flags(libc::O_NOFOLLOW)
-        .open(path)
+        .open(dir.join(relative))
         .ok()?;
-    if !file.metadata().ok()?.is_file() {
+    let opened = std::fs::read_link(format!("/proc/self/fd/{}", std::os::fd::AsRawFd::as_raw_fd(&file))).ok()?;
+    if !opened.starts_with(&home) || !file.metadata().ok()?.is_file() {
         return None;
     }
     let mut text = String::new();
