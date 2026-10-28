@@ -23,7 +23,7 @@
 		/>
 	</div>
 
-	<template v-else>
+	<div v-else class="flex flex-col gap-4">
 		<BrowseInstallHeader divider bottom-padding />
 
 		<Admonition
@@ -57,7 +57,7 @@
 		</div>
 
 		<SelectedProjectsFloatingBar />
-	</template>
+	</div>
 </template>
 
 <script setup lang="ts">
