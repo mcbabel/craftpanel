@@ -853,15 +853,11 @@ impl Content {
             Err(Upstream::NotFound(_)) => return Ok(None),
             Err(err) => return Err(upstream(err)),
         };
-        let mut fitting: Vec<_> = versions
+        let fitting: Vec<_> = versions
             .into_iter()
             .filter(|version| compat::matches_modpack(version, &facts.game_version))
-            .filter(|version| {
-                channels::allows(&version.version_type, facts.update_channel, None)
-            })
             .collect();
-        fitting.sort_by(|left, right| right.published().cmp(&left.published()));
-        Ok(fitting.into_iter().next())
+        Ok(channels::newest(fitting, facts.update_channel))
     }
 
     pub fn server_dir(&self, facts: &ServerFacts) -> PathBuf {

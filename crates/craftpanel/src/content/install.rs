@@ -169,13 +169,9 @@ pub async fn newest_fitting(
         Err(err) => return Err(err),
     };
 
-    let mut fitting: Vec<MrVersion> = versions
-        .into_iter()
-        .filter(|version| compat::matches(version, &target))
-        .filter(|version| channels::allows(&version.version_type, channel, None))
-        .collect();
-    fitting.sort_by(|left, right| right.published().cmp(&left.published()));
-    Ok(fitting.into_iter().next())
+    let fitting: Vec<MrVersion> =
+        versions.into_iter().filter(|version| compat::matches(version, &target)).collect();
+    Ok(channels::newest(fitting, channel))
 }
 
 pub fn kind_of(project_type: &str) -> Option<ContentProjectType> {

@@ -37,8 +37,14 @@ fn fallbacks(policy: UpdateChannel) -> &'static [&'static [UpdateChannel]] {
     }
 }
 
-pub fn allows(version_type: &str, policy: UpdateChannel, installed_type: Option<&str>) -> bool {
-    fallbacks(effective(policy, installed_type))[0].contains(&normalise(version_type))
+pub fn newest(versions: Vec<MrVersion>, policy: UpdateChannel) -> Option<MrVersion> {
+    fallbacks(policy).iter().find_map(|step| {
+        versions
+            .iter()
+            .filter(|version| step.contains(&normalise(&version.version_type)))
+            .max_by_key(|version| version.published())
+            .cloned()
+    })
 }
 
 pub fn newest_eligible<'a>(
@@ -91,6 +97,26 @@ mod tests {
 
     fn at(text: &str) -> Option<Timestamp> {
         Some(text.parse().expect("a timestamp"))
+    }
+
+    #[test]
+    fn a_release_server_installs_the_newest_release_while_there_is_one() {
+        let picked = newest(field(), UpdateChannel::Release);
+        assert_eq!(picked.expect("a version").id, "release-new");
+    }
+
+    #[test]
+    fn a_project_without_releases_still_installs_its_newest_beta_and_then_its_newest_alpha() {
+        let without_releases: Vec<MrVersion> =
+            field().into_iter().filter(|version| version.version_type != "release").collect();
+        let picked = newest(without_releases.clone(), UpdateChannel::Release);
+        assert_eq!(picked.expect("a version").id, "beta-newer");
+
+        let only_alphas: Vec<MrVersion> =
+            without_releases.into_iter().filter(|version| version.version_type == "alpha").collect();
+        let picked = newest(only_alphas, UpdateChannel::Release);
+        assert_eq!(picked.expect("a version").id, "alpha-newest");
+        assert!(newest(Vec::new(), UpdateChannel::Release).is_none());
     }
 
     #[test]
@@ -178,7 +204,5 @@ mod tests {
         assert_eq!(effective(UpdateChannel::Release, Some("alpha")), UpdateChannel::Alpha);
         assert_eq!(effective(UpdateChannel::Alpha, Some("release")), UpdateChannel::Alpha);
         assert_eq!(effective(UpdateChannel::Beta, None), UpdateChannel::Beta);
-        assert!(allows("beta", UpdateChannel::Beta, None));
-        assert!(!allows("alpha", UpdateChannel::Beta, None));
     }
 }
