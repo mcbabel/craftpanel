@@ -146,6 +146,7 @@ impl Message {
 
 #[derive(Debug, Clone)]
 pub struct Sender {
+    pub brand: String,
     pub name: String,
     pub address: String,
     pub reply_to: Option<String>,
@@ -171,6 +172,7 @@ pub struct Values {
     pub slots: Vec<(&'static str, String)>,
     pub action_url: Option<String>,
     pub footer: String,
+    pub brand: String,
 }
 
 impl Message {
@@ -231,7 +233,7 @@ impl Message {
             }
         }
 
-        Ok(Values { slots, action_url, footer: self.footer(base) })
+        Ok(Values { slots, action_url, footer: self.footer(base), brand: sender.brand.clone() })
     }
 
     fn footer(&self, base: Option<&str>) -> String {
@@ -307,6 +309,7 @@ mod tests {
 
     fn sender(base: Option<&str>) -> Sender {
         Sender {
+            brand: crate::branding::DEFAULT_NAME.to_owned(),
             name: "CraftPanel".to_owned(),
             address: "onboarding@resend.dev".to_owned(),
             reply_to: None,

@@ -27,7 +27,12 @@ pub fn render(
 }
 
 pub fn sample(kind: Kind) -> Rendered {
+    sample_for(kind, crate::branding::DEFAULT_NAME)
+}
+
+pub fn sample_for(kind: Kind, brand: &str) -> Rendered {
     let sender = Sender {
+        brand: brand.to_owned(),
         name: "CraftPanel".to_owned(),
         address: "onboarding@resend.dev".to_owned(),
         reply_to: None,
@@ -86,6 +91,7 @@ fn assemble(kind: Kind, values: &Values) -> Rendered {
         SHELL_HTML,
         &[
             ("subject", escape(kind.subject())),
+            ("brand", escape(&values.brand)),
             ("preheader", escape(kind.preheader())),
             ("body", fill(body_html(kind), &escaped)),
             ("footer", escape(&values.footer)),
@@ -255,6 +261,7 @@ mod tests {
             placeholders(SHELL_HTML),
             BTreeSet::from([
                 "body".to_owned(),
+                "brand".to_owned(),
                 "footer".to_owned(),
                 "manual_link".to_owned(),
                 "preheader".to_owned(),
@@ -316,6 +323,7 @@ mod tests {
         );
 
         let sender = Sender {
+            brand: crate::branding::DEFAULT_NAME.to_owned(),
             name: "craftpanel".to_owned(),
             address: "panel@panel.example".to_owned(),
             reply_to: None,
@@ -336,6 +344,7 @@ mod tests {
     #[test]
     fn a_name_that_looks_like_html_is_escaped_in_the_html_and_raw_in_the_text() {
         let sender = Sender {
+            brand: crate::branding::DEFAULT_NAME.to_owned(),
             name: "craftpanel".to_owned(),
             address: "panel@panel.example".to_owned(),
             reply_to: None,

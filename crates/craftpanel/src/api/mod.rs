@@ -3,6 +3,7 @@
 pub mod access;
 pub mod admin;
 pub mod backups;
+pub mod branding;
 pub mod console;
 pub mod content;
 pub mod drive;

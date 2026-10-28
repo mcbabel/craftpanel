@@ -1,4 +1,5 @@
 import type {
+	BrandingView,
 	AdminStatistics,
 	ServerTransferList,
 	ServerTransferOutcome,
@@ -503,6 +504,29 @@ const serverGroups = {
 			json: body,
 			signal: options.signal,
 		}),
+}
+
+const branding = {
+	get: (options: Cancellable = {}) =>
+		requestJson<BrandingView>('/branding', { method: 'GET', signal: options.signal }),
+
+	rename: (name: string | null, options: Cancellable = {}) =>
+		requestJson<BrandingView>('/admin/branding', {
+			method: 'PUT',
+			json: { name },
+			signal: options.signal,
+		}),
+
+	uploadLogo: (picture: Blob, options: Cancellable = {}) =>
+		requestJson<BrandingView>('/admin/branding/logo', {
+			method: 'PUT',
+			body: picture,
+			headers: { 'content-type': picture.type || 'application/octet-stream' },
+			signal: options.signal,
+		}),
+
+	removeLogo: (options: Cancellable = {}) =>
+		requestJson<BrandingView>('/admin/branding/logo', { method: 'DELETE', signal: options.signal }),
 }
 
 const serverTransfers = {
@@ -1242,6 +1266,7 @@ export const api = {
 	servers,
 	serverGroups,
 	serverTransfers,
+	branding,
 	operations,
 	console: consoleApi,
 	files,

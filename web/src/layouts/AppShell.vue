@@ -6,8 +6,9 @@
 					:to="{ name: 'servers' }"
 					class="flex items-center gap-2 text-lg font-extrabold text-contrast no-underline"
 				>
-					<CraftPanelLogo class="h-7 w-auto" />
-					CraftPanel
+					<img v-if="branding.logo_url" :src="branding.logo_url" alt="" class="h-7 w-auto max-w-[7rem] object-contain" />
+					<CraftPanelLogo v-else class="h-7 w-auto" />
+					{{ branding.name }}
 				</RouterLink>
 
 				<TeleportOverflowMenu
@@ -101,6 +102,7 @@ import { RouterLink, RouterView, useRouter } from 'vue-router'
 
 import { setCopyFailureHandler } from '@/clipboard'
 import CraftPanelLogo from '@/components/CraftPanelLogo.vue'
+import { useBranding } from '@/composables/branding'
 import { isLocale, useLocale } from '@/composables/locale'
 import { useInvitations } from '@/composables/invitations'
 import { provideModrinthHost, provideNotifications } from '@/composables/modrinth-host'
@@ -109,6 +111,7 @@ import { isChoice, themeChoices, useTheme } from '@/composables/theme'
 
 const { formatMessage } = useVIntl()
 const router = useRouter()
+const { branding } = useBranding()
 const { user, isAdmin, signOut } = useSession()
 const { choice, systemTheme, setTheme } = useTheme()
 const { locale, setLocale } = useLocale()

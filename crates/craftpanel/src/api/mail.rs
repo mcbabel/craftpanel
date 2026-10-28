@@ -175,21 +175,24 @@ async fn retry(
     Ok(StatusCode::ACCEPTED)
 }
 
-async fn preview(_: Admin, Path(kind): Path<String>) -> Result<Response> {
+async fn preview(State(state): State<AppState>, _: Admin, Path(kind): Path<String>) -> Result<Response> {
     let kind: Kind = kind
         .parse()
         .map_err(|_| Failure::not_found("not_found", "there is no mail by that name"))?;
-    Ok(html_page(with_inline_logo(crate::mail::render::sample(kind).html)))
+    let brand = crate::branding::load(&state.pool).await?;
+    let html = crate::mail::render::sample_for(kind, brand.name()).html;
+    Ok(html_page(with_inline_logo(html, brand.logo.as_ref())))
 }
 
-fn with_inline_logo(html: String) -> String {
+fn with_inline_logo(html: String, custom: Option<&crate::branding::Logo>) -> String {
     use base64::Engine;
 
+    let (mime, bytes) = match custom {
+        Some(custom) => (custom.kind.mime(), custom.bytes.as_slice()),
+        None => ("image/png", crate::mail::render::LOGO_PNG),
+    };
     let cid = format!("cid:{}", crate::mail::render::LOGO_CID);
-    let inline = format!(
-        "data:image/png;base64,{}",
-        base64::engine::general_purpose::STANDARD.encode(crate::mail::render::LOGO_PNG)
-    );
+    let inline = format!("data:{mime};base64,{}", base64::engine::general_purpose::STANDARD.encode(bytes));
     html.replace(&cid, &inline)
 }
 

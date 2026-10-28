@@ -284,6 +284,39 @@
   "account.title": {
     "defaultMessage": "Dein Konto"
   },
+  "admin.branding.description": {
+    "defaultMessage": "Ein eigener Name und ein eigenes Logo für das Panel. Sie erscheinen in der Kopfzeile, im Browser-Tab und in den E-Mails, die es verschickt."
+  },
+  "admin.branding.failed": {
+    "defaultMessage": "Das Branding konnte nicht geändert werden"
+  },
+  "admin.branding.logo": {
+    "defaultMessage": "Logo"
+  },
+  "admin.branding.logo-hint": {
+    "defaultMessage": "PNG, JPEG oder WebP, höchstens 512 KiB, am besten quadratisch. E-Mails tragen nur PNG und JPEG; bei einem WebP-Logo behalten sie das CraftPanel-Logo."
+  },
+  "admin.branding.name": {
+    "defaultMessage": "Name"
+  },
+  "admin.branding.name-hint": {
+    "defaultMessage": "Leer lassen, um zu CraftPanel zurückzukehren. Höchstens 40 Zeichen."
+  },
+  "admin.branding.remove-logo": {
+    "defaultMessage": "CraftPanel-Logo verwenden"
+  },
+  "admin.branding.replace-logo": {
+    "defaultMessage": "Logo ersetzen"
+  },
+  "admin.branding.saved": {
+    "defaultMessage": "Branding gespeichert"
+  },
+  "admin.branding.title": {
+    "defaultMessage": "Branding"
+  },
+  "admin.branding.upload-logo": {
+    "defaultMessage": "Logo hochladen"
+  },
   "admin.drive.account.connected": {
     "defaultMessage": "Verbunden"
   },

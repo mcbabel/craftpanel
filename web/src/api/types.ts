@@ -192,6 +192,12 @@ export interface UpdateServerGroupRequest {
 	position?: number
 }
 
+export interface BrandingView {
+	name: string
+	custom_name: boolean
+	logo_url: string | null
+}
+
 export interface AdminStatistics {
 	host: {
 		cpu_cores: number

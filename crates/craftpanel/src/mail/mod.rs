@@ -236,7 +236,8 @@ impl Mail {
         let message = Message::Test { to: Recipient::address(to) };
         self.brake(&message, &settings, now).await?;
 
-        let sender = sender_of(&settings);
+        let brand = crate::branding::load(&self.pool).await.map_err(database)?;
+        let sender = sender_of(&settings, &brand);
         let mail = render::render(&message, &sender, now)?;
         let id = Id::new();
 
@@ -320,7 +321,8 @@ impl Mail {
         };
 
         let settings = store::load(&self.pool).await?;
-        let sender = sender_of(&settings);
+        let brand = crate::branding::load(&self.pool).await?;
+        let sender = sender_of(&settings, &brand);
         let provider = self.provider().await;
         let mail = Rendered {
             subject: row.subject.clone(),
@@ -422,6 +424,8 @@ impl Mail {
                 )
             }
             Provider::Resend(key) => {
+                let brand = crate::branding::load(&self.pool).await.map_err(database)?;
+                let logo = brand.logo.as_ref().filter(|logo| logo.kind.fits_mail());
                 let from = sender.header();
                 let outgoing = Outgoing {
                     from: &from,
@@ -431,6 +435,7 @@ impl Mail {
                     html: &mail.html,
                     text: &mail.text,
                     kind: kind.as_str(),
+                    logo,
                 };
                 self.resend.send(key, &outgoing, &id.to_string()).await
             }
@@ -445,7 +450,8 @@ impl Mail {
 
         self.brake(&message, &settings, now).await?;
 
-        let mail = render::render(&message, &sender_of(&settings), now)?;
+        let brand = crate::branding::load(&self.pool).await.map_err(database)?;
+        let mail = render::render(&message, &sender_of(&settings, &brand), now)?;
         let id = Id::new();
         let to = message.to();
 
@@ -560,8 +566,9 @@ pub fn spawn_purge(pool: SqlitePool) -> tokio::task::JoinHandle<()> {
     })
 }
 
-fn sender_of(settings: &Settings) -> Sender {
+fn sender_of(settings: &Settings, brand: &crate::branding::Brand) -> Sender {
     Sender {
+        brand: brand.name().to_owned(),
         name: settings.from_name.clone(),
         address: settings.from_address.clone(),
         reply_to: settings.reply_to.clone(),

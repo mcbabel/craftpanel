@@ -7,6 +7,7 @@ import { createApp } from 'vue'
 
 import App from '@/App.vue'
 import { installClipboardFallback } from '@/clipboard'
+import { startBranding } from '@/composables/branding'
 import { startLocale } from '@/composables/locale'
 import { startTheme } from '@/composables/theme'
 import { overlayScrollbarsDirective } from '@/directives/overlay-scrollbars'
@@ -15,6 +16,7 @@ import router from '@/router'
 
 startTheme()
 startLocale()
+startBranding()
 installClipboardFallback()
 
 const app = createApp(App)

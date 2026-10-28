@@ -31,6 +31,8 @@
 				:body="formatMessage(commonMessages.changesSavedLabel)"
 			/>
 
+			<BrandingSettings />
+
 			<Card class="!mb-0 flex flex-col gap-6">
 				<SettingsLabel
 					:title="formatMessage(messages.networkTitle)"
@@ -263,6 +265,7 @@ import { computed, onMounted, onUnmounted, ref, toRaw } from 'vue'
 
 import { api, type HostCapacity, isApiRequestError, type PanelSettings } from '@/api'
 import { blankSettings } from '@/pages/admin/settings/blank'
+import BrandingSettings from '@/pages/admin/settings/Branding.vue'
 import { panelSettingsSections, sectionsValid } from '@/pages/admin/settings/sections'
 import UserLimitFields from '@/pages/admin/UserLimitFields.vue'
 

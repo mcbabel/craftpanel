@@ -42,6 +42,7 @@ pub struct Outgoing<'a> {
     pub html: &'a str,
     pub text: &'a str,
     pub kind: &'a str,
+    pub logo: Option<&'a crate::branding::Logo>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
@@ -143,7 +144,7 @@ impl Resend {
             html: mail.html,
             text: mail.text,
             tags: [Tag { name: "kind", value: mail.kind }],
-            attachments: [logo()],
+            attachments: [logo(mail.logo)],
         };
 
         let response = self
@@ -178,14 +179,18 @@ struct Body<'a> {
 #[derive(Serialize)]
 struct Attachment {
     content: String,
-    filename: &'static str,
+    filename: String,
     content_id: &'static str,
 }
 
-fn logo() -> Attachment {
+fn logo(custom: Option<&crate::branding::Logo>) -> Attachment {
+    let (bytes, filename) = match custom {
+        Some(custom) => (custom.bytes.as_slice(), format!("logo.{}", custom.kind.extension())),
+        None => (super::render::LOGO_PNG, "craftpanel.png".to_owned()),
+    };
     Attachment {
-        content: base64::engine::general_purpose::STANDARD.encode(super::render::LOGO_PNG),
-        filename: "craftpanel.png",
+        content: base64::engine::general_purpose::STANDARD.encode(bytes),
+        filename,
         content_id: super::render::LOGO_CID,
     }
 }
@@ -433,6 +438,7 @@ mod tests {
             html: "<p>hi</p>",
             text: "hi",
             kind: "verify_email",
+            logo: None,
         };
         let body = Body {
             from: mail.from,
@@ -442,7 +448,7 @@ mod tests {
             html: mail.html,
             text: mail.text,
             tags: [Tag { name: "kind", value: mail.kind }],
-            attachments: [logo()],
+            attachments: [logo(mail.logo)],
         };
 
         let json = serde_json::to_value(&body).expect("a body");
@@ -453,6 +459,18 @@ mod tests {
         assert!(json["attachments"][0]["content"].as_str().is_some_and(|png| png.starts_with("iVBORw0KGgo")));
         assert_eq!(json["tags"][0]["value"], "verify_email");
         assert!(json.get("reply_to").is_none(), "an absent reply_to is not sent at all");
+    }
+
+    #[test]
+    fn an_uploaded_logo_takes_the_place_of_ours() {
+        let custom = crate::branding::Logo {
+            bytes: vec![0xFF, 0xD8, 0xFF, 0xE0, 1, 2, 3],
+            kind: crate::branding::LogoKind::Jpeg,
+        };
+        let attached = serde_json::to_value(logo(Some(&custom))).expect("an attachment");
+        assert_eq!(attached["filename"], "logo.jpg");
+        assert_eq!(attached["content_id"], "craftpanel-logo", "the mail still points at the same name");
+        assert_eq!(attached["content"], "/9j/4AECAw==");
     }
 
     #[tokio::test]
@@ -467,6 +485,7 @@ mod tests {
             html: "<p>x</p>",
             text: "x",
             kind: "test",
+            logo: None,
         };
 
         let bogus = ApiKey::parse("re_notarealkey_000000000000").expect("a key");
