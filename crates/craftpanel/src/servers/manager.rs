@@ -1051,17 +1051,12 @@ impl Manager {
             server_id: row.id.to_string(),
             working_dir: crate::helper::in_servers(row.id),
             program,
-            args: argv(
-                row.loader,
-                row.memory_mib,
-                &row.flags(),
-                crate::settings::startup::args_file(
-                    &self.dir(row.owner_id, row.id),
-                    row.loader,
-                    row.loader_version.as_deref(),
-                )
-                .as_deref(),
-            ),
+            args: argv(row.loader, row.memory_mib, &row.flags(), {
+                let dir = self.dir(row.owner_id, row.id);
+                crate::settings::startup::args_file(&dir, row.loader, row.loader_version.as_deref())
+                    .and_then(|file| crate::settings::startup::args_from_file(&dir, &file))
+            }
+            .as_deref()),
             env: Vec::new(),
             supervisor_socket: self.hub.socket().to_path_buf(),
             token,
@@ -1843,7 +1838,7 @@ fn wire(state: RunState) -> PowerState {
     crate::ops::power_state_of(state).0
 }
 
-fn argv(loader: Option<LoaderId>, memory_mib: u32, extra: &[String], args_file: Option<&str>) -> Vec<String> {
+fn argv(loader: Option<LoaderId>, memory_mib: u32, extra: &[String], launcher: Option<&[String]>) -> Vec<String> {
     let mut args = vec![format!("-Xmx{memory_mib}M")];
     for flag in extra {
         let owned = ["-Xmx", "-Xms", "-XX:MaxRAM", "-XX:MaxHeapSize"];
@@ -1852,8 +1847,8 @@ fn argv(loader: Option<LoaderId>, memory_mib: u32, extra: &[String], args_file: 
         }
         args.push(flag.clone());
     }
-    match args_file {
-        Some(file) => args.push(format!("@{file}")),
+    match launcher {
+        Some(words) => args.extend(words.iter().cloned()),
         None => {
             args.push("-jar".to_owned());
             args.push(JAR.to_owned());
@@ -3919,9 +3914,9 @@ mod tests {
         let limbo = argv(Some(LoaderId::Limbo), 512, &[], None);
         assert_eq!(limbo, ["-Xmx512M", "-jar", JAR, "--nogui"]);
 
-        let file = "libraries/net/minecraftforge/forge/1.20.1-47.3.0/unix_args.txt";
-        let forge = argv(Some(LoaderId::Forge), 6144, &[], Some(file));
-        assert_eq!(forge, ["-Xmx6144M", &format!("@{file}"), "nogui"]);
+        let launcher = ["-p".to_owned(), "libraries/a.jar".to_owned(), "cpw.Main".to_owned()];
+        let forge = argv(Some(LoaderId::Forge), 6144, &[], Some(&launcher));
+        assert_eq!(forge, ["-Xmx6144M", "-p", "libraries/a.jar", "cpw.Main", "nogui"]);
     }
 
     #[test]

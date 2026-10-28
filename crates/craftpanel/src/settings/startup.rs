@@ -87,6 +87,30 @@ pub fn args_file(dir: &std::path::Path, loader: Option<LoaderId>, loader_version
     found.pop()
 }
 
+const ARGS_FILE_LIMIT: u64 = 256 * 1024;
+
+pub fn args_from_file(dir: &std::path::Path, relative: &str) -> Option<Vec<String>> {
+    use std::io::Read;
+    use std::os::unix::fs::OpenOptionsExt;
+    let file = std::fs::OpenOptions::new()
+        .read(true)
+        .custom_flags(libc::O_NOFOLLOW)
+        .open(dir.join(relative))
+        .ok()?;
+    if !file.metadata().ok()?.is_file() {
+        return None;
+    }
+    let mut text = String::new();
+    file.take(ARGS_FILE_LIMIT).read_to_string(&mut text).ok()?;
+    let args: Vec<String> = text
+        .split_whitespace()
+        .filter(|word| !word.starts_with('#'))
+        .filter(|word| !is_panel_memory_flag(word) && !word.starts_with("-XX:MaxRAMPercentage"))
+        .map(str::to_owned)
+        .collect();
+    (!args.is_empty()).then_some(args)
+}
+
 pub fn launch_of(loader: Option<LoaderId>) -> Launch {
     match loader {
         Some(LoaderId::Velocity) => Launch { jar: "server.jar", trailing: NOTHING },
@@ -510,5 +534,22 @@ mod tests {
             args_file(&dir, Some(LoaderId::NeoForge), Some("21.1.77")).as_deref(),
             Some("libraries/net/neoforged/neoforge/21.1.77/unix_args.txt")
         );
+    }
+
+    #[test]
+    fn an_args_file_cannot_raise_the_heap_the_panel_set() {
+        let dir = std::env::temp_dir().join(format!("craftpanel-argsread-{}", crate::model::Id::new()));
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(
+            dir.join("unix_args.txt"),
+            "-Xmx64G -XX:MaxRAMPercentage=90 -Xms8G\n-p libraries/a.jar\ncpw.Main --launchTarget forge_server\n",
+        )
+        .unwrap();
+        assert_eq!(
+            args_from_file(&dir, "unix_args.txt").unwrap(),
+            ["-p", "libraries/a.jar", "cpw.Main", "--launchTarget", "forge_server"]
+        );
+        std::os::unix::fs::symlink("/etc/hostname", dir.join("linked.txt")).unwrap();
+        assert_eq!(args_from_file(&dir, "linked.txt"), None);
     }
 }
