@@ -209,7 +209,7 @@ fn collision_or(err: sqlx::Error) -> Fault {
     let collided = matches!(&err, sqlx::Error::Database(db)
         if db.message().contains("UNIQUE constraint failed"));
     if collided {
-        Fault::conflict("server_busy", "a backup run is already open on this server")
+        Fault::conflict("server_busy", "a run of this kind is already open on this server")
     } else {
         Fault::from(err)
     }

@@ -1742,6 +1742,31 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn a_second_zip_waits_until_the_open_one_is_done() {
+        let panel = panel().await;
+        panel.sandbox.write("world/level.dat", b"level");
+        panel
+            .operations
+            .create(crate::ops::NewOperation::new(
+                panel.server,
+                crate::model::OperationKind::Archive,
+                None,
+            ))
+            .await
+            .expect("an open archive run");
+
+        let refused = panel
+            .post("/zip", serde_json::json!({ "parent": "/", "include": ["world"] }))
+            .await;
+        assert_eq!(
+            refused.status(),
+            StatusCode::CONFLICT,
+            "each run would pass the disk check on its own"
+        );
+        assert_eq!(body_json(refused).await["error"], "server_busy");
+    }
+
+    #[tokio::test]
     async fn zipping_more_than_the_disk_budget_holds_is_refused_up_front() {
         const MIB: u64 = 1024 * 1024;
         let panel = panel_with(Disks::fixed(1000 * MIB, 0)).await;

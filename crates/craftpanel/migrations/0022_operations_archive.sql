@@ -81,3 +81,5 @@ CREATE UNIQUE INDEX operations_one_open_backup_create
     ON operations(server_id) WHERE kind = 'backup_create' AND state IN ('queued', 'ongoing');
 CREATE UNIQUE INDEX operations_one_open_backup_restore
     ON operations(server_id) WHERE kind = 'backup_restore' AND state IN ('queued', 'ongoing');
+CREATE UNIQUE INDEX operations_one_open_archive
+    ON operations(server_id) WHERE kind = 'archive' AND state IN ('queued', 'ongoing');
