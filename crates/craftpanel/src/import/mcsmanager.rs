@@ -213,7 +213,7 @@ impl Guard<'_> {
     fn trusted(&self) -> Vec<u32> {
         use std::os::unix::fs::MetadataExt;
         let mut trusted = vec![0, effective_uid()];
-        if let Ok(meta) = std::fs::symlink_metadata(self.daemon) {
+        if let Ok(meta) = self.daemon.canonicalize().and_then(std::fs::metadata) {
             trusted.push(meta.uid());
         }
         trusted
@@ -487,7 +487,10 @@ fn move_dir(source: &Path, target: &Path, identity: (u64, u64)) -> Result<()> {
 
 fn put_back(target: &Path, source: &Path) {
     let free = matches!(std::fs::symlink_metadata(source), Err(err) if err.kind() == std::io::ErrorKind::NotFound);
-    if !free || std::fs::rename(target, source).is_err() {
+    let unchanged = source
+        .parent()
+        .is_some_and(|parent| parent.canonicalize().is_ok_and(|resolved| resolved == parent));
+    if !free || !unchanged || std::fs::rename(target, source).is_err() {
         eprintln!("        the files stay in {}; move them back by hand", target.display());
     }
 }
