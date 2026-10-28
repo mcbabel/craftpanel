@@ -139,7 +139,7 @@
 						<div
 							ref="optionsContainerRef"
 							class="overflow-y-auto"
-							:style="{ maxHeight: `${maxHeight}px` }"
+							:style="{ maxHeight: `${listMaxHeight ?? maxHeight}px` }"
 							data-overlayscrollbars-viewport
 						>
 							<div ref="optionsListRef" class="relative flex flex-col">
@@ -268,6 +268,8 @@ type ViewportRect = {
 
 const DROPDOWN_VIEWPORT_MARGIN = 8
 const DROPDOWN_GAP = 8
+// CraftPanel: the list never shrinks below this to fit the window; past it the page has to scroll.
+const MIN_LIST_HEIGHT = 120
 const DEFAULT_MAX_HEIGHT = 300
 const OPTIONS_OVERLAY_SCROLLBARS_OPTIONS = Object.freeze<PartialOptions>({
 	overflow: {
@@ -451,6 +453,7 @@ const dropdownStyle = ref({
 })
 
 const openDirection = ref<'down' | 'up'>('down')
+const listMaxHeight = ref<number | null>(null)
 const dropdownTransformOrigin = computed(() =>
 	openDirection.value === 'up' ? 'bottom center' : 'top center',
 )
@@ -646,7 +649,17 @@ function determineOpenDirection(
 	const hasSpaceAbove =
 		triggerTop - dropdownRect.height - DROPDOWN_GAP - DROPDOWN_VIEWPORT_MARGIN > viewportTop
 
-	return !hasSpaceBelow && hasSpaceAbove ? 'up' : 'down'
+	if (hasSpaceBelow) return 'down'
+	if (hasSpaceAbove) return 'up'
+	// CraftPanel: room on neither side; open toward the larger one, and the list shrinks to fit.
+	return viewportBottom - triggerBottom >= triggerTop - viewportTop ? 'down' : 'up'
+}
+
+function roomToward(direction: 'up' | 'down', triggerRect: DOMRect, viewport: ViewportRect): number {
+	const margin = DROPDOWN_GAP + DROPDOWN_VIEWPORT_MARGIN
+	return direction === 'down'
+		? viewport.height - triggerRect.bottom - margin
+		: triggerRect.top - margin
 }
 
 function calculateVerticalPosition(
@@ -742,13 +755,21 @@ async function updateDropdownPosition() {
 	if (!isOpen.value || !dropdownRef.value) return
 
 	triggerRect = getTriggerRect(trigger)
+	const list = optionsContainerRef.value
+	const shownList = list?.clientHeight ?? 0
+	const fullList = list ? Math.min(list.scrollHeight, props.maxHeight) : 0
+	const chrome = dropdownRef.value.offsetHeight - shownList
 	const dropdownRect = {
 		width: dropdownRef.value.offsetWidth,
-		height: dropdownRef.value.offsetHeight,
+		height: chrome + fullList,
 	}
 	const viewport = getViewportRect()
 
 	const direction = determineOpenDirection(triggerRect, dropdownRect, viewport)
+	const room = roomToward(direction, triggerRect, viewport)
+	listMaxHeight.value =
+		list && dropdownRect.height > room ? Math.max(MIN_LIST_HEIGHT, room - chrome) : null
+	if (listMaxHeight.value !== null) dropdownRect.height = chrome + listMaxHeight.value
 	const top = calculateVerticalPosition(triggerRect, dropdownRect, direction, viewport)
 	const left = calculateHorizontalPosition(triggerRect, dropdownRect, viewport)
 

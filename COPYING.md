@@ -93,9 +93,19 @@ show a scrollbar or cut off a field. Those are corrected in place, one class at 
   `-mb-2` and got a `pb-1`. The modal's content area has no bottom padding when it has actions, so
   the negative margin made the field overflow it and the dialog scroll, and without the padding
   the field's focus ring is cut off.
-- `ui/src/components/modal/ShareModal.vue`: the copy buttons are `!absolute`. Every button frame
-  sets `relative` itself now, which won over `absolute` and pushed the QR code's copy button out of
-  its corner and below the code.
+- `ui/src/components/modal/ShareModal.vue`: the text field's copy button is `!absolute`. Every
+  button frame sets `relative` itself now, which won over `absolute` and pushed it out of its
+  corner. The QR code's copy button no longer sits on the code, where it was hard to see; it is a
+  full button below "Open in new tab".
+
+- `ui/src/components/servers/access/GrantAccessModal.vue`: two optional props, `texts` and
+  `permissionsLink`. The dialog speaks of Modrinth usernames and links to an article on
+  modrinth.com; the panel passes its own wording and hides that link. Without the props it behaves
+  as upstream.
+
+- `ui/src/components/base/Combobox.vue`: when the list fits neither below nor above its field, it
+  opens toward the side with more room and its list shrinks to fit, scrolling inside. Upstream it
+  always opened downwards and ran off the bottom of the window.
 
 A new copy of Modrinth's code overwrites these as well; check each one again after an update.
 
