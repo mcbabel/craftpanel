@@ -162,6 +162,39 @@ export interface Server {
 export interface ServerListResponse {
 	servers: Server[]
 	users: Record<Ulid, UserRef>
+	power: Record<Ulid, PowerFacts>
+}
+
+export interface PowerFacts {
+	state: PowerState
+	running_since: Rfc3339 | null
+	last_started_at: Rfc3339 | null
+}
+
+export interface ServerGroup {
+	id: Ulid
+	name: string
+	position: number
+	server_ids: Ulid[]
+}
+
+export interface ServerGroupList {
+	groups: ServerGroup[]
+}
+
+export interface CreateServerGroupRequest {
+	name: string
+	server_ids?: Ulid[]
+}
+
+export interface UpdateServerGroupRequest {
+	name?: string
+	position?: number
+}
+
+export interface AssignServerGroupRequest {
+	server_ids: Ulid[]
+	group_id: Ulid | null
 }
 
 export interface KnownProperties {

@@ -1,4 +1,8 @@
 import type {
+	AssignServerGroupRequest,
+	CreateServerGroupRequest,
+	ServerGroupList,
+	UpdateServerGroupRequest,
 	AddMemberRequest,
 	AdminUserDetail,
 	AdminUserList,
@@ -464,6 +468,38 @@ const servers = {
 
 	removeIcon: (serverId: Ulid, options: Cancellable = {}) =>
 		requestVoid(serverPath(serverId, '/icon'), { method: 'DELETE', signal: options.signal }),
+}
+
+const serverGroups = {
+	list: (options: Cancellable = {}) =>
+		requestJson<ServerGroupList>('/server-groups', { method: 'GET', signal: options.signal }),
+
+	create: (body: CreateServerGroupRequest, options: Cancellable = {}) =>
+		requestJson<ServerGroupList>('/server-groups', {
+			method: 'POST',
+			json: body,
+			signal: options.signal,
+		}),
+
+	update: (groupId: Ulid, body: UpdateServerGroupRequest, options: Cancellable = {}) =>
+		requestJson<ServerGroupList>(`/server-groups/${segment(groupId)}`, {
+			method: 'PATCH',
+			json: body,
+			signal: options.signal,
+		}),
+
+	remove: (groupId: Ulid, options: Cancellable = {}) =>
+		requestJson<ServerGroupList>(`/server-groups/${segment(groupId)}`, {
+			method: 'DELETE',
+			signal: options.signal,
+		}),
+
+	assign: (body: AssignServerGroupRequest, options: Cancellable = {}) =>
+		requestJson<ServerGroupList>('/server-groups/members', {
+			method: 'PUT',
+			json: body,
+			signal: options.signal,
+		}),
 }
 
 const operations = {
@@ -1174,6 +1210,7 @@ const admin = {
 export const api = {
 	auth,
 	servers,
+	serverGroups,
 	operations,
 	console: consoleApi,
 	files,

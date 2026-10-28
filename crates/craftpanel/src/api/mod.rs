@@ -7,6 +7,7 @@ pub mod console;
 pub mod content;
 pub mod drive;
 pub mod files;
+pub mod groups;
 pub mod mail;
 pub mod playit;
 pub mod recovery;

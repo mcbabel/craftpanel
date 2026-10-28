@@ -234,6 +234,7 @@ async fn serve() -> Result<()> {
         .merge(ops::api::router(Arc::clone(&operations)))
         .merge(api::ws::router(Arc::clone(&operations)))
         .merge(api::servers::router(Arc::clone(&manager)))
+        .merge(api::groups::router())
         .merge(api::files::router(Arc::clone(&operations), disks.clone()))
         .merge(api::content::router(Arc::clone(&content), live.clone()))
         .merge(api::registration::with_live(Arc::clone(&sign_ups), live.clone(), disks.clone()))

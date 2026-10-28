@@ -12,7 +12,7 @@ use crate::auth::error::{Failure, Result};
 use crate::auth::{Caller, JsonBody, Params};
 use crate::model::{
     Id, Operation, OperationAccepted, Permission, PowerAction, PowerState, PowerTarget,
-    PropertiesFields, Server, UpdateChannel, UserRef,
+    PropertiesFields, Server, Timestamp, UpdateChannel, UserRef,
 };
 use crate::servers::manager::{CreateContent, Created, Manager, NewServer, ServerWarning};
 use crate::AppState;
@@ -44,6 +44,16 @@ struct ListQuery {
 struct ServerListResponse {
     servers: Vec<Server>,
     users: BTreeMap<Id, UserRef>,
+    power: BTreeMap<Id, PowerFacts>,
+}
+
+#[derive(Debug, Serialize, sqlx::FromRow)]
+struct PowerFacts {
+    #[serde(skip)]
+    id: Id,
+    state: PowerState,
+    running_since: Option<Timestamp>,
+    last_started_at: Option<Timestamp>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -129,7 +139,16 @@ async fn list(
     }
 
     let (servers, users) = manager.list(&caller, everything).await?;
-    Ok(Json(ServerListResponse { servers, users }))
+    let power: BTreeMap<Id, PowerFacts> = sqlx::query_as::<_, PowerFacts>(
+        "SELECT id, power_state AS state, running_since, last_started_at FROM servers",
+    )
+    .fetch_all(manager.pool())
+    .await?
+    .into_iter()
+    .filter(|facts| servers.iter().any(|server| server.id == facts.id))
+    .map(|facts| (facts.id, facts))
+    .collect();
+    Ok(Json(ServerListResponse { servers, users, power }))
 }
 
 async fn create(

@@ -3206,6 +3206,54 @@
   "panel.servers.blocked.system-user": {
     "defaultMessage": "Your system account is not ready yet. Nothing can run until an administrator has fixed it."
   },
+  "panel.servers.bulk-progress": {
+    "defaultMessage": "Working on {done} of {total}..."
+  },
+  "panel.servers.bulk.done": {
+    "defaultMessage": "{action} sent to {count, plural, one {# server} other {# servers}}"
+  },
+  "panel.servers.bulk.failed": {
+    "defaultMessage": "{count, plural, one {# server} other {# servers}} did not take it"
+  },
+  "panel.servers.bulk.group": {
+    "defaultMessage": "Group"
+  },
+  "panel.servers.bulk.kill": {
+    "defaultMessage": "Kill"
+  },
+  "panel.servers.bulk.more": {
+    "defaultMessage": "More actions"
+  },
+  "panel.servers.bulk.move-to-group": {
+    "defaultMessage": "Move to a group"
+  },
+  "panel.servers.bulk.new-group-from-selection": {
+    "defaultMessage": "New group from the selection"
+  },
+  "panel.servers.bulk.remove-from-group": {
+    "defaultMessage": "Take out of its group"
+  },
+  "panel.servers.bulk.restart": {
+    "defaultMessage": "Restart"
+  },
+  "panel.servers.bulk.skipped": {
+    "defaultMessage": "{count, plural, one {# selected server was} other {# selected servers were}} left alone: already in that state, busy, or not yours to control."
+  },
+  "panel.servers.bulk.start": {
+    "defaultMessage": "Start"
+  },
+  "panel.servers.bulk.stop": {
+    "defaultMessage": "Stop"
+  },
+  "panel.servers.clear-selection": {
+    "defaultMessage": "Clear selection"
+  },
+  "panel.servers.delete-group": {
+    "defaultMessage": "Delete group"
+  },
+  "panel.servers.empty-group": {
+    "defaultMessage": "Nothing in here yet. Select servers and move them here with “Group”."
+  },
   "panel.servers.empty.description": {
     "defaultMessage": "Pick a loader and a version, and this machine will run it in a minute."
   },
@@ -3215,14 +3263,50 @@
   "panel.servers.error.unreachable": {
     "defaultMessage": "The panel could not be reached."
   },
+  "panel.servers.filter.all": {
+    "defaultMessage": "All"
+  },
+  "panel.servers.filter.crashed": {
+    "defaultMessage": "Crashed"
+  },
+  "panel.servers.filter.running": {
+    "defaultMessage": "Running"
+  },
+  "panel.servers.filter.stopped": {
+    "defaultMessage": "Stopped"
+  },
+  "panel.servers.group-failed": {
+    "defaultMessage": "The groups could not be changed"
+  },
+  "panel.servers.group-menu": {
+    "defaultMessage": "Options for {name}"
+  },
+  "panel.servers.group-name": {
+    "defaultMessage": "Name"
+  },
+  "panel.servers.group-name-placeholder": {
+    "defaultMessage": "Network, Tests, Friends..."
+  },
+  "panel.servers.group.of-user": {
+    "defaultMessage": "Servers of {name}"
+  },
   "panel.servers.group.own": {
     "defaultMessage": "Your servers"
   },
   "panel.servers.group.shared": {
     "defaultMessage": "Shared with you"
   },
+  "panel.servers.last-started": {
+    "defaultMessage": "Started {time} ago"
+  },
   "panel.servers.load-failed": {
     "defaultMessage": "The server list could not be loaded"
+  },
+  "panel.servers.new-group": {
+    "defaultMessage": "New group"
+  },
+  "panel.servers.new-group-with": {
+    "defaultMessage": "The {count, plural, one {selected server goes} other {# selected servers go}} straight into it."
   },
   "panel.servers.new-server": {
     "defaultMessage": "New server"
@@ -3233,14 +3317,50 @@
   "panel.servers.no-match.heading": {
     "defaultMessage": "Nothing matches"
   },
+  "panel.servers.no-state-match": {
+    "defaultMessage": "No server is in that state right now."
+  },
   "panel.servers.port-only": {
     "defaultMessage": "Port {port}"
+  },
+  "panel.servers.rename-group": {
+    "defaultMessage": "Rename group"
   },
   "panel.servers.retry": {
     "defaultMessage": "Try again"
   },
   "panel.servers.search-placeholder": {
     "defaultMessage": "Search servers..."
+  },
+  "panel.servers.select-section": {
+    "defaultMessage": "Select every server in {name}"
+  },
+  "panel.servers.select-server": {
+    "defaultMessage": "Select {name}"
+  },
+  "panel.servers.selected-count": {
+    "defaultMessage": "{count, plural, one {# server} other {# servers}} selected"
+  },
+  "panel.servers.selection-bar": {
+    "defaultMessage": "Actions for the selected servers"
+  },
+  "panel.servers.show-everyone": {
+    "defaultMessage": "Show the servers of every user"
+  },
+  "panel.servers.sort-by": {
+    "defaultMessage": "Sort by {mode}"
+  },
+  "panel.servers.sort.name": {
+    "defaultMessage": "Name (A-Z)"
+  },
+  "panel.servers.sort.newest": {
+    "defaultMessage": "Newest first"
+  },
+  "panel.servers.sort.recent": {
+    "defaultMessage": "Last started"
+  },
+  "panel.servers.sort.running": {
+    "defaultMessage": "Running first"
   },
   "panel.servers.state.backup-creating": {
     "defaultMessage": "Backing up"
@@ -3257,14 +3377,14 @@
   "panel.servers.state.installing": {
     "defaultMessage": "Installing"
   },
-  "panel.servers.state.ready": {
-    "defaultMessage": "Ready"
-  },
   "panel.servers.state.setup-pending": {
     "defaultMessage": "Needs setup"
   },
   "panel.servers.state.syncing-content": {
     "defaultMessage": "Syncing content"
+  },
+  "panel.servers.up-for": {
+    "defaultMessage": "Up {time}"
   },
   "server.settings.tabs.advanced": {
     "defaultMessage": "Advanced"

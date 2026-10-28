@@ -1086,9 +1086,10 @@ impl Manager {
         sqlx::query(
             "UPDATE servers SET supervisor_token = ?, power_state = 'starting',
                                 running_since = NULL, exit_code = NULL, oom_killed = 0,
-                                updated_at = ? WHERE id = ?",
+                                last_started_at = ?, updated_at = ? WHERE id = ?",
         )
         .bind(&token)
+        .bind(Timestamp::now())
         .bind(Timestamp::now())
         .bind(row.id)
         .execute(&self.pool)
