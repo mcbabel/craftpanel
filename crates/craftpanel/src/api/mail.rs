@@ -179,7 +179,18 @@ async fn preview(_: Admin, Path(kind): Path<String>) -> Result<Response> {
     let kind: Kind = kind
         .parse()
         .map_err(|_| Failure::not_found("not_found", "there is no mail by that name"))?;
-    Ok(html_page(crate::mail::render::sample(kind).html))
+    Ok(html_page(with_inline_logo(crate::mail::render::sample(kind).html)))
+}
+
+fn with_inline_logo(html: String) -> String {
+    use base64::Engine;
+
+    let cid = format!("cid:{}", crate::mail::render::LOGO_CID);
+    let inline = format!(
+        "data:image/png;base64,{}",
+        base64::engine::general_purpose::STANDARD.encode(crate::mail::render::LOGO_PNG)
+    );
+    html.replace(&cid, &inline)
 }
 
 fn html_page(html: String) -> Response {
@@ -604,6 +615,8 @@ mod tests {
 
             let html = text(response).await;
             assert!(html.contains(&format!("<title>{}</title>", kind.subject())), "{kind}");
+            assert!(!html.contains("cid:"), "{kind}: a browser cannot follow an attachment link");
+            assert!(html.contains("src=\"data:image/png;base64,"), "{kind}: the logo is carried inline");
             assert!(!html.contains("{{"), "{kind}");
         }
 
