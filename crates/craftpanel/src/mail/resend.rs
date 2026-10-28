@@ -1,6 +1,7 @@
 use std::fmt;
 use std::time::Duration;
 
+use base64::Engine;
 use serde::Serialize;
 
 pub const BASE: &str = "https://api.resend.com";
@@ -142,6 +143,7 @@ impl Resend {
             html: mail.html,
             text: mail.text,
             tags: [Tag { name: "kind", value: mail.kind }],
+            attachments: [logo()],
         };
 
         let response = self
@@ -170,6 +172,22 @@ struct Body<'a> {
     html: &'a str,
     text: &'a str,
     tags: [Tag<'a>; 1],
+    attachments: [Attachment; 1],
+}
+
+#[derive(Serialize)]
+struct Attachment {
+    content: String,
+    filename: &'static str,
+    content_id: &'static str,
+}
+
+fn logo() -> Attachment {
+    Attachment {
+        content: base64::engine::general_purpose::STANDARD.encode(super::render::LOGO_PNG),
+        filename: "craftpanel.png",
+        content_id: super::render::LOGO_CID,
+    }
 }
 
 #[derive(Serialize)]
@@ -424,11 +442,15 @@ mod tests {
             html: mail.html,
             text: mail.text,
             tags: [Tag { name: "kind", value: mail.kind }],
+            attachments: [logo()],
         };
 
         let json = serde_json::to_value(&body).expect("a body");
         assert_eq!(json["from"], FROM);
         assert_eq!(json["to"], serde_json::json!(["anna@example.com"]));
+        assert_eq!(json["attachments"][0]["content_id"], "craftpanel-logo");
+        assert_eq!(json["attachments"][0]["filename"], "craftpanel.png");
+        assert!(json["attachments"][0]["content"].as_str().is_some_and(|png| png.starts_with("iVBORw0KGgo")));
         assert_eq!(json["tags"][0]["value"], "verify_email");
         assert!(json.get("reply_to").is_none(), "an absent reply_to is not sent at all");
     }

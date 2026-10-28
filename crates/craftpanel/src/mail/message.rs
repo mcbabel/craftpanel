@@ -307,7 +307,7 @@ mod tests {
 
     fn sender(base: Option<&str>) -> Sender {
         Sender {
-            name: "craftpanel".to_owned(),
+            name: "CraftPanel".to_owned(),
             address: "onboarding@resend.dev".to_owned(),
             reply_to: None,
             link_base: base.map(str::to_owned),
@@ -439,7 +439,7 @@ mod tests {
     #[test]
     fn the_from_header_takes_both_shapes_resend_accepts() {
         let mut sender = sender(None);
-        assert_eq!(sender.header(), "craftpanel <onboarding@resend.dev>");
+        assert_eq!(sender.header(), "CraftPanel <onboarding@resend.dev>");
         assert_eq!(sender.contact(), "onboarding@resend.dev");
 
         sender.name.clear();

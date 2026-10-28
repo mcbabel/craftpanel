@@ -47,10 +47,16 @@ pub fn write(out: &Path, only: Option<Kind>) -> Result<Vec<PathBuf>> {
     std::fs::create_dir_all(out)
         .with_context(|| format!("making the directory {}", out.display()))?;
 
+    let logo = out.join(format!("{}.png", super::render::LOGO_CID));
+    std::fs::write(&logo, super::render::LOGO_PNG)
+        .with_context(|| format!("writing {}", logo.display()))?;
+
+    let cid = format!("cid:{}", super::render::LOGO_CID);
     let mut written = Vec::new();
     for kind in Kind::ALL.iter().filter(|kind| only.is_none_or(|wanted| wanted == **kind)) {
         let mail = sample(*kind);
-        for (suffix, body) in [("html", &mail.html), ("txt", &mail.text)] {
+        let html = mail.html.replace(&cid, &format!("{}.png", super::render::LOGO_CID));
+        for (suffix, body) in [("html", &html), ("txt", &mail.text)] {
             let path = out.join(format!("{kind}.{suffix}"));
             std::fs::write(&path, body)
                 .with_context(|| format!("writing {}", path.display()))?;

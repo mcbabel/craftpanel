@@ -120,8 +120,8 @@ scale and the button shape. Rewritten as plain HTML with `include_str!` rather t
 components, so the mails stay small and render without a browser engine.
 
 Not taken over, and not to be reintroduced: the logo and the seven social icons (branding, see
-below), the postal address of a company that is not us, and the Google Fonts link. The mails carry
-no images at all.
+below), the postal address of a company that is not us, and the Google Fonts link. The only image in
+the mails is CraftPanel's own logo, carried inside the mail as an attachment.
 
 ## What was removed, and why it may not come back
 

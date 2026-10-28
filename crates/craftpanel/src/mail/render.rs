@@ -5,6 +5,8 @@ use super::resend::MailError;
 use crate::model::Timestamp;
 
 const SHELL_HTML: &str = include_str!("templates/shell.html");
+pub const LOGO_PNG: &[u8] = include_bytes!("templates/logo.png");
+pub const LOGO_CID: &str = "craftpanel-logo";
 const SHELL_TEXT: &str = include_str!("templates/shell.txt");
 const MANUAL_LINK: &str = include_str!("templates/manual_link.html");
 
@@ -26,7 +28,7 @@ pub fn render(
 
 pub fn sample(kind: Kind) -> Rendered {
     let sender = Sender {
-        name: "craftpanel".to_owned(),
+        name: "CraftPanel".to_owned(),
         address: "onboarding@resend.dev".to_owned(),
         reply_to: None,
         link_base: Some("https://panel.example".to_owned()),
@@ -378,10 +380,14 @@ mod tests {
     }
 
     #[test]
-    fn nothing_of_somebody_elses_brand_and_no_image_at_all() {
+    fn nothing_of_somebody_elses_brand_and_no_image_but_our_own_logo() {
         let html = all_html();
+        assert_eq!(
+            html.matches("<img").count(),
+            html.matches(&format!("src=\"cid:{LOGO_CID}\"")).count(),
+            "the only image is the logo carried inside the mail"
+        );
         for forbidden in [
-            "<img",
             "cdn.modrinth.com",
             "cdn-raw.modrinth.com",
             "modrinth",
