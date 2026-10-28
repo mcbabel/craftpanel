@@ -1,5 +1,6 @@
 pub mod logs;
 pub mod mclogs;
+pub mod shared;
 
 use std::collections::{HashMap, VecDeque};
 use std::sync::{Arc, Mutex};

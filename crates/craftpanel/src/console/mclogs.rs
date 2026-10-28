@@ -87,6 +87,23 @@ pub struct SharedLog {
     pub raw: String,
 }
 
+/// What mclo.gs answers to an upload. The token deletes the log later and is shown only this
+/// once, so it is kept apart from [`SharedLog`], which is what the browser gets to see.
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+pub struct Uploaded {
+    pub id: String,
+    pub url: String,
+    pub raw: String,
+    #[serde(default)]
+    pub token: Option<String>,
+}
+
+impl Uploaded {
+    pub fn link(&self) -> SharedLog {
+        SharedLog { id: self.id.clone(), url: self.url.clone(), raw: self.raw.clone() }
+    }
+}
+
 pub struct Mclogs {
     http: reqwest::Client,
     base: String,
@@ -129,9 +146,48 @@ impl Mclogs {
         Ok(analysis)
     }
 
-    pub async fn share(&self, content: &str) -> Result<SharedLog> {
+    pub async fn share(&self, content: &str) -> Result<Uploaded> {
         let body = self.post("log", content).await?;
-        read(&body)
+        let uploaded: Uploaded = read(&body)?;
+        if !is_log_id(&uploaded.id) {
+            return Err(unavailable(format!("mclo.gs named the log {:?}", uploaded.id)));
+        }
+        Ok(uploaded)
+    }
+
+    /// Takes a log down. One that mclo.gs no longer has counts as gone: logs expire there on
+    /// their own, 90 days after they were last looked at.
+    pub async fn delete(&self, id: &str, token: &str) -> Result<()> {
+        if !is_log_id(id) {
+            return Err(unavailable(format!("{id:?} is not a log of mclo.gs")));
+        }
+        if self.blocked(Instant::now()) {
+            return Err(rate_limited());
+        }
+
+        let sent = self
+            .http
+            .delete(format!("{}/1/log/{id}", self.base))
+            .bearer_auth(token)
+            .timeout(WHOLE_TIMEOUT)
+            .send()
+            .await
+            .map_err(|err| unavailable(err.to_string()))?;
+
+        let status = sent.status();
+        if status == StatusCode::TOO_MANY_REQUESTS {
+            *self.blocked_until.lock().expect("the mclo.gs lock") =
+                Some(Instant::now() + BLOCKED_FOR);
+            return Err(rate_limited());
+        }
+        if status == StatusCode::NOT_FOUND {
+            return Ok(());
+        }
+        let body = sent.bytes().await.map_err(|err| unavailable(err.to_string()))?;
+        if !status.is_success() {
+            return Err(unavailable(format!("mclo.gs answered {status}")));
+        }
+        read::<serde_json::Value>(&body).map(|_| ())
     }
 
     async fn post(&self, endpoint: &str, content: &str) -> Result<Vec<u8>> {
@@ -199,6 +255,11 @@ fn read<T: serde::de::DeserializeOwned>(body: &[u8]) -> Result<T> {
 
     serde_json::from_value(answered)
         .map_err(|err| unavailable(format!("mclo.gs answered something unreadable: {err}")))
+}
+
+// The id ends up in a path; mclo.gs only ever hands out letters and digits.
+fn is_log_id(id: &str) -> bool {
+    !id.is_empty() && id.len() <= 64 && id.bytes().all(|byte| byte.is_ascii_alphanumeric())
 }
 
 fn form(field: &str, value: &str) -> String {

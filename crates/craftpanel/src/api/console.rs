@@ -14,7 +14,7 @@ use crate::audit::{self, Event};
 use crate::auth::error::{Failure, Result};
 use crate::auth::{access, extract, Caller, JsonBody, Params};
 use crate::console::logs::{self, LogFileContentResponse, LogFileListResponse};
-use crate::console::{check_command, echo, mclogs, Console};
+use crate::console::{check_command, echo, mclogs, shared, Console};
 use crate::files::{RelPath, Workspace};
 use crate::model::{Id, Permission};
 use crate::ops::Operations;
@@ -35,6 +35,9 @@ fn routes(operations: Arc<Operations>, hub: Arc<Hub>, service: Arc<Console>) -> 
         .route("/servers/{server}/console/logs", get(list_logs).delete(delete_log))
         .route("/servers/{server}/console/logs/content", get(read_log))
         .route("/servers/{server}/console/logs/share", post(share_log))
+        .route("/servers/{server}/console/share", post(share_text))
+        .route("/servers/{server}/shared-logs", get(list_shared))
+        .route("/servers/{server}/shared-logs/{log}", axum::routing::delete(delete_shared))
         .layer(Extension(operations))
         .layer(Extension(hub))
         .layer(Extension(service))
@@ -88,6 +91,11 @@ struct LogFileQuery {
 #[derive(Debug, Deserialize)]
 struct ShareLogRequest {
     path: String,
+}
+
+#[derive(Debug, Deserialize)]
+struct ShareTextRequest {
+    content: String,
 }
 
 async fn command(
@@ -228,7 +236,76 @@ async fn share_log(
         return Err(Failure::conflict("log_empty", "there is nothing in this log to share"));
     }
 
-    Ok(Json(service.analyst.share(&read.content).await?))
+    let uploaded = service.analyst.share(&read.content).await?;
+    shared::record(&state.pool, server, caller.id(), &uploaded, &body.path).await?;
+    Ok(Json(uploaded.link()))
+}
+
+// What the console shows is text the browser already has; it still goes out through the panel,
+// so the switch for outgoing calls holds and the log can be taken down again later.
+async fn share_text(
+    State(state): State<AppState>,
+    Extension(service): Extension<Arc<Console>>,
+    caller: Caller,
+    OfServer(server): OfServer,
+    JsonBody(body): JsonBody<ShareTextRequest>,
+) -> Result<Json<mclogs::SharedLog>> {
+    access::require(&state.pool, &caller, server, Permission::BaseRead).await?;
+    if body.content.trim().is_empty() {
+        return Err(Failure::conflict("log_empty", "there is nothing in this log to share"));
+    }
+    if body.content.len() as u64 > logs::MAX_CONTENT_BYTES {
+        return Err(Failure::bad_request("log_too_large", "this log is too large to share"));
+    }
+    may_call_out(&state).await?;
+
+    let content = last_lines(&body.content, logs::MAX_CONTENT_LINES);
+    let uploaded = service.analyst.share(content).await?;
+    shared::record(&state.pool, server, caller.id(), &uploaded, shared::CONSOLE).await?;
+    Ok(Json(uploaded.link()))
+}
+
+fn last_lines(text: &str, keep: usize) -> &str {
+    let trimmed = text.trim_end_matches('\n');
+    match trimmed.rmatch_indices('\n').nth(keep.saturating_sub(1)) {
+        Some((at, _)) => &trimmed[at + 1..],
+        None => trimmed,
+    }
+}
+
+async fn list_shared(
+    State(state): State<AppState>,
+    caller: Caller,
+    OfServer(server): OfServer,
+) -> Result<Json<shared::SharedLogList>> {
+    access::require(&state.pool, &caller, server, Permission::BaseRead).await?;
+    Ok(Json(shared::list(&state.pool, server).await?))
+}
+
+// Whoever shared a log may take it down, and so may the server's owner. A log mclo.gs gave
+// no token for can only leave the list; it expires there on its own.
+async fn delete_shared(
+    State(state): State<AppState>,
+    Extension(service): Extension<Arc<Console>>,
+    caller: Caller,
+    axum::extract::Path((server, log)): axum::extract::Path<(String, String)>,
+) -> Result<StatusCode> {
+    let server: Id = server.parse().map_err(|_| unknown_server())?;
+    let log: Id = log
+        .parse()
+        .map_err(|_| Failure::not_found("shared_log_not_found", "no such shared log"))?;
+    let seat = access::require(&state.pool, &caller, server, Permission::BaseRead).await?;
+    let row = shared::find(&state.pool, server, log).await?;
+    if row.shared_by != Some(caller.id()) && !seat.allows(Permission::ServerAdmin) {
+        return Err(Failure::forbidden());
+    }
+
+    if let Some(token) = &row.token {
+        may_call_out(&state).await?;
+        service.analyst.delete(&row.mclogs_id, token).await?;
+    }
+    shared::remove(&state.pool, row.id).await?;
+    Ok(StatusCode::NO_CONTENT)
 }
 
 async fn may_call_out(state: &AppState) -> Result<()> {
@@ -387,6 +464,8 @@ mod tests {
         calls: AtomicUsize,
         status: AtomicU16,
         bodies: Mutex<Vec<String>>,
+        deleted: Mutex<Vec<(String, String)>>,
+        delete_status: AtomicU16,
     }
 
     struct FakeMclogs {
@@ -400,6 +479,7 @@ mod tests {
             let app = Router::new()
                 .route("/1/analyse", post(analyse))
                 .route("/1/log", post(log))
+                .route("/1/log/{id}", axum::routing::delete(take_down))
                 .with_state(Arc::clone(&state));
             let listener =
                 tokio::net::TcpListener::bind("127.0.0.1:0").await.expect("a free port");
@@ -416,6 +496,14 @@ mod tests {
 
         fn answer_with(&self, status: u16) {
             self.state.status.store(status, Ordering::Relaxed);
+        }
+
+        fn deleted(&self) -> Vec<(String, String)> {
+            self.state.deleted.lock().unwrap().clone()
+        }
+
+        fn answer_deletes_with(&self, status: u16) {
+            self.state.delete_status.store(status, Ordering::Relaxed);
         }
 
         fn last_body(&self) -> String {
@@ -448,6 +536,23 @@ mod tests {
             other => {
                 (StatusCode::from_u16(other).expect("a status"), "no").into_response()
             }
+        }
+    }
+
+    async fn take_down(
+        State(state): State<Arc<Upstream>>,
+        axum::extract::Path(id): axum::extract::Path<String>,
+        headers: axum::http::HeaderMap,
+    ) -> Response {
+        let auth = headers
+            .get(axum::http::header::AUTHORIZATION)
+            .and_then(|value| value.to_str().ok())
+            .unwrap_or_default()
+            .to_owned();
+        state.deleted.lock().unwrap().push((id, auth));
+        match state.delete_status.load(Ordering::Relaxed) {
+            0 => ([(CONTENT_TYPE, "application/json")], r#"{"success": true}"#).into_response(),
+            other => (StatusCode::from_u16(other).expect("a status"), "{}").into_response(),
         }
     }
 
@@ -577,6 +682,22 @@ mod tests {
 
         async fn delete(&self, tail: &str) -> Response {
             self.delete_as(&self.cookie.clone(), tail).await
+        }
+
+        async fn shared_as(&self, cookie: &str, method: &str, tail: &str) -> Response {
+            let request = Request::builder()
+                .method(method)
+                .uri(format!("/servers/{}/shared-logs{tail}", self.server))
+                .header(COOKIE, format!("craft_session={cookie}"))
+                .body(Body::empty())
+                .expect("a request");
+            self.send(request).await
+        }
+
+        async fn shared(&self) -> serde_json::Value {
+            let answer = self.shared_as(&self.cookie.clone(), "GET", "").await;
+            assert_eq!(answer.status(), StatusCode::OK);
+            body_json(answer).await
         }
 
         async fn a_member(&self, name: &str, role: ServerRole) -> String {
@@ -1140,5 +1261,114 @@ mod tests {
         assert_eq!(refused.status(), StatusCode::CONFLICT);
         assert_eq!(body_json(refused).await["error"], "external_services_disabled");
         assert_eq!(panel.upstream.calls(), 0);
+    }
+
+    #[tokio::test]
+    async fn a_shared_log_is_kept_without_its_token_showing() {
+        let panel = panel().await;
+        panel.sandbox.write("logs/latest.log", b"[15:04:22] Done (3.2s)!\n");
+        panel.post("/logs/share", serde_json::json!({ "path": "/logs/latest.log" })).await;
+        let shown =
+            panel.post("/share", serde_json::json!({ "content": "[15:04:23] from the screen\n" })).await;
+        assert_eq!(shown.status(), StatusCode::OK);
+
+        let listed = panel.shared().await;
+        let logs = listed["logs"].as_array().expect("a list");
+        assert_eq!(logs.len(), 2);
+        let sources: Vec<&str> = logs.iter().map(|log| log["source"].as_str().unwrap()).collect();
+        assert!(sources.contains(&"/logs/latest.log") && sources.contains(&"console"), "{sources:?}");
+        assert_eq!(logs[0]["url"], "https://mclo.gs/abc123");
+        assert!(logs[0]["shared_by"]["username"].is_string());
+        assert!(!listed.to_string().contains("never-handed-out"), "the token stays in the panel");
+
+        let stored: Option<String> =
+            sqlx::query_scalar("SELECT token FROM shared_logs LIMIT 1").fetch_one(&panel.pool).await.unwrap();
+        assert_eq!(stored.as_deref(), Some("never-handed-out"));
+    }
+
+    #[tokio::test]
+    async fn taking_a_log_down_hands_mclogs_its_token() {
+        let panel = panel().await;
+        panel.post("/share", serde_json::json!({ "content": "one\n" })).await;
+        let id = panel.shared().await["logs"][0]["id"].as_str().unwrap().to_owned();
+
+        let answer = panel.shared_as(&panel.cookie.clone(), "DELETE", &format!("/{id}")).await;
+        assert_eq!(answer.status(), StatusCode::NO_CONTENT);
+        assert_eq!(
+            panel.upstream.deleted(),
+            [("abc123".to_owned(), "Bearer never-handed-out".to_owned())]
+        );
+        assert!(panel.shared().await["logs"].as_array().unwrap().is_empty());
+    }
+
+    #[tokio::test]
+    async fn a_log_mclogs_already_forgot_still_leaves_the_list() {
+        let panel = panel().await;
+        panel.post("/share", serde_json::json!({ "content": "one\n" })).await;
+        let id = panel.shared().await["logs"][0]["id"].as_str().unwrap().to_owned();
+        panel.upstream.answer_deletes_with(404);
+
+        let answer = panel.shared_as(&panel.cookie.clone(), "DELETE", &format!("/{id}")).await;
+        assert_eq!(answer.status(), StatusCode::NO_CONTENT);
+        assert!(panel.shared().await["logs"].as_array().unwrap().is_empty());
+
+        panel.post("/share", serde_json::json!({ "content": "two\n" })).await;
+        let kept = panel.shared().await["logs"][0]["id"].as_str().unwrap().to_owned();
+        panel.upstream.answer_deletes_with(500);
+        let failed = panel.shared_as(&panel.cookie.clone(), "DELETE", &format!("/{kept}")).await;
+        assert_eq!(failed.status(), StatusCode::BAD_GATEWAY);
+        assert_eq!(panel.shared().await["logs"].as_array().unwrap().len(), 1, "kept for another try");
+    }
+
+    #[tokio::test]
+    async fn only_who_shared_a_log_or_the_owner_takes_it_down() {
+        let panel = panel().await;
+        panel.post("/share", serde_json::json!({ "content": "the owner's\n" })).await;
+        let owners = panel.shared().await["logs"][0]["id"].as_str().unwrap().to_owned();
+
+        let editor = panel.a_member("eddie", ServerRole::Editor).await;
+        assert_eq!(panel.shared_as(&editor, "GET", "").await.status(), StatusCode::OK);
+        let refused = panel.shared_as(&editor, "DELETE", &format!("/{owners}")).await;
+        assert_eq!(refused.status(), StatusCode::FORBIDDEN);
+
+        panel.post_as(&editor, "/share", serde_json::json!({ "content": "eddie's\n" })).await;
+        let logs = panel.shared().await;
+        let eddies = logs["logs"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|log| log["shared_by"]["username"] == "eddie")
+            .expect("eddie's log")["id"]
+            .as_str()
+            .unwrap()
+            .to_owned();
+        let own = panel.shared_as(&editor, "DELETE", &format!("/{eddies}")).await;
+        assert_eq!(own.status(), StatusCode::NO_CONTENT);
+        assert_eq!(panel.upstream.deleted().len(), 1);
+    }
+
+    #[tokio::test]
+    async fn taking_a_log_down_respects_the_switch_for_outgoing_calls() {
+        let panel = panel().await;
+        panel.post("/share", serde_json::json!({ "content": "one\n" })).await;
+        let id = panel.shared().await["logs"][0]["id"].as_str().unwrap().to_owned();
+        sqlx::query("UPDATE panel_settings SET external_services_enabled = 0 WHERE id = 1")
+            .execute(&panel.pool)
+            .await
+            .expect("switched off");
+
+        let refused = panel.shared_as(&panel.cookie.clone(), "DELETE", &format!("/{id}")).await;
+        assert_eq!(refused.status(), StatusCode::CONFLICT);
+        assert!(panel.upstream.deleted().is_empty());
+        assert_eq!(panel.shared().await["logs"].as_array().unwrap().len(), 1);
+
+        let text = panel.post("/share", serde_json::json!({ "content": "two\n" })).await;
+        assert_eq!(text.status(), StatusCode::CONFLICT);
+    }
+
+    #[test]
+    fn only_the_last_lines_go_out() {
+        assert_eq!(last_lines("a\nb\nc\n", 2), "b\nc");
+        assert_eq!(last_lines("a\nb", 5), "a\nb");
     }
 }
