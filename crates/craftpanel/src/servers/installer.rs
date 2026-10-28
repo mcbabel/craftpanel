@@ -171,7 +171,7 @@ mod tests {
             tokio::time::sleep(Duration::from_millis(10)).await;
         }
         let (reader, mut writer) = stream.expect("the hub listens").into_split();
-        let mut send = |message: SupervisorMessage| {
+        let send = |message: SupervisorMessage| {
             let mut line = serde_json::to_vec(&message).unwrap();
             line.push(b'\n');
             line

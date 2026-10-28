@@ -1,4 +1,5 @@
 mod detect;
+mod ledger;
 mod mcsmanager;
 
 use std::path::PathBuf;
@@ -10,6 +11,8 @@ use clap::{Args, Subcommand};
 pub enum ImportCommand {
     #[command(about = "Take over the servers of an MCSManager daemon on this machine")]
     Mcsmanager(McsmanagerArgs),
+    #[command(hide = true)]
+    Ledger,
 }
 
 #[derive(Debug, Args)]
@@ -31,5 +34,6 @@ pub struct McsmanagerArgs {
 pub async fn run(command: ImportCommand) -> Result<()> {
     match command {
         ImportCommand::Mcsmanager(args) => mcsmanager::run(args).await,
+        ImportCommand::Ledger => ledger::serve().await,
     }
 }

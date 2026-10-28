@@ -3,13 +3,12 @@ use std::path::{Path, PathBuf};
 
 use anyhow::{bail, Context, Result};
 use serde::Deserialize;
-use sqlx::SqlitePool;
-
 use super::detect::{self, Detected};
+use super::ledger::{Entry, Ledger};
 use super::McsmanagerArgs;
 use crate::config::Config;
 use crate::helper::Helper;
-use crate::model::{Id, LoaderId, SystemUserState, Timestamp};
+use crate::model::{Id, LoaderId, SystemUserState};
 
 const GLOBAL_INSTANCE: &str = "global0001";
 const JAR: &str = "server.jar";
@@ -52,21 +51,17 @@ struct Stored {
     kind: String,
 }
 
-struct Owner {
-    id: Id,
-    state: SystemUserState,
-}
-
 pub async fn run(args: McsmanagerArgs) -> Result<()> {
-    let config = Config::load(&crate::auth::cli::config_path())?;
-    let pool = crate::db::connect(&config.database_path()).await?;
+    let config_path = crate::auth::cli::config_path();
+    let config = Config::load(&config_path)?;
+    let ledger = Ledger::open(&config_path, &config).await?;
     let helper = Helper::new(&config.helper_socket);
 
     let chosen = select(instances(&args.from)?, &args.only)?;
-    let owner = owner(&pool, &args.owner).await?;
+    let (owner, state) = ledger.owner(&args.owner).await?;
     if !args.dry_run {
         helper.ping().await.context("the privileged helper has to run to hand the files over")?;
-        if owner.state != SystemUserState::Ready {
+        if state != SystemUserState::Ready {
             bail!("the system account of {} is not ready yet; fix it in the panel first", args.owner);
         }
     }
@@ -87,7 +82,7 @@ pub async fn run(args: McsmanagerArgs) -> Result<()> {
             println!("import  {}", describe(&planned));
             continue;
         }
-        match import(&pool, &config, &helper, &guard, owner.id, &planned, args.copy).await {
+        match import(&ledger, &config, &helper, &guard, owner, &planned, args.copy).await {
             Ok(done) => {
                 imported += 1;
                 println!("done    {} as {} on port {}", describe(&planned), done.server, done.port);
@@ -307,18 +302,8 @@ fn describe(planned: &Planned) -> String {
     )
 }
 
-async fn owner(pool: &SqlitePool, username: &str) -> Result<Owner> {
-    let row: Option<(Id, SystemUserState)> =
-        sqlx::query_as("SELECT id, system_state FROM users WHERE username = ? COLLATE NOCASE")
-            .bind(username)
-            .fetch_optional(pool)
-            .await?;
-    let (id, state) = row.with_context(|| format!("there is no panel user called {username}"))?;
-    Ok(Owner { id, state })
-}
-
 pub async fn import(
-    pool: &SqlitePool,
+    ledger: &Ledger,
     config: &Config,
     helper: &Helper,
     guard: &Guard<'_>,
@@ -348,7 +333,7 @@ pub async fn import(
     } else {
         move_dir(source, &target, identity)?;
     }
-    let settled = settle(pool, &target, owner, server, planned).await;
+    let settled = settle(ledger, &target, owner, server, planned).await;
     let imported = match settled {
         Ok(imported) => imported,
         Err(err) => {
@@ -369,57 +354,39 @@ pub async fn import(
 }
 
 async fn settle(
-    pool: &SqlitePool,
+    ledger: &Ledger,
     dir: &Path,
     owner: Id,
     server: Id,
     planned: &Planned,
 ) -> Result<Imported> {
     let found = &planned.detected;
-    let mut tx = pool.begin().await?;
-    let port = free_port(&mut tx, found.port).await?;
-    let now = Timestamp::now();
-    sqlx::query(
-        "INSERT INTO servers (id, name, owner_id, status, loader, loader_version, game_version, \
-         memory_mib, flows_intro, extra_flags, created_at, updated_at) \
-         VALUES (?, ?, ?, 'available', ?, ?, ?, ?, 0, ?, ?, ?)",
-    )
-    .bind(server)
-    .bind(&planned.instance.name)
-    .bind(owner)
-    .bind(found.loader)
-    .bind(&found.loader_version)
-    .bind(&found.game_version)
-    .bind(i64::from(planned.memory_mib))
-    .bind(serde_json::to_string(&planned.flags)?)
-    .bind(now)
-    .bind(now)
-    .execute(&mut *tx)
-    .await?;
-    sqlx::query(
-        "INSERT INTO allocations (port, server_id, name, is_primary, created_at) \
-         VALUES (?, ?, 'primary', 1, ?)",
-    )
-    .bind(i64::from(port))
-    .bind(server)
-    .bind(now)
-    .execute(&mut *tx)
-    .await?;
-    sqlx::query(
-        "INSERT INTO audit_log (id, server_id, actor_user_id, action, metadata, created_at) \
-         VALUES (?, ?, ?, 'server_created', ?, ?)",
-    )
-    .bind(Id::new())
-    .bind(server)
-    .bind(owner)
-    .bind(serde_json::json!({ "imported_from": "mcsmanager", "instance": planned.instance.uuid }).to_string())
-    .bind(now)
-    .execute(&mut *tx)
-    .await?;
-
+    let port = ledger.free_port(found.port).await?;
     detect::set_port(dir, found.loader, port)?;
-    tx.commit().await?;
+    ledger
+        .record(Entry {
+            server,
+            owner,
+            name: planned.instance.name.clone(),
+            loader: found.loader,
+            loader_version: found.loader_version.clone(),
+            game_version: found.game_version.clone(),
+            memory_mib: planned.memory_mib,
+            flags: planned.flags.clone(),
+            port,
+            instance: planned.instance.uuid.clone(),
+        })
+        .await?;
+    if let Err(err) = arrange(dir, found) {
+        if let Err(undo) = ledger.forget(server).await {
+            return Err(err.context(format!("and the server's rows could not be taken back out: {undo:#}")));
+        }
+        return Err(err);
+    }
+    Ok(Imported { server, port, port_changed: found.port.is_some_and(|wanted| wanted != port) })
+}
 
+fn arrange(dir: &Path, found: &Detected) -> Result<()> {
     if let Some(vanilla) = &found.vanilla_jar {
         if vanilla != MINECRAFT_JAR {
             std::fs::rename(dir.join(vanilla), dir.join(MINECRAFT_JAR))?;
@@ -454,23 +421,7 @@ async fn settle(
         }
     }
 
-    Ok(Imported { server, port, port_changed: found.port.is_some_and(|wanted| wanted != port) })
-}
-
-async fn free_port(tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>, wanted: Option<u16>) -> Result<u16> {
-    let taken: Vec<i64> = sqlx::query_scalar("SELECT port FROM allocations").fetch_all(&mut **tx).await?;
-    let free = |port: u16| !taken.contains(&i64::from(port));
-    if let Some(port) = wanted.filter(|port| *port >= 1024 && free(*port)) {
-        return Ok(port);
-    }
-    let (from, to): (i64, i64) =
-        sqlx::query_as("SELECT port_pool_from, port_pool_to FROM panel_settings WHERE id = 1")
-            .fetch_one(&mut **tx)
-            .await?;
-    (from..=to)
-        .filter_map(|port| u16::try_from(port).ok())
-        .find(|port| free(*port))
-        .context("the port pool has no free port left; widen it with `craftpanel admin ports`")
+    Ok(())
 }
 
 const MAX_DEPTH: usize = 256;
@@ -581,6 +532,7 @@ fn running_in(dir: &Path) -> Option<u32> {
 mod tests {
     use super::*;
     use crate::auth::harness::{an_admin, test_pool, FakeHelper};
+    use crate::model::Timestamp;
 
     struct Setup {
         daemon: PathBuf,
@@ -690,7 +642,7 @@ mod tests {
         }));
 
         let planned = plan(&instances(&setup.daemon).unwrap()[0]).unwrap();
-        let done = import(&pool, &config, &helper, &guard, owner, &planned, false).await.unwrap();
+        let done = import(&Ledger::Open(pool.clone()), &config, &helper, &guard, owner, &planned, false).await.unwrap();
 
         assert_eq!(done.port, 25590);
         assert!(!done.port_changed);
@@ -740,7 +692,7 @@ mod tests {
         }));
 
         let planned = plan(&instances(&setup.daemon).unwrap()[0]).unwrap();
-        let done = import(&pool, &config, &helper, &guard, owner, &planned, false).await.unwrap();
+        let done = import(&Ledger::Open(pool.clone()), &config, &helper, &guard, owner, &planned, false).await.unwrap();
         let target = crate::files::server_dir(&config, owner, done.server);
 
         assert_eq!(std::fs::read(target.join("server.jar")).unwrap(), b"launcher");
@@ -771,8 +723,8 @@ mod tests {
         }
 
         let found = instances(&setup.daemon).unwrap();
-        let first = import(&pool, &config, &helper, &guard, owner, &plan(&found[0]).unwrap(), true).await.unwrap();
-        let second = import(&pool, &config, &helper, &guard, owner, &plan(&found[1]).unwrap(), true).await.unwrap();
+        let first = import(&Ledger::Open(pool.clone()), &config, &helper, &guard, owner, &plan(&found[0]).unwrap(), true).await.unwrap();
+        let second = import(&Ledger::Open(pool.clone()), &config, &helper, &guard, owner, &plan(&found[1]).unwrap(), true).await.unwrap();
 
         assert_eq!(first.port, 25565);
         assert_ne!(second.port, 25565);
@@ -852,7 +804,7 @@ mod tests {
         }));
 
         let planned = plan(&instances(&setup.daemon).unwrap()[0]).unwrap();
-        let refused = import(&pool, &config, &helper, &guard, owner, &planned, false).await.unwrap_err();
+        let refused = import(&Ledger::Open(pool.clone()), &config, &helper, &guard, owner, &planned, false).await.unwrap_err();
         assert!(format!("{refused:#}").contains("no free port"), "{refused:#}");
         assert!(dir.join("world/level.dat").is_file(), "the folder is back where it was");
         let count: i64 = sqlx::query_scalar("SELECT count(*) FROM servers").fetch_one(&pool).await.unwrap();
