@@ -5,7 +5,7 @@
 		width="500px"
 		@show="focusInput"
 	>
-		<div class="flex flex-col gap-2 pb-1">
+		<div class="flex flex-col gap-2">
 			<label for="backup-name-input">
 				<span class="text-lg font-semibold text-contrast">{{ formatMessage(messages.nameLabel) }}</span>
 			</label>

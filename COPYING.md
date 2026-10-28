@@ -89,10 +89,10 @@ wins and our id goes.
 A few of Modrinth's components no longer fit the modal they sit in after an upstream change, and
 show a scrollbar or cut off a field. Those are corrected in place, one class at a time:
 
+- `ui/src/components/modal/NewModal.vue`: the content area keeps 4 px of padding at the bottom when
+  the modal has actions, the width of the focus ring, which was cut off there in every dialog.
 - `ui/src/components/servers/backups/BackupCreateModal.vue`: the name field's wrapper lost its
-  `-mb-2` and got a `pb-1`. The modal's content area has no bottom padding when it has actions, so
-  the negative margin made the field overflow it and the dialog scroll, and without the padding
-  the field's focus ring is cut off.
+  `-mb-2`, which made the field overflow the modal and the dialog scroll.
 - `ui/src/components/modal/ShareModal.vue`: the text field's copy button is `!absolute`. Every
   button frame sets `relative` itself now, which won over `absolute` and pushed it out of its
   corner. The QR code's copy button no longer sits on the code, where it was hard to see; it is a
