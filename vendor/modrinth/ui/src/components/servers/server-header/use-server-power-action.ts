@@ -1,0 +1,153 @@
+import { computed, type Ref } from 'vue'
+
+import { defineMessages, useVIntl } from '#ui/composables/i18n'
+import { useServerPermissions } from '#ui/composables/server-permissions'
+import {
+	injectModrinthClient,
+	injectModrinthServerContext,
+	injectNotificationManager,
+} from '#ui/providers'
+
+export type PowerAction = 'Start' | 'Stop' | 'Restart' | 'Kill'
+
+const messages = defineMessages({
+	serverStarting: {
+		id: 'craftpanel.vendor.power.server-starting',
+		defaultMessage: 'Your server is starting',
+	},
+	restart: {
+		id: 'craftpanel.vendor.power.restart',
+		defaultMessage: 'Restart',
+	},
+	stopping: {
+		id: 'craftpanel.vendor.power.stopping',
+		defaultMessage: 'Stopping',
+	},
+	start: {
+		id: 'craftpanel.vendor.power.start',
+		defaultMessage: 'Start',
+	},
+	failedStart: {
+		id: 'craftpanel.vendor.power.failed-start',
+		defaultMessage: 'Failed to start server',
+	},
+	failedStop: {
+		id: 'craftpanel.vendor.power.failed-stop',
+		defaultMessage: 'Failed to stop server',
+	},
+	failedRestart: {
+		id: 'craftpanel.vendor.power.failed-restart',
+		defaultMessage: 'Failed to restart server',
+	},
+	failedKill: {
+		id: 'craftpanel.vendor.power.failed-kill',
+		defaultMessage: 'Failed to kill server',
+	},
+	actionError: {
+		id: 'craftpanel.vendor.power.action-error',
+		defaultMessage: 'An error occurred while performing this action.',
+	},
+})
+
+const failedActionMessages = {
+	Start: messages.failedStart,
+	Stop: messages.failedStop,
+	Restart: messages.failedRestart,
+	Kill: messages.failedKill,
+} satisfies Record<PowerAction, (typeof messages)[keyof typeof messages]>
+
+export function useServerPowerAction(options?: { disabled?: Ref<boolean> }) {
+	const { formatMessage } = useVIntl()
+	const client = injectModrinthClient()
+	const { serverId, powerState, busyReasons } = injectModrinthServerContext()
+	const { addNotification } = injectNotificationManager()
+	const { canUsePowerActions, permissionDeniedMessage } = useServerPermissions()
+
+	const isInstalling = computed(() =>
+		busyReasons.value.some((reason) => reason.reason.id === 'servers.busy.installing'),
+	)
+	const isRunning = computed(() => powerState.value === 'running')
+	const isStopping = computed(() => powerState.value === 'stopping')
+	const isStarting = computed(() => powerState.value === 'starting')
+	const isTransitioning = computed(() => isStarting.value || isStopping.value)
+
+	const showStopSplit = computed(() => isRunning.value || isStarting.value || isStopping.value)
+	const showRestartButton = computed(() => isRunning.value || isStarting.value)
+
+	const isBlockedByPropsBusyOrPermission = computed(
+		() =>
+			!canUsePowerActions.value ||
+			Boolean(options?.disabled?.value) ||
+			busyReasons.value.length > 0,
+	)
+
+	const busyTooltip = computed(() => {
+		if (!canUsePowerActions.value) return permissionDeniedMessage.value
+		if (isStarting.value) return formatMessage(messages.serverStarting)
+		return busyReasons.value.length > 0 ? formatMessage(busyReasons.value[0].reason) : undefined
+	})
+
+	const canTakeAction = computed(
+		() => !isTransitioning.value && !isBlockedByPropsBusyOrPermission.value,
+	)
+
+	const canKill = computed(
+		() =>
+			!isBlockedByPropsBusyOrPermission.value &&
+			(isStopping.value || isRunning.value || isStarting.value),
+	)
+
+	const primaryActionText = computed(() => {
+		switch (powerState.value) {
+			case 'running':
+			case 'starting':
+				return formatMessage(messages.restart)
+			case 'stopping':
+				return formatMessage(messages.stopping)
+			default:
+				return formatMessage(messages.start)
+		}
+	})
+
+	async function sendPowerAction(action: PowerAction) {
+		try {
+			await client.archon.servers_v0.power(serverId, action)
+		} catch (error) {
+			console.error(`Error performing ${action} on server:`, error)
+			addNotification({
+				type: 'error',
+				title: formatMessage(failedActionMessages[action]),
+				text: formatMessage(messages.actionError),
+			})
+		}
+	}
+
+	function initiateAction(action: PowerAction) {
+		if (action === 'Kill') {
+			if (!canKill.value) return
+		} else {
+			if (!canTakeAction.value) return
+		}
+		void sendPowerAction(action)
+	}
+
+	function handlePrimaryAction() {
+		initiateAction(isRunning.value ? 'Restart' : 'Start')
+	}
+
+	return {
+		isInstalling,
+		isRunning,
+		isStopping,
+		isTransitioning,
+		showStopSplit,
+		showRestartButton,
+		busyTooltip,
+		canTakeAction,
+		canKill,
+		primaryActionText,
+		sendPowerAction,
+		initiateAction,
+		handlePrimaryAction,
+	}
+}

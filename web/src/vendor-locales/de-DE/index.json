@@ -1,0 +1,578 @@
+{
+  "craftpanel.vendor.admonition.dismiss": {
+    "defaultMessage": "Ausblenden"
+  },
+  "craftpanel.vendor.admonition.toggle": {
+    "defaultMessage": "Ein- oder ausklappen"
+  },
+  "craftpanel.vendor.backups.backup-label": {
+    "defaultMessage": "Sicherung"
+  },
+  "craftpanel.vendor.backups.create-backup": {
+    "defaultMessage": "Sicherung erstellen"
+  },
+  "craftpanel.vendor.backups.default-name": {
+    "defaultMessage": "Sicherung #{number}"
+  },
+  "craftpanel.vendor.backups.error-creating": {
+    "defaultMessage": "Sicherung konnte nicht erstellt werden"
+  },
+  "craftpanel.vendor.backups.error-renaming": {
+    "defaultMessage": "Sicherung konnte nicht umbenannt werden"
+  },
+  "craftpanel.vendor.backups.failed-to-restore": {
+    "defaultMessage": "Sicherung konnte nicht wiederhergestellt werden"
+  },
+  "craftpanel.vendor.backups.files-replaced-body": {
+    "defaultMessage": "Beim Wiederherstellen werden die aktuelle Welt und die Serverdateien ersetzt. Alle Änderungen seit dieser Sicherung gehen dauerhaft verloren."
+  },
+  "craftpanel.vendor.backups.files-replaced-header": {
+    "defaultMessage": "Deine Serverdateien werden ersetzt"
+  },
+  "craftpanel.vendor.backups.name-exists-prefix": {
+    "defaultMessage": "Du hast schon eine Sicherung namens „"
+  },
+  "craftpanel.vendor.backups.name-exists-suffix": {
+    "defaultMessage": "“"
+  },
+  "craftpanel.vendor.backups.name-label": {
+    "defaultMessage": "Name"
+  },
+  "craftpanel.vendor.backups.rate-limited": {
+    "defaultMessage": "Du erstellst Sicherungen zu schnell. Warte kurz und versuch es dann noch einmal."
+  },
+  "craftpanel.vendor.backups.renaming": {
+    "defaultMessage": "Wird umbenannt..."
+  },
+  "craftpanel.vendor.backups.renaming-backup": {
+    "defaultMessage": "Sicherung umbenennen"
+  },
+  "craftpanel.vendor.backups.restore-backup": {
+    "defaultMessage": "Sicherung wiederherstellen"
+  },
+  "craftpanel.vendor.backups.restoring": {
+    "defaultMessage": "Wird wiederhergestellt..."
+  },
+  "craftpanel.vendor.backups.safety-backup-name": {
+    "defaultMessage": "Vor dem Wiederherstellen von „{name}“"
+  },
+  "craftpanel.vendor.backups.server-running-body": {
+    "defaultMessage": "Stoppe den Server, bevor du eine Sicherung wiederherstellst."
+  },
+  "craftpanel.vendor.backups.server-running-header": {
+    "defaultMessage": "Der Server läuft"
+  },
+  "craftpanel.vendor.backups.too-fast": {
+    "defaultMessage": "Du erstellst Sicherungen zu schnell."
+  },
+  "craftpanel.vendor.backups.warning-after-link": {
+    "defaultMessage": "– dieser Vorgang lässt sich nicht rückgängig machen und kann deine Welt oder die Dateien auf deinem Server dauerhaft verändern."
+  },
+  "craftpanel.vendor.backups.warning-before-link": {
+    "defaultMessage": "Du solltest vorher"
+  },
+  "craftpanel.vendor.backups.warning-link": {
+    "defaultMessage": "eine Sicherung erstellen"
+  },
+  "craftpanel.vendor.browse.change-display-mode": {
+    "defaultMessage": "Ansicht wechseln"
+  },
+  "craftpanel.vendor.card.toggle-details": {
+    "defaultMessage": "Details ein- oder ausblenden"
+  },
+  "craftpanel.vendor.combobox.no-results-found": {
+    "defaultMessage": "Keine Ergebnisse gefunden"
+  },
+  "craftpanel.vendor.combobox.select-an-option": {
+    "defaultMessage": "Option auswählen"
+  },
+  "craftpanel.vendor.combobox.toggle-dropdown": {
+    "defaultMessage": "Liste öffnen oder schließen"
+  },
+  "craftpanel.vendor.confirm-modal.proceed": {
+    "defaultMessage": "Fortfahren"
+  },
+  "craftpanel.vendor.confirm-modal.type-here": {
+    "defaultMessage": "Hier eingeben..."
+  },
+  "craftpanel.vendor.confirm-modal.type-to-confirm-after": {
+    "defaultMessage": "unten ein:"
+  },
+  "craftpanel.vendor.confirm-modal.type-to-confirm-before": {
+    "defaultMessage": "Gib zur Bestätigung"
+  },
+  "craftpanel.vendor.console.command-input-disabled": {
+    "defaultMessage": "Befehlseingabe deaktiviert"
+  },
+  "craftpanel.vendor.console.delete-log-file": {
+    "defaultMessage": "Log-Datei löschen"
+  },
+  "craftpanel.vendor.console.delete-log-file-body": {
+    "defaultMessage": "Das Löschen dieser Log-Datei lässt sich nicht rückgängig machen. Willst du wirklich fortfahren?"
+  },
+  "craftpanel.vendor.console.delete-log-file-failed": {
+    "defaultMessage": "Log-Datei konnte nicht gelöscht werden"
+  },
+  "craftpanel.vendor.console.filter-all": {
+    "defaultMessage": "Alle"
+  },
+  "craftpanel.vendor.console.filter-debug": {
+    "defaultMessage": "Debug"
+  },
+  "craftpanel.vendor.console.filter-error": {
+    "defaultMessage": "Fehler"
+  },
+  "craftpanel.vendor.console.filter-info": {
+    "defaultMessage": "Info"
+  },
+  "craftpanel.vendor.console.filter-trace": {
+    "defaultMessage": "Trace"
+  },
+  "craftpanel.vendor.console.filter-warn": {
+    "defaultMessage": "Warnung"
+  },
+  "craftpanel.vendor.console.irreversible": {
+    "defaultMessage": "Das lässt sich nicht rückgängig machen"
+  },
+  "craftpanel.vendor.console.problems-detected": {
+    "defaultMessage": "{count} {count, plural, one {Problem} other {Probleme}} erkannt"
+  },
+  "craftpanel.vendor.console.search-logs": {
+    "defaultMessage": "Logs durchsuchen"
+  },
+  "craftpanel.vendor.console.server-not-running": {
+    "defaultMessage": "Der Server läuft nicht"
+  },
+  "craftpanel.vendor.console.share-logs": {
+    "defaultMessage": "Logs teilen"
+  },
+  "craftpanel.vendor.console.share-logs-failed": {
+    "defaultMessage": "Logs konnten nicht geteilt werden"
+  },
+  "craftpanel.vendor.console.unknown-error": {
+    "defaultMessage": "Unbekannter Fehler."
+  },
+  "craftpanel.vendor.content-modals.deletion-backup-name": {
+    "defaultMessage": "Vor dem Löschen"
+  },
+  "craftpanel.vendor.content-modals.deletion-backup-name-with-tip": {
+    "defaultMessage": "Vor dem Löschen ({tip})"
+  },
+  "craftpanel.vendor.content-modals.modpack-backup-name": {
+    "defaultMessage": "Vor {action, select, downgrade {dem Modpack-Downgrade} other {dem Modpack-Update}}"
+  },
+  "craftpanel.vendor.content-modals.modpack-backup-name-with-tip": {
+    "defaultMessage": "Vor {action, select, downgrade {dem Modpack-Downgrade} other {dem Modpack-Update}} ({tip})"
+  },
+  "craftpanel.vendor.date-picker.clear-date": {
+    "defaultMessage": "Datum entfernen"
+  },
+  "craftpanel.vendor.date-picker.enter-date": {
+    "defaultMessage": "Datum eingeben"
+  },
+  "craftpanel.vendor.dropdown.select-an-option": {
+    "defaultMessage": "Option auswählen"
+  },
+  "craftpanel.vendor.error-card.copy-information": {
+    "defaultMessage": "Informationen kopieren"
+  },
+  "craftpanel.vendor.files.redo-failed-text": {
+    "defaultMessage": "{type, select, move {Das letzte Verschieben} other {Das letzte Umbenennen}} konnte nicht wiederholt werden"
+  },
+  "craftpanel.vendor.files.redo-failed-title": {
+    "defaultMessage": "Wiederholen fehlgeschlagen"
+  },
+  "craftpanel.vendor.files.redone-text": {
+    "defaultMessage": "{fileName} wurde erneut {type, select, move {verschoben} other {umbenannt}}"
+  },
+  "craftpanel.vendor.files.redone-title": {
+    "defaultMessage": "{type, select, move {Verschieben} other {Umbenennen}} wiederholt"
+  },
+  "craftpanel.vendor.files.undo-failed-text": {
+    "defaultMessage": "{type, select, move {Das letzte Verschieben} other {Das letzte Umbenennen}} konnte nicht rückgängig gemacht werden"
+  },
+  "craftpanel.vendor.files.undo-failed-title": {
+    "defaultMessage": "Rückgängig machen fehlgeschlagen"
+  },
+  "craftpanel.vendor.files.undone-text": {
+    "defaultMessage": "{fileName} hat wieder {type, select, move {seinen ursprünglichen Ort} other {seinen ursprünglichen Namen}}"
+  },
+  "craftpanel.vendor.files.undone-title": {
+    "defaultMessage": "{type, select, move {Verschieben} other {Umbenennen}} rückgängig gemacht"
+  },
+  "craftpanel.vendor.filter-bar.selected-count": {
+    "defaultMessage": "{count, plural, one {# ausgewählt} other {# ausgewählt}}"
+  },
+  "craftpanel.vendor.inline-backup.cancelled-text": {
+    "defaultMessage": "Die Sicherung wurde abgebrochen. Du kannst eine neue erstellen oder ohne Sicherung weitermachen."
+  },
+  "craftpanel.vendor.inline-backup.cancelled-title": {
+    "defaultMessage": "Sicherung abgebrochen"
+  },
+  "craftpanel.vendor.inline-backup.error-creating": {
+    "defaultMessage": "Sicherung konnte nicht erstellt werden"
+  },
+  "craftpanel.vendor.inline-backup.leave-confirm": {
+    "defaultMessage": "Gerade wird eine Sicherung erstellt. Willst du die Seite wirklich verlassen?"
+  },
+  "craftpanel.vendor.inline-backup.too-fast": {
+    "defaultMessage": "Du erstellst Sicherungen zu schnell."
+  },
+  "craftpanel.vendor.input.clear-input": {
+    "defaultMessage": "Eingabe leeren"
+  },
+  "craftpanel.vendor.installation.before-loader-change": {
+    "defaultMessage": "Vor dem Loader-Wechsel"
+  },
+  "craftpanel.vendor.installation.before-version-change": {
+    "defaultMessage": "Vor dem Versionswechsel"
+  },
+  "craftpanel.vendor.loading.loading": {
+    "defaultMessage": "Wird geladen"
+  },
+  "craftpanel.vendor.modal.content-error": {
+    "defaultMessage": "Etwas ist schiefgelaufen. Der Inhalt dieses Fensters konnte nicht angezeigt werden. Wende dich bitte an den Support und beschreib, was du gerade gemacht hast."
+  },
+  "craftpanel.vendor.multi-select.clear-all": {
+    "defaultMessage": "Alle entfernen"
+  },
+  "craftpanel.vendor.multi-select.no-options-available": {
+    "defaultMessage": "Keine Optionen verfügbar"
+  },
+  "craftpanel.vendor.multi-select.no-results-found": {
+    "defaultMessage": "Keine Ergebnisse gefunden"
+  },
+  "craftpanel.vendor.multi-select.select-options": {
+    "defaultMessage": "Optionen auswählen"
+  },
+  "craftpanel.vendor.multi-select.selected-count": {
+    "defaultMessage": "{count, plural, one {# ausgewählt} other {# ausgewählt}}"
+  },
+  "craftpanel.vendor.notifications.copy-support-details": {
+    "defaultMessage": "Fehlerdetails für den Support kopieren"
+  },
+  "craftpanel.vendor.notifications.copy-to-clipboard": {
+    "defaultMessage": "In die Zwischenablage kopieren"
+  },
+  "craftpanel.vendor.notifications.dismiss": {
+    "defaultMessage": "Schließen"
+  },
+  "craftpanel.vendor.power.action-error": {
+    "defaultMessage": "Bei dieser Aktion ist ein Fehler aufgetreten."
+  },
+  "craftpanel.vendor.power.failed-kill": {
+    "defaultMessage": "Server konnte nicht abgeschossen werden"
+  },
+  "craftpanel.vendor.power.failed-restart": {
+    "defaultMessage": "Server konnte nicht neu gestartet werden"
+  },
+  "craftpanel.vendor.power.failed-start": {
+    "defaultMessage": "Server konnte nicht gestartet werden"
+  },
+  "craftpanel.vendor.power.failed-stop": {
+    "defaultMessage": "Server konnte nicht gestoppt werden"
+  },
+  "craftpanel.vendor.power.force-stop-options": {
+    "defaultMessage": "Optionen zum erzwungenen Stoppen"
+  },
+  "craftpanel.vendor.power.kill-server": {
+    "defaultMessage": "Server abschießen"
+  },
+  "craftpanel.vendor.power.restart": {
+    "defaultMessage": "Neu starten"
+  },
+  "craftpanel.vendor.power.server-starting": {
+    "defaultMessage": "Dein Server startet"
+  },
+  "craftpanel.vendor.power.start": {
+    "defaultMessage": "Starten"
+  },
+  "craftpanel.vendor.power.stopping": {
+    "defaultMessage": "Wird gestoppt"
+  },
+  "craftpanel.vendor.project.by-author": {
+    "defaultMessage": "von"
+  },
+  "craftpanel.vendor.project.no-results-found": {
+    "defaultMessage": "Keine Ergebnisse gefunden"
+  },
+  "craftpanel.vendor.project.search-by-name-or-id": {
+    "defaultMessage": "Nach Name suchen oder ID einfügen..."
+  },
+  "craftpanel.vendor.project.select-project": {
+    "defaultMessage": "Projekt auswählen"
+  },
+  "craftpanel.vendor.properties.advanced-properties": {
+    "defaultMessage": "Erweiterte Eigenschaften"
+  },
+  "craftpanel.vendor.properties.allow-cheats": {
+    "defaultMessage": "Cheats erlauben"
+  },
+  "craftpanel.vendor.properties.allow-flight": {
+    "defaultMessage": "Fliegen erlauben"
+  },
+  "craftpanel.vendor.properties.difficulty": {
+    "defaultMessage": "Schwierigkeit"
+  },
+  "craftpanel.vendor.properties.enable-spawn-protection": {
+    "defaultMessage": "Spawnschutz aktivieren"
+  },
+  "craftpanel.vendor.properties.enable-whitelist": {
+    "defaultMessage": "Whitelist aktivieren"
+  },
+  "craftpanel.vendor.properties.error-occurred": {
+    "defaultMessage": "Ein Fehler ist aufgetreten."
+  },
+  "craftpanel.vendor.properties.files-tab": {
+    "defaultMessage": "Dateien-Tab"
+  },
+  "craftpanel.vendor.properties.gamemode": {
+    "defaultMessage": "Spielmodus"
+  },
+  "craftpanel.vendor.properties.group-performance": {
+    "defaultMessage": "Leistung"
+  },
+  "craftpanel.vendor.properties.group-resource-pack": {
+    "defaultMessage": "Ressourcenpaket"
+  },
+  "craftpanel.vendor.properties.intro-after-wiki": {
+    "defaultMessage": "mehr dazu."
+  },
+  "craftpanel.vendor.properties.intro-before-files-tab": {
+    "defaultMessage": "Bearbeite hier die Eigenschaften des Minecraft-Servers. Die ganze Datei kannst du im"
+  },
+  "craftpanel.vendor.properties.intro-before-wiki": {
+    "defaultMessage": "bearbeiten. Wenn du dir bei einer Einstellung unsicher bist, findest du im"
+  },
+  "craftpanel.vendor.properties.max-players": {
+    "defaultMessage": "Maximale Spieler"
+  },
+  "craftpanel.vendor.properties.minecraft-wiki": {
+    "defaultMessage": "Minecraft Wiki"
+  },
+  "craftpanel.vendor.properties.missing-properties": {
+    "defaultMessage": "In deiner server.properties fehlen einige erwartete Eigenschaften. Meist heißt das, dass der Server seinen ersten Start noch nicht abgeschlossen hat."
+  },
+  "craftpanel.vendor.properties.motd-placeholder": {
+    "defaultMessage": "Ein Minecraft-Server"
+  },
+  "craftpanel.vendor.properties.no-properties-found": {
+    "defaultMessage": "Keine Eigenschaften gefunden"
+  },
+  "craftpanel.vendor.properties.no-properties-match": {
+    "defaultMessage": "Keine Eigenschaft passt zu „{query}“."
+  },
+  "craftpanel.vendor.properties.option-creative": {
+    "defaultMessage": "Kreativ"
+  },
+  "craftpanel.vendor.properties.option-easy": {
+    "defaultMessage": "Einfach"
+  },
+  "craftpanel.vendor.properties.option-hard": {
+    "defaultMessage": "Schwer"
+  },
+  "craftpanel.vendor.properties.option-hardcore": {
+    "defaultMessage": "Hardcore"
+  },
+  "craftpanel.vendor.properties.option-normal": {
+    "defaultMessage": "Normal"
+  },
+  "craftpanel.vendor.properties.option-peaceful": {
+    "defaultMessage": "Friedlich"
+  },
+  "craftpanel.vendor.properties.option-survival": {
+    "defaultMessage": "Überleben"
+  },
+  "craftpanel.vendor.properties.other-properties-before-files-tab": {
+    "defaultMessage": "Alle anderen Eigenschaften der server.properties bearbeitest du im"
+  },
+  "craftpanel.vendor.properties.property-max-tick-time": {
+    "defaultMessage": "Maximale Tick-Dauer"
+  },
+  "craftpanel.vendor.properties.property-pause-when-empty-seconds": {
+    "defaultMessage": "Pause bei leerem Server (Sekunden)"
+  },
+  "craftpanel.vendor.properties.property-player-idle-timeout": {
+    "defaultMessage": "Zeitlimit für untätige Spieler"
+  },
+  "craftpanel.vendor.properties.property-require-resource-pack": {
+    "defaultMessage": "Ressourcenpaket erzwingen"
+  },
+  "craftpanel.vendor.properties.property-resource-pack": {
+    "defaultMessage": "Ressourcenpaket"
+  },
+  "craftpanel.vendor.properties.property-resource-pack-id": {
+    "defaultMessage": "Ressourcenpaket-ID"
+  },
+  "craftpanel.vendor.properties.property-resource-pack-sha1": {
+    "defaultMessage": "Ressourcenpaket-SHA1"
+  },
+  "craftpanel.vendor.properties.property-simulation-distance": {
+    "defaultMessage": "Simulationsdistanz"
+  },
+  "craftpanel.vendor.properties.property-sync-chunk-writes": {
+    "defaultMessage": "Chunks synchron schreiben"
+  },
+  "craftpanel.vendor.properties.property-view-distance": {
+    "defaultMessage": "Sichtweite"
+  },
+  "craftpanel.vendor.properties.protection-radius": {
+    "defaultMessage": "Schutzradius"
+  },
+  "craftpanel.vendor.properties.search-label": {
+    "defaultMessage": "Servereigenschaften durchsuchen"
+  },
+  "craftpanel.vendor.properties.search-placeholder": {
+    "defaultMessage": "Servereigenschaften durchsuchen …"
+  },
+  "craftpanel.vendor.properties.type-here": {
+    "defaultMessage": "Hier eingeben …"
+  },
+  "craftpanel.vendor.properties.update-failed-title": {
+    "defaultMessage": "Servereigenschaften konnten nicht aktualisiert werden"
+  },
+  "craftpanel.vendor.properties.updated-text": {
+    "defaultMessage": "Deine Servereigenschaften wurden geändert."
+  },
+  "craftpanel.vendor.properties.updated-title": {
+    "defaultMessage": "Servereigenschaften aktualisiert"
+  },
+  "craftpanel.vendor.save-banner.restarting": {
+    "defaultMessage": "Wird neu gestartet …"
+  },
+  "craftpanel.vendor.save-banner.save-and-restart": {
+    "defaultMessage": "Speichern & neu starten"
+  },
+  "craftpanel.vendor.save-banner.save-and-start": {
+    "defaultMessage": "Speichern & starten"
+  },
+  "craftpanel.vendor.save-banner.saving": {
+    "defaultMessage": "Wird gespeichert …"
+  },
+  "craftpanel.vendor.save-banner.starting": {
+    "defaultMessage": "Wird gestartet …"
+  },
+  "craftpanel.vendor.save-banner.unsaved-changes": {
+    "defaultMessage": "Du hast ungespeicherte Änderungen."
+  },
+  "craftpanel.vendor.search.clear-all-filters": {
+    "defaultMessage": "Alle Filter entfernen"
+  },
+  "craftpanel.vendor.search.select-type": {
+    "defaultMessage": "Typ auswählen"
+  },
+  "craftpanel.vendor.search.server-sort-date-published": {
+    "defaultMessage": "Veröffentlichungsdatum"
+  },
+  "craftpanel.vendor.search.server-sort-date-updated": {
+    "defaultMessage": "Aktualisierungsdatum"
+  },
+  "craftpanel.vendor.search.sort-date-published": {
+    "defaultMessage": "Veröffentlichungsdatum"
+  },
+  "craftpanel.vendor.search.sort-date-updated": {
+    "defaultMessage": "Aktualisierungsdatum"
+  },
+  "craftpanel.vendor.search.sort-downloads": {
+    "defaultMessage": "Downloads"
+  },
+  "craftpanel.vendor.search.sort-followers": {
+    "defaultMessage": "Follower"
+  },
+  "craftpanel.vendor.search.sort-players": {
+    "defaultMessage": "Spieler"
+  },
+  "craftpanel.vendor.search.sort-relevance": {
+    "defaultMessage": "Relevanz"
+  },
+  "craftpanel.vendor.search.sort-verified-plays": {
+    "defaultMessage": "Verifizierte Spielstarts"
+  },
+  "craftpanel.vendor.server-icon.alt": {
+    "defaultMessage": "Server-Symbol"
+  },
+  "craftpanel.vendor.server-labels.change-loader": {
+    "defaultMessage": "Server-Loader ändern"
+  },
+  "craftpanel.vendor.server-labels.change-version": {
+    "defaultMessage": "Serverversion ändern"
+  },
+  "craftpanel.vendor.server-labels.players": {
+    "defaultMessage": "{current} / {max} Spieler"
+  },
+  "craftpanel.vendor.server-notice.survey-id": {
+    "defaultMessage": "Umfrage-ID:"
+  },
+  "craftpanel.vendor.server-stats.memory": {
+    "defaultMessage": "Arbeitsspeicher"
+  },
+  "craftpanel.vendor.server-stats.storage": {
+    "defaultMessage": "Speicherplatz"
+  },
+  "craftpanel.vendor.share-modal.copy-failed": {
+    "defaultMessage": "Text konnte nicht kopiert werden"
+  },
+  "craftpanel.vendor.share-modal.copy-link": {
+    "defaultMessage": "Link kopieren"
+  },
+  "craftpanel.vendor.share-modal.copy-qr-code": {
+    "defaultMessage": "QR-Code kopieren"
+  },
+  "craftpanel.vendor.share-modal.copy-text": {
+    "defaultMessage": "Text kopieren"
+  },
+  "craftpanel.vendor.share-modal.link-copied-text": {
+    "defaultMessage": "Der Link wurde in deine Zwischenablage kopiert."
+  },
+  "craftpanel.vendor.share-modal.link-copied-title": {
+    "defaultMessage": "Link kopiert"
+  },
+  "craftpanel.vendor.share-modal.open-in-browser": {
+    "defaultMessage": "Link im Browser öffnen"
+  },
+  "craftpanel.vendor.share-modal.open-in-new-tab": {
+    "defaultMessage": "In neuem Tab öffnen"
+  },
+  "craftpanel.vendor.share-modal.reddit": {
+    "defaultMessage": "Auf Reddit teilen"
+  },
+  "craftpanel.vendor.share-modal.send-email": {
+    "defaultMessage": "Als E-Mail senden"
+  },
+  "craftpanel.vendor.share-modal.share": {
+    "defaultMessage": "Teilen"
+  },
+  "craftpanel.vendor.share-modal.toot": {
+    "defaultMessage": "Darüber tooten"
+  },
+  "craftpanel.vendor.share-modal.tweet": {
+    "defaultMessage": "Darüber twittern"
+  },
+  "craftpanel.vendor.subdomain.copy-custom-url": {
+    "defaultMessage": "Eigene URL kopieren"
+  },
+  "craftpanel.vendor.subdomain.custom-url-copied": {
+    "defaultMessage": "Eigene URL kopiert"
+  },
+  "craftpanel.vendor.subdomain.custom-url-copied-text": {
+    "defaultMessage": "Die URL deines Servers wurde in die Zwischenablage kopiert."
+  },
+  "craftpanel.vendor.table.no-data-available": {
+    "defaultMessage": "Keine Daten vorhanden."
+  },
+  "craftpanel.vendor.terminal.scroll-to-bottom": {
+    "defaultMessage": "Nach unten scrollen"
+  },
+  "craftpanel.vendor.terminal.send-command": {
+    "defaultMessage": "Befehl senden"
+  },
+  "craftpanel.vendor.terminal.server-not-running": {
+    "defaultMessage": "Der Server läuft nicht"
+  },
+  "craftpanel.vendor.upload.uploading-file": {
+    "defaultMessage": "{name} wird hochgeladen ({completed}/{total})"
+  },
+  "craftpanel.vendor.upload.uploading-files": {
+    "defaultMessage": "Dateien werden hochgeladen ({completed}/{total})"
+  }
+}

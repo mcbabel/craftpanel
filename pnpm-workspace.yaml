@@ -1,0 +1,11 @@
+packages:
+  - 'web'
+  - 'vendor/modrinth/*'
+
+allowBuilds:
+  '@parcel/watcher': false
+  canvas: false
+  esbuild: true
+  unrs-resolver: false
+  vue-demi: true
+  workerd: false
