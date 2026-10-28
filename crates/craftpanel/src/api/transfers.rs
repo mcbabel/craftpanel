@@ -221,6 +221,36 @@ async fn settle_now(
     if server.status != ServerStatus::Available {
         return Err(Failure::conflict("server_not_ready", "only a server that is set up and idle can change hands"));
     }
+    let locked = sqlx::query(
+        "UPDATE servers SET status = 'installing', updated_at = ? \
+         WHERE id = ? AND owner_id = ? AND status = 'available' AND power_state IN ('stopped', 'crashed')",
+    )
+    .bind(Timestamp::now())
+    .bind(server.id)
+    .bind(server.owner_id)
+    .execute(&state.pool)
+    .await?
+    .rows_affected()
+        == 1;
+    if !locked {
+        return Err(Failure::conflict("server_running", "stop the server before it changes hands"));
+    }
+    let outcome = while_locked(state, live, playit, server, receiver).await;
+    sqlx::query("UPDATE servers SET status = 'available', updated_at = ? WHERE id = ? AND status = 'installing'")
+        .bind(Timestamp::now())
+        .bind(server.id)
+        .execute(&state.pool)
+        .await?;
+    outcome
+}
+
+async fn while_locked(
+    state: &AppState,
+    live: &LiveServers,
+    playit: &Playit,
+    server: &ServerFacts,
+    receiver: &UserRow,
+) -> Result<()> {
     if !live.among(&[server.id]).await.is_empty() {
         return Err(Failure::conflict("server_running", "stop the server before it changes hands"));
     }
@@ -620,6 +650,20 @@ mod tests {
             .call(as_user(send("POST", &format!("/servers/{server}/transfer"), json!({ "to": "eve" })), &boss_secret))
             .await;
         assert_eq!(status, StatusCode::CONFLICT);
+        assert_eq!(answer["error"], "server_running");
+        let status: ServerStatus = sqlx::query_scalar("SELECT status FROM servers WHERE id = ?")
+            .bind(server)
+            .fetch_one(&running.pool)
+            .await
+            .unwrap();
+        assert_eq!(status, ServerStatus::Available, "the lock is let go again");
+
+        sqlx::query("UPDATE servers SET power_state = 'starting' WHERE id = ?").bind(server).execute(&running.pool).await.unwrap();
+        let idle = running.with_live(LiveServers::none());
+        let (status, answer) = idle
+            .call(as_user(send("POST", &format!("/servers/{server}/transfer"), json!({ "to": "eve" })), &boss_secret))
+            .await;
+        assert_eq!(status, StatusCode::CONFLICT, "a start that is under way counts as running");
         assert_eq!(answer["error"], "server_running");
     }
 }
