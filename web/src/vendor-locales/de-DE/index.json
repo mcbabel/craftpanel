@@ -284,6 +284,9 @@
   "craftpanel.vendor.installation.before-version-change": {
     "defaultMessage": "Vor dem Versionswechsel"
   },
+  "craftpanel.vendor.installation.ignore-conflicts": {
+    "defaultMessage": "Ignorieren und speichern"
+  },
   "craftpanel.vendor.loading.loading": {
     "defaultMessage": "Wird geladen"
   },

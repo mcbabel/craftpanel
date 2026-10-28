@@ -269,7 +269,16 @@ export function useInstallationSettings(options: InstallationSettingsOptions) {
 		await loadContent()
 	}
 
-	async function install(platform: string, gameVersion: string, loaderVersionId: string | null) {
+	function gameVersionAffectsContent(platform: string): boolean {
+		return !isLoaderId(platform, loaders.value) || LOADER_FAMILY[platform] !== 'proxy'
+	}
+
+	async function install(
+		platform: string,
+		gameVersion: string,
+		loaderVersionId: string | null,
+		keepContent = false,
+	) {
 		if (!isLoaderId(platform, loaders.value)) throw new Error(formatMessage(messages.unknownLoader))
 		const sameFamily = LOADER_FAMILY[platform] === LOADER_FAMILY[currentPlatform.value]
 		await runOperation(async () => {
@@ -277,7 +286,7 @@ export function useInstallationSettings(options: InstallationSettingsOptions) {
 				loader: platform,
 				game_version: gameVersion,
 				loader_version: platform === 'vanilla' ? null : loaderVersionId,
-				content_policy: sameFamily ? 'keep' : 'wipe_mods',
+				content_policy: sameFamily || keepContent ? 'keep' : 'wipe_mods',
 			})
 			if (accepted.warnings?.includes('properties_will_be_ignored')) {
 				options.notify({
@@ -294,7 +303,12 @@ export function useInstallationSettings(options: InstallationSettingsOptions) {
 		const platformChanged = platform !== currentPlatform.value
 		const gameVersionChanged = gameVersion !== currentGameVersion.value
 		try {
-			if (!platformChanged && gameVersionChanged && isLoaderId(platform, loaders.value)) {
+			if (
+				!platformChanged &&
+				gameVersionChanged &&
+				isLoaderId(platform, loaders.value) &&
+				gameVersionAffectsContent(platform)
+			) {
 				await runOperation(
 					() =>
 						client.content.changeGameVersion(serverId, {
@@ -308,6 +322,40 @@ export function useInstallationSettings(options: InstallationSettingsOptions) {
 				return
 			}
 			await install(platform, gameVersion, loaderVersionId)
+		} catch (cause) {
+			reportError(messages.saveFailed, cause)
+			throw cause
+		}
+	}
+
+	async function saveIgnoringConflicts(
+		platform: string,
+		gameVersion: string,
+		loaderVersionId: string | null,
+	) {
+		if (isBusy.value) return
+		const platformChanged = platform !== currentPlatform.value
+		const gameVersionChanged = gameVersion !== currentGameVersion.value
+		try {
+			if (
+				!platformChanged &&
+				gameVersionChanged &&
+				isLoaderId(platform, loaders.value) &&
+				gameVersionAffectsContent(platform)
+			) {
+				await runOperation(
+					() =>
+						client.content.changeGameVersion(serverId, {
+							game_version: gameVersion,
+							loader: platform,
+							loader_version: loaderVersionId,
+							incompatible_content: 'keep',
+						}),
+					messages.saveFailed,
+				)
+				return
+			}
+			await install(platform, gameVersion, loaderVersionId, true)
 		} catch (cause) {
 			reportError(messages.saveFailed, cause)
 			throw cause
@@ -647,6 +695,8 @@ export function useInstallationSettings(options: InstallationSettingsOptions) {
 		disableAllContent,
 		disableIncompatibleContent,
 		saveWithoutAutoFix,
+		saveIgnoringConflicts,
+		gameVersionAffectsContent,
 		previewSave,
 		editingPlatformRef: editingPlatform,
 		editingGameVersionRef: editingGameVersion,

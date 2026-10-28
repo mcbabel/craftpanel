@@ -420,6 +420,29 @@ async fn a_plugin_platform_installs_into_plugins_and_a_modloader_into_mods() {
 }
 
 #[tokio::test]
+async fn a_proxy_takes_plugins_for_the_newest_minecraft_release_and_not_its_own_version() {
+    let panel = Panel::new("velocity", "3.4.0").await;
+    assert_eq!(panel.listed().await.game_version, "1.21.1");
+
+    let version = panel.publish("PROXY", "v1", "proxy-plugin.jar", b"bytes");
+    panel.upstream.set_versions("PROXY", vec![version]);
+    let answer = panel
+        .content
+        .install(
+            panel.server,
+            &ContentInstallRequest {
+                items: vec![ContentInstallTarget { project_id: "PROXY".to_owned(), version_id: None }],
+                resolve_dependencies: false,
+            },
+            None,
+        )
+        .await
+        .expect("an accepted install");
+    panel.settled(answer.operation.id).await;
+    assert!(panel.exists("plugins/proxy-plugin.jar"));
+}
+
+#[tokio::test]
 async fn installing_nothing_that_fits_is_an_http_failure_and_not_a_run() {
     let panel = Panel::new("paper", "1.21.1").await;
     let mut fabric_only = a_version("v1", "MOD", "release", "2026-06-01T00:00:00Z");

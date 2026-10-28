@@ -100,31 +100,17 @@ impl Job {
     }
 }
 
-pub fn check_change(
-    current: Option<LoaderId>,
-    wanted: LoaderId,
-    policy: ContentPolicy,
-) -> Result<Vec<ServerWarning>> {
+pub fn check_change(current: Option<LoaderId>, wanted: LoaderId) -> Vec<ServerWarning> {
     let Some(current) = current else {
-        return Ok(Vec::new());
+        return Vec::new();
     };
-    if current.family() != wanted.family() && policy != ContentPolicy::WipeMods {
-        return Err(Failure::conflict(
-            "loader_change_needs_wipe",
-            format!(
-                "{current} and {wanted} do not read each other's content; \
-                 send content_policy \"wipe_mods\""
-            ),
-        ));
-    }
-
     let was_proxy = current == LoaderId::Velocity;
     let will_be_proxy = wanted == LoaderId::Velocity;
-    Ok(if was_proxy == will_be_proxy {
+    if was_proxy == will_be_proxy {
         Vec::new()
     } else {
         vec![ServerWarning::PropertiesWillBeIgnored]
-    })
+    }
 }
 
 pub struct Runner {
@@ -516,44 +502,28 @@ mod tests {
     use crate::settings::harness::a_dir;
 
     #[test]
-    fn a_swap_inside_a_family_keeps_the_content_and_one_across_it_does_not() {
-        assert_eq!(
-            check_change(Some(LoaderId::Paper), LoaderId::Purpur, ContentPolicy::Keep).unwrap(),
-            []
-        );
-        assert_eq!(
-            check_change(Some(LoaderId::Fabric), LoaderId::Quilt, ContentPolicy::Keep).unwrap(),
-            []
-        );
-
-        let refusal =
-            check_change(Some(LoaderId::Paper), LoaderId::Fabric, ContentPolicy::Keep).unwrap_err();
-        assert_eq!(refusal.code(), "loader_change_needs_wipe");
-        assert_eq!(refusal.status(), axum::http::StatusCode::CONFLICT);
-
-        assert!(check_change(Some(LoaderId::Paper), LoaderId::Fabric, ContentPolicy::WipeMods)
-            .is_ok());
+    fn a_swap_between_game_servers_warns_about_nothing() {
+        assert_eq!(check_change(Some(LoaderId::Paper), LoaderId::Purpur), []);
+        assert_eq!(check_change(Some(LoaderId::Fabric), LoaderId::Quilt), []);
+        assert_eq!(check_change(Some(LoaderId::Paper), LoaderId::Fabric), []);
     }
 
     #[test]
     fn a_move_to_or_from_a_proxy_warns_that_the_properties_stop_being_read() {
         assert_eq!(
-            check_change(Some(LoaderId::Paper), LoaderId::Velocity, ContentPolicy::WipeMods)
-                .unwrap(),
+            check_change(Some(LoaderId::Paper), LoaderId::Velocity),
             [ServerWarning::PropertiesWillBeIgnored]
         );
         assert_eq!(
-            check_change(Some(LoaderId::Velocity), LoaderId::Paper, ContentPolicy::WipeMods)
-                .unwrap(),
+            check_change(Some(LoaderId::Velocity), LoaderId::Paper),
             [ServerWarning::PropertiesWillBeIgnored]
         );
         assert_eq!(
-            check_change(Some(LoaderId::Velocity), LoaderId::Velocity, ContentPolicy::Keep)
-                .unwrap(),
+            check_change(Some(LoaderId::Velocity), LoaderId::Velocity),
             []
         );
         assert_eq!(
-            check_change(None, LoaderId::Velocity, ContentPolicy::Keep).unwrap(),
+            check_change(None, LoaderId::Velocity),
             [],
             "a server without a loader is not changing away from one"
         );

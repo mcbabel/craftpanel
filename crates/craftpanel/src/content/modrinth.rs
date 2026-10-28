@@ -176,6 +176,14 @@ where
 #[derive(Debug, Deserialize)]
 struct GameVersionTag {
     version: String,
+    #[serde(default)]
+    version_type: String,
+}
+
+#[derive(Clone)]
+struct KnownVersions {
+    all: Arc<[String]>,
+    newest_release: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -209,7 +217,7 @@ pub struct Modrinth {
     pool: SqlitePool,
     bucket: Arc<Mutex<Bucket>>,
     background: Arc<Mutex<Bucket>>,
-    tags: Arc<Mutex<Option<(Instant, Arc<[String]>)>>>,
+    tags: Arc<Mutex<Option<(Instant, KnownVersions)>>>,
     backoff: Duration,
 }
 
@@ -237,9 +245,17 @@ impl Modrinth {
     }
 
     pub async fn game_versions(&self) -> Option<Arc<[String]>> {
+        Some(self.known_versions().await?.all)
+    }
+
+    pub async fn newest_release(&self) -> Option<String> {
+        self.known_versions().await?.newest_release
+    }
+
+    async fn known_versions(&self) -> Option<KnownVersions> {
         if let Some((fetched, known)) = self.tags.lock().await.as_ref() {
             if fetched.elapsed() < TAGS_TTL {
-                return Some(Arc::clone(known));
+                return Some(known.clone());
             }
         }
 
@@ -248,8 +264,13 @@ impl Modrinth {
             return None;
         }
         let tags: Vec<GameVersionTag> = parse(&answer.body).ok()?;
-        let known: Arc<[String]> = tags.into_iter().map(|tag| tag.version).collect();
-        *self.tags.lock().await = Some((Instant::now(), Arc::clone(&known)));
+        let newest_release =
+            tags.iter().find(|tag| tag.version_type == "release").map(|tag| tag.version.clone());
+        let known = KnownVersions {
+            all: tags.into_iter().map(|tag| tag.version).collect(),
+            newest_release,
+        };
+        *self.tags.lock().await = Some((Instant::now(), known.clone()));
         Some(known)
     }
 

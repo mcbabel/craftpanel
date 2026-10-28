@@ -101,6 +101,14 @@ export interface InstallationSettingsContext {
 		loaderVersionId: string | null,
 	) => Promise<void>
 
+	saveIgnoringConflicts?: (
+		platform: string,
+		gameVersion: string,
+		loaderVersionId: string | null,
+	) => Promise<void>
+
+	gameVersionAffectsContent?: (platform: string) => boolean
+
 	previewSave?: (
 		platform: string,
 		gameVersion: string,

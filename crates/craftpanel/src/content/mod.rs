@@ -28,7 +28,7 @@ use crate::auth::disk::{self, Disks};
 use crate::auth::error::{Failure, Result};
 use crate::helper::Helper;
 use crate::model::{
-    AlwaysFalse, ApiContentItem, ContentModpack, ContentProject, ContentSourceKind, ContentVersion, Id, LoaderId, ModpackSourceKind, ModrinthOwner, Operation,
+    AlwaysFalse, ApiContentItem, ContentModpack, ContentProject, ContentSourceKind, ContentVersion, Id, LoaderFamily, LoaderId, ModpackSourceKind, ModrinthOwner, Operation,
     OperationError, OperationErrorStep, OperationKind, Permission, PropertiesFields, Timestamp,
     UpdateChannel, KNOWN_PROPERTY_KEYS,
 };
@@ -150,7 +150,7 @@ impl Content {
             content_type: facts.loader.content_type(),
             loader: facts.loader,
             loader_version: facts.loader_version.clone(),
-            game_version: facts.game_version.clone(),
+            game_version: facts.content_version.clone(),
             update_channel: facts.update_channel,
             updates_checked_at: facts.updates_checked_at,
             permissions: ContentPermissions {
@@ -886,12 +886,21 @@ impl Content {
         let (id, owner_id, loader, loader_version, game_version, update_channel, checked) =
             row.ok_or_else(|| Failure::not_found("server_not_found", "no such server"))?;
 
+        let loader = loader.unwrap_or(LoaderId::Vanilla);
+        let game_version = game_version.unwrap_or_default();
+        let content_version = if loader.family() == LoaderFamily::Proxy {
+            self.modrinth.newest_release().await.unwrap_or_else(|| game_version.clone())
+        } else {
+            game_version.clone()
+        };
+
         Ok(ServerFacts {
             id,
             owner_id,
-            loader: loader.unwrap_or(LoaderId::Vanilla),
+            loader,
             loader_version,
-            game_version: game_version.unwrap_or_default(),
+            game_version,
+            content_version,
             update_channel,
             updates_checked_at: checked,
         })
@@ -1125,13 +1134,14 @@ pub struct ServerFacts {
     pub loader: LoaderId,
     pub loader_version: Option<String>,
     pub game_version: String,
+    pub content_version: String,
     pub update_channel: UpdateChannel,
     pub updates_checked_at: Option<Timestamp>,
 }
 
 impl ServerFacts {
     fn target(&self) -> Target {
-        Target::new(self.game_version.clone(), self.loader)
+        Target::new(self.content_version.clone(), self.loader)
     }
 }
 
@@ -1615,6 +1625,7 @@ impl Content {
             loader: target.loader,
             loader_version,
             game_version: target.game_version.clone(),
+            content_version: target.game_version.clone(),
             ..facts.clone()
         })
     }

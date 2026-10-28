@@ -491,7 +491,7 @@ async fn install(
     let loader = install::read_loader(&request.loader)?;
     refuse_while_running(&live, server).await?;
 
-    let warnings = install::check_change(row.loader, loader, request.content_policy)?;
+    let warnings = install::check_change(row.loader, loader);
     let build = resolve(loader, &request.game_version, request.loader_version.as_deref()).await?;
 
     let plan = Plan {
@@ -1616,24 +1616,6 @@ mod tests {
             .await;
         assert_eq!(unknown.status(), StatusCode::UNPROCESSABLE_ENTITY);
         assert_eq!(body_json(unknown).await["error"], "unknown_loader");
-
-        let wipe = world
-            .call(
-                send(
-                    "POST",
-                    &format!("/servers/{}/install", world.server),
-                    serde_json::json!({
-                        "loader": "fabric",
-                        "game_version": "1.21.8",
-                        "loader_version": null,
-                        "content_policy": "keep"
-                    }),
-                ),
-                &secret,
-            )
-            .await;
-        assert_eq!(wipe.status(), StatusCode::CONFLICT);
-        assert_eq!(body_json(wipe).await["error"], "loader_change_needs_wipe");
     }
 
     #[tokio::test]

@@ -46,6 +46,14 @@
 					<XIcon />
 					{{ formatMessage(commonMessages.cancelButton) }}
 				</Button>
+				<Button :disabled="buttonsDisabled || loading" @click="handleIgnore">
+					<SpinnerIcon
+						v-if="loading && loadingAction === 'ignore'"
+						class="size-5 animate-spin"
+					/>
+					<CheckIcon v-else class="size-5" />
+					{{ formatMessage(messages.ignoreButton) }}
+				</Button>
 				<template v-if="variant === 'game-version-change'">
 					<Button :disabled="buttonsDisabled || loading" @click="handleDisableConflicts">
 						<SpinnerIcon
@@ -88,6 +96,7 @@
 
 <script setup lang="ts">
 import {
+	CheckIcon,
 	CircleAlertIcon,
 	HammerIcon,
 	PowerOffIcon,
@@ -114,6 +123,7 @@ const emit = defineEmits<{
 	'confirm-loader-change': []
 	'auto-fix': []
 	'disable-conflicts': []
+	ignore: []
 	'reset-server': []
 	cancel: []
 }>()
@@ -122,7 +132,7 @@ const { formatMessage } = useVIntl()
 
 const modal = ref<InstanceType<typeof NewModal>>()
 const buttonsDisabled = ref(false)
-const loadingAction = ref<'auto-fix' | 'disable-conflicts' | null>(null)
+const loadingAction = ref<'auto-fix' | 'disable-conflicts' | 'ignore' | null>(null)
 
 function show(e?: MouseEvent) {
 	loadingAction.value = null
@@ -150,6 +160,11 @@ function handleAutoFix() {
 function handleDisableConflicts() {
 	loadingAction.value = 'disable-conflicts'
 	emit('disable-conflicts')
+}
+
+function handleIgnore() {
+	loadingAction.value = 'ignore'
+	emit('ignore')
 }
 
 function handleResetServer() {
@@ -191,6 +206,10 @@ const messages = defineMessages({
 	disableConflictsButton: {
 		id: 'installation-settings.incompatible-content.disable-conflicts-button',
 		defaultMessage: 'Disable conflicts',
+	},
+	ignoreButton: {
+		id: 'craftpanel.vendor.installation.ignore-conflicts',
+		defaultMessage: 'Ignore and save',
 	},
 	beforeLoaderChange: {
 		id: 'craftpanel.vendor.installation.before-loader-change',

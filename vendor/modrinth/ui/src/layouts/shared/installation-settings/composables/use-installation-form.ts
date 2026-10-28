@@ -132,7 +132,9 @@ export function useInstallationForm(
 		try {
 			const platformChanged = selectedPlatform.value !== ctx.currentPlatform.value
 			const isModded = ctx.currentPlatform.value !== 'vanilla'
-			const gameVersionChanged = selectedGameVersion.value !== ctx.currentGameVersion.value
+			const gameVersionChanged =
+				selectedGameVersion.value !== ctx.currentGameVersion.value &&
+				(ctx.gameVersionAffectsContent?.(selectedPlatform.value) ?? true)
 
 			if (platformChanged && ctx.disableAllContent) {
 				debug('save: platform changed, showing incompatible modal', {
@@ -323,6 +325,33 @@ export function useInstallationForm(
 						? (loaderVersionEntries.value[selectedLoaderVersion.value]?.id ?? null)
 						: null
 				await ctx.saveWithoutAutoFix(
+					selectedPlatform.value,
+					selectedGameVersion.value,
+					loaderVersionId,
+				)
+				if (ctx.afterSave) await ctx.afterSave()
+				isEditing.value = false
+				isSaving.value = false
+			} else {
+				await performSave()
+			}
+		} catch {
+			incompatibleContentVariant.value = null
+			isSaving.value = false
+		}
+	}
+
+	async function confirmIgnore() {
+		if (ctx.isBusy.value) return
+		isSaving.value = true
+		try {
+			incompatibleContentVariant.value = null
+			if (ctx.saveIgnoringConflicts) {
+				const loaderVersionId =
+					selectedPlatform.value !== 'vanilla'
+						? (loaderVersionEntries.value[selectedLoaderVersion.value]?.id ?? null)
+						: null
+				await ctx.saveIgnoringConflicts(
 					selectedPlatform.value,
 					selectedGameVersion.value,
 					loaderVersionId,
@@ -563,6 +592,7 @@ export function useInstallationForm(
 		confirmLoaderChange,
 		confirmAutoFix,
 		confirmDisableConflicts,
+		confirmIgnore,
 		cancelPreview,
 		cancelEditing,
 		updatingModpack,

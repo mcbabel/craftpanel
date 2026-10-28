@@ -1095,6 +1095,7 @@ const messages = defineMessages({
 				@confirm-loader-change="form.confirmLoaderChange()"
 				@auto-fix="form.confirmAutoFix()"
 				@disable-conflicts="form.confirmDisableConflicts()"
+				@ignore="form.confirmIgnore()"
 				@reset-server="handleIncompatibleResetServer"
 				@cancel="form.cancelPreview()"
 			/>
