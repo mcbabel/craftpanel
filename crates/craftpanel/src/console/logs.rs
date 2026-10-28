@@ -119,6 +119,17 @@ pub fn target(raw: &str) -> Result<RelPath> {
     Ok(at)
 }
 
+pub fn shareable(at: &RelPath) -> bool {
+    let Some(name) = at.name().map(str::to_ascii_lowercase) else { return false };
+    if name.ends_with(".log") {
+        return true;
+    }
+    SOURCES.iter().any(|(directory, _, endings)| {
+        at.segments().first().is_some_and(|first| first == directory)
+            && endings.iter().any(|ending| name.ends_with(ending))
+    })
+}
+
 pub fn on_the_wire(at: &RelPath) -> String {
     at.segments().join("/")
 }
@@ -301,6 +312,23 @@ mod tests {
 
     fn root(sandbox: &Sandbox) -> Root {
         Root::open(sandbox.server_dir()).expect("the server directory")
+    }
+
+    #[test]
+    fn only_a_text_log_may_be_shared() {
+        let shareable = |raw: &str| shareable(&RelPath::parse(raw).expect("a path"));
+        for path in [
+            "/logs/latest.log",
+            "/logs/2024-05-01-1.log.gz",
+            "/logs/debug.txt",
+            "/crash-reports/crash-2024-05-01_12.00.00-server.txt",
+            "/plugins/LuckPerms/logs/actions.LOG",
+        ] {
+            assert!(shareable(path), "{path}");
+        }
+        for path in ["/", "/server.properties", "/logs/usercache.json", "/plugins/a.txt", "/logs"] {
+            assert!(!shareable(path), "{path}");
+        }
     }
 
     fn gzip(bytes: &[u8]) -> Vec<u8> {

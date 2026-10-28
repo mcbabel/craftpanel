@@ -88,6 +88,18 @@ const messages = defineMessages({
 		id: 'craftpanel.files.zip-no-room',
 		defaultMessage: 'There is not enough room left in your disk budget for this ZIP.',
 	},
+	logShared: { id: 'craftpanel.files.log-shared', defaultMessage: 'Log shared' },
+	logSharedCopied: {
+		id: 'craftpanel.files.log-shared-copied',
+		defaultMessage: 'Log shared, link copied',
+	},
+	openLog: { id: 'craftpanel.files.open-log', defaultMessage: 'Open' },
+	shareFailed: { id: 'craftpanel.files.share-failed', defaultMessage: 'Could not share the log' },
+	shareOff: {
+		id: 'craftpanel.files.share-off',
+		defaultMessage:
+			'Outbound services are switched off on this panel, so logs cannot be shared to mclo.gs.',
+	},
 })
 
 interface DirectoryListing {
@@ -95,7 +107,7 @@ interface DirectoryListing {
 	partial: boolean
 }
 
-export type PanelClient = Pick<typeof api, 'files' | 'operations'>
+export type PanelClient = Pick<typeof api, 'files' | 'operations' | 'console'>
 
 export interface FileManagerOptions {
 	serverId: Ulid
@@ -168,7 +180,7 @@ function isAborted(error: unknown): boolean {
 
 export function provideServerFileManager(options: FileManagerOptions): ServerFileManager {
 	const { serverId, socket } = options
-	const { files, operations: operationsApi } = options.client ?? api
+	const { files, operations: operationsApi, console: consoleApi } = options.client ?? api
 	const { formatMessage } = useVIntl()
 	const { addNotification } = injectNotificationManager()
 	const queryClient = useQueryClient()
@@ -370,6 +382,42 @@ export function provideServerFileManager(options: FileManagerOptions): ServerFil
 
 	function zipPaths(parent: string, include: string[], target: string): Promise<void> {
 		return startZip({ parent: normalizePath(parent), include, target, on_conflict: 'fail' })
+	}
+
+	async function shareToMclogs(): Promise<void> {
+		const file = editingFile.value
+		if (!file) return
+		try {
+			const { url } = await consoleApi.shareLog(serverId, { path: normalizePath(file.path) })
+			const copied = await navigator.clipboard
+				?.writeText(url)
+				.then(() => true)
+				.catch(() => false)
+			addNotification({
+				title: formatMessage(copied ? messages.logSharedCopied : messages.logShared),
+				text: url,
+				type: 'success',
+				autoCloseMs: null,
+				buttons: [
+					{
+						label: formatMessage(messages.openLog),
+						action: () => {
+							window.open(url, '_blank', 'noopener,noreferrer')
+						},
+					},
+				],
+			})
+		} catch (failure) {
+			if (hasErrorCode(failure, 'external_services_disabled')) {
+				addNotification({
+					title: formatMessage(messages.shareFailed),
+					text: formatMessage(messages.shareOff),
+					type: 'error',
+				})
+				return
+			}
+			notifyFailure(messages.shareFailed, failure)
+		}
 	}
 
 	async function downloadFile(path: string, fileName: string): Promise<void> {
@@ -598,6 +646,8 @@ export function provideServerFileManager(options: FileManagerOptions): ServerFil
 		prefetchDirectory,
 		prefetchFile,
 		basePath,
+		canShareToMclogs: true,
+		shareToMclogs,
 	}
 	provideFileManager(context)
 

@@ -80,6 +80,13 @@ pub struct CrashAnalysis {
     pub analysis: Analysis,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct SharedLog {
+    pub id: String,
+    pub url: String,
+    pub raw: String,
+}
+
 pub struct Mclogs {
     http: reqwest::Client,
     base: String,
@@ -112,13 +119,29 @@ impl Mclogs {
         if let Some(known) = self.remembered(key, now) {
             return Ok(known);
         }
-        if self.blocked(now) {
+
+        let body = self.post("analyse", content).await?;
+        let analysis: CrashAnalysis = read(&body)?;
+        self.cache
+            .lock()
+            .expect("the mclo.gs lock")
+            .insert(key, (Instant::now(), analysis.clone()));
+        Ok(analysis)
+    }
+
+    pub async fn share(&self, content: &str) -> Result<SharedLog> {
+        let body = self.post("log", content).await?;
+        read(&body)
+    }
+
+    async fn post(&self, endpoint: &str, content: &str) -> Result<Vec<u8>> {
+        if self.blocked(Instant::now()) {
             return Err(rate_limited());
         }
 
         let sent = self
             .http
-            .post(format!("{}/1/analyse", self.base))
+            .post(format!("{}/1/{endpoint}", self.base))
             .header(reqwest::header::CONTENT_TYPE, "application/x-www-form-urlencoded")
             .body(form("content", content))
             .timeout(WHOLE_TIMEOUT)
@@ -137,13 +160,7 @@ impl Mclogs {
         if !status.is_success() {
             return Err(unavailable(format!("mclo.gs answered {status}")));
         }
-
-        let analysis = read(&body)?;
-        self.cache
-            .lock()
-            .expect("the mclo.gs lock")
-            .insert(key, (Instant::now(), analysis.clone()));
-        Ok(analysis)
+        Ok(body.to_vec())
     }
 
     fn remembered(&self, key: Key, now: Instant) -> Option<CrashAnalysis> {
@@ -171,7 +188,7 @@ impl Default for Mclogs {
     }
 }
 
-fn read(body: &[u8]) -> Result<CrashAnalysis> {
+fn read<T: serde::de::DeserializeOwned>(body: &[u8]) -> Result<T> {
     let answered: serde_json::Value =
         serde_json::from_slice(body).map_err(|err| unavailable(err.to_string()))?;
 
@@ -204,7 +221,7 @@ fn rate_limited() -> Failure {
     Failure::new(
         StatusCode::TOO_MANY_REQUESTS,
         "upstream_rate_limited",
-        "mclo.gs is rate limiting this panel; the analysis can be asked for again shortly",
+        "mclo.gs is rate limiting this panel; try again in a minute",
     )
 }
 
@@ -239,7 +256,7 @@ mod tests {
 
     #[test]
     fn the_answer_is_trimmed_to_what_the_layout_reads() {
-        let analysis = read(ANSWER.as_bytes()).expect("a readable answer");
+        let analysis: CrashAnalysis = read(ANSWER.as_bytes()).expect("a readable answer");
         assert_eq!(analysis.name, None, "the real API answers null and Modrinth's type is wrong");
         assert_eq!(analysis.version, None);
         assert_eq!(analysis.kind, "Vanilla");
@@ -254,12 +271,27 @@ mod tests {
 
     #[test]
     fn a_refusal_from_mclogs_is_a_bad_gateway_and_says_why() {
-        let refused = read(br#"{"success":false,"error":"No content"}"#).unwrap_err();
+        let refused = read::<CrashAnalysis>(br#"{"success":false,"error":"No content"}"#)
+            .unwrap_err();
         assert_eq!(refused.code(), "upstream_unavailable");
         assert_eq!(refused.status(), StatusCode::BAD_GATEWAY);
         assert!(format!("{refused}").contains("No content"));
 
-        assert_eq!(read(b"<html>").unwrap_err().code(), "upstream_unavailable");
+        assert_eq!(read::<CrashAnalysis>(b"<html>").unwrap_err().code(), "upstream_unavailable");
+    }
+
+    #[test]
+    fn a_shared_log_answers_the_link_and_nothing_of_the_token() {
+        let shared: SharedLog = read(
+            br#"{"success":true,"id":"abc123","source":null,"created":1,"expires":2,
+                "size":10,"lines":1,"errors":0,"url":"https://mclo.gs/abc123",
+                "raw":"https://api.mclo.gs/1/raw/abc123","token":"secret"}"#,
+        )
+        .expect("a readable answer");
+        assert_eq!(shared.url, "https://mclo.gs/abc123");
+
+        let out = serde_json::to_value(&shared).expect("json");
+        assert!(out.get("token").is_none(), "the token stays with the panel");
     }
 
     #[test]
@@ -272,7 +304,7 @@ mod tests {
     fn an_answer_is_kept_for_ten_minutes_and_a_block_expires_by_itself() {
         let client = Mclogs::with_base("http://127.0.0.1:1");
         let key = Key::Log { server: Id::new(), modified: 7, size: 12 };
-        let analysis = read(ANSWER.as_bytes()).unwrap();
+        let analysis: CrashAnalysis = read(ANSWER.as_bytes()).unwrap();
 
         let now = Instant::now();
         client.cache.lock().unwrap().insert(key, (now, analysis.clone()));

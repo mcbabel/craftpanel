@@ -251,6 +251,16 @@ export interface CrashAnalysisRequest {
 	source?: CrashAnalysisSource
 }
 
+export interface ShareLogRequest {
+	path: FilePath
+}
+
+export interface SharedLog {
+	id: string
+	url: string
+	raw: string
+}
+
 export interface CrashAnalysisEntry {
 	level: number
 	time: string | null

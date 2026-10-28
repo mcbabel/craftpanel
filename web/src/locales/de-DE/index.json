@@ -2318,11 +2318,26 @@
   "craftpanel.files.cancel-failed": {
     "defaultMessage": "Das Entpacken konnte nicht abgebrochen werden"
   },
+  "craftpanel.files.log-shared": {
+    "defaultMessage": "Log geteilt"
+  },
+  "craftpanel.files.log-shared-copied": {
+    "defaultMessage": "Log geteilt, Link kopiert"
+  },
   "craftpanel.files.open-failed": {
     "defaultMessage": "{file} konnte nicht geöffnet werden"
   },
+  "craftpanel.files.open-log": {
+    "defaultMessage": "Öffnen"
+  },
   "craftpanel.files.open-missing": {
     "defaultMessage": "Auf diesem Server gibt es {file} noch nicht. Ein Server legt die Datei beim ersten Start an."
+  },
+  "craftpanel.files.share-failed": {
+    "defaultMessage": "Das Log konnte nicht geteilt werden"
+  },
+  "craftpanel.files.share-off": {
+    "defaultMessage": "Ausgehende Dienste sind in diesem Panel ausgeschaltet, deshalb können Logs nicht zu mclo.gs geteilt werden."
   },
   "craftpanel.files.upload-conflict": {
     "defaultMessage": "{file} gibt es in diesem Ordner schon."

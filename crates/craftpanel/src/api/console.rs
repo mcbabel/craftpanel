@@ -15,7 +15,7 @@ use crate::auth::error::{Failure, Result};
 use crate::auth::{access, extract, Caller, JsonBody, Params};
 use crate::console::logs::{self, LogFileContentResponse, LogFileListResponse};
 use crate::console::{check_command, echo, mclogs, Console};
-use crate::files::Workspace;
+use crate::files::{RelPath, Workspace};
 use crate::model::{Id, Permission};
 use crate::ops::Operations;
 use crate::servers::Hub;
@@ -34,6 +34,7 @@ fn routes(operations: Arc<Operations>, hub: Arc<Hub>, service: Arc<Console>) -> 
         .route("/servers/{server}/console/crash-analysis", post(crash_analysis))
         .route("/servers/{server}/console/logs", get(list_logs).delete(delete_log))
         .route("/servers/{server}/console/logs/content", get(read_log))
+        .route("/servers/{server}/console/logs/share", post(share_log))
         .layer(Extension(operations))
         .layer(Extension(hub))
         .layer(Extension(service))
@@ -82,6 +83,11 @@ struct LogListQuery {
 #[derive(Debug, Deserialize)]
 struct LogFileQuery {
     file: String,
+}
+
+#[derive(Debug, Deserialize)]
+struct ShareLogRequest {
+    path: String,
 }
 
 async fn command(
@@ -165,13 +171,7 @@ async fn crash_analysis(
     JsonBody(body): JsonBody<CrashAnalysisRequest>,
 ) -> Result<Json<mclogs::CrashAnalysis>> {
     let seat = access::require(&state.pool, &caller, server, Permission::BaseRead).await?;
-
-    if !crate::auth::settings::load(&state.pool).await?.external_services_enabled {
-        return Err(Failure::conflict(
-            "external_services_disabled",
-            "this panel does not call out to other services",
-        ));
-    }
+    may_call_out(&state).await?;
 
     let (key, text) = match body.source {
         CrashAnalysisSource::LatestLog => {
@@ -204,6 +204,41 @@ async fn crash_analysis(
     let analysed =
         service.analyst.analyse(key, logs::last_bytes(&text, logs::ANALYSIS_BYTES)).await?;
     Ok(Json(analysed))
+}
+
+async fn share_log(
+    State(state): State<AppState>,
+    Extension(service): Extension<Arc<Console>>,
+    caller: Caller,
+    OfServer(server): OfServer,
+    JsonBody(body): JsonBody<ShareLogRequest>,
+) -> Result<Json<mclogs::SharedLog>> {
+    let seat = access::require(&state.pool, &caller, server, Permission::BaseRead).await?;
+    let at = RelPath::parse(&body.path)?;
+    if !logs::shareable(&at) {
+        return Err(Failure::bad_request("not_a_log", "only log files can be shared"));
+    }
+    may_call_out(&state).await?;
+
+    let workspace = workspace(&state, seat.owner_id, server, "log_not_found")?;
+    let read = tokio::task::spawn_blocking(move || logs::read(workspace.root(), &at))
+        .await
+        .map_err(joined)??;
+    if read.content.trim().is_empty() {
+        return Err(Failure::conflict("log_empty", "there is nothing in this log to share"));
+    }
+
+    Ok(Json(service.analyst.share(&read.content).await?))
+}
+
+async fn may_call_out(state: &AppState) -> Result<()> {
+    if !crate::auth::settings::load(&state.pool).await?.external_services_enabled {
+        return Err(Failure::conflict(
+            "external_services_disabled",
+            "this panel does not call out to other services",
+        ));
+    }
+    Ok(())
 }
 
 async fn list_logs(
@@ -364,6 +399,7 @@ mod tests {
             let state = Arc::new(Upstream::default());
             let app = Router::new()
                 .route("/1/analyse", post(analyse))
+                .route("/1/log", post(log))
                 .with_state(Arc::clone(&state));
             let listener =
                 tokio::net::TcpListener::bind("127.0.0.1:0").await.expect("a free port");
@@ -392,6 +428,23 @@ mod tests {
         state.bodies.lock().unwrap().push(body);
         match state.status.load(Ordering::Relaxed) {
             0 => ([(CONTENT_TYPE, "application/json")], ANALYSED).into_response(),
+            other => {
+                (StatusCode::from_u16(other).expect("a status"), "no").into_response()
+            }
+        }
+    }
+
+    const SHARED: &str = r#"{
+        "success": true, "id": "abc123", "source": null, "created": 1, "expires": 2,
+        "size": 20, "lines": 1, "errors": 0, "url": "https://mclo.gs/abc123",
+        "raw": "https://api.mclo.gs/1/raw/abc123", "token": "never-handed-out"
+    }"#;
+
+    async fn log(State(state): State<Arc<Upstream>>, body: String) -> Response {
+        state.calls.fetch_add(1, Ordering::Relaxed);
+        state.bodies.lock().unwrap().push(body);
+        match state.status.load(Ordering::Relaxed) {
+            0 => ([(CONTENT_TYPE, "application/json")], SHARED).into_response(),
             other => {
                 (StatusCode::from_u16(other).expect("a status"), "no").into_response()
             }
@@ -1025,6 +1078,65 @@ mod tests {
             .expect("12.10");
 
         let refused = panel.post("/crash-analysis", serde_json::json!({})).await;
+        assert_eq!(refused.status(), StatusCode::CONFLICT);
+        assert_eq!(body_json(refused).await["error"], "external_services_disabled");
+        assert_eq!(panel.upstream.calls(), 0);
+    }
+
+    #[tokio::test]
+    async fn a_log_file_is_shared_and_only_the_link_comes_back() {
+        let panel = panel().await;
+        panel.sandbox.write("logs/latest.log", b"[15:04:22] Done (3.2s)!\n");
+
+        let answer =
+            panel.post("/logs/share", serde_json::json!({ "path": "/logs/latest.log" })).await;
+        assert_eq!(answer.status(), StatusCode::OK);
+        let body = body_json(answer).await;
+        assert_eq!(body["url"], "https://mclo.gs/abc123");
+        assert!(body.get("token").is_none());
+
+        assert_eq!(panel.upstream.calls(), 1);
+        assert!(panel.upstream.last_body().starts_with("content="));
+        assert!(panel.upstream.last_body().contains("Done+%283.2s%29%21"));
+    }
+
+    #[tokio::test]
+    async fn what_is_not_a_log_never_leaves_the_panel() {
+        let panel = panel().await;
+        panel.sandbox.write("server.properties", b"rcon.password=hunter2\n");
+        panel.sandbox.write("logs/empty.log", b"\n\n");
+
+        let refused =
+            panel.post("/logs/share", serde_json::json!({ "path": "/server.properties" })).await;
+        assert_eq!(refused.status(), StatusCode::BAD_REQUEST);
+        assert_eq!(body_json(refused).await["error"], "not_a_log");
+
+        let climbing =
+            panel.post("/logs/share", serde_json::json!({ "path": "/../../panel.log" })).await;
+        assert_eq!(climbing.status(), StatusCode::BAD_REQUEST);
+
+        let missing =
+            panel.post("/logs/share", serde_json::json!({ "path": "/logs/gone.log" })).await;
+        assert_eq!(missing.status(), StatusCode::NOT_FOUND);
+
+        let empty = panel.post("/logs/share", serde_json::json!({ "path": "/logs/empty.log" })).await;
+        assert_eq!(empty.status(), StatusCode::CONFLICT);
+        assert_eq!(body_json(empty).await["error"], "log_empty");
+
+        assert_eq!(panel.upstream.calls(), 0);
+    }
+
+    #[tokio::test]
+    async fn sharing_respects_the_switch_for_outgoing_calls() {
+        let panel = panel().await;
+        panel.sandbox.write("logs/latest.log", b"[15:04:22] one\n");
+        sqlx::query("UPDATE panel_settings SET external_services_enabled = 0 WHERE id = 1")
+            .execute(&panel.pool)
+            .await
+            .expect("switched off");
+
+        let refused =
+            panel.post("/logs/share", serde_json::json!({ "path": "/logs/latest.log" })).await;
         assert_eq!(refused.status(), StatusCode::CONFLICT);
         assert_eq!(body_json(refused).await["error"], "external_services_disabled");
         assert_eq!(panel.upstream.calls(), 0);

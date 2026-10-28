@@ -2318,11 +2318,26 @@
   "craftpanel.files.cancel-failed": {
     "defaultMessage": "Could not cancel the extraction"
   },
+  "craftpanel.files.log-shared": {
+    "defaultMessage": "Log shared"
+  },
+  "craftpanel.files.log-shared-copied": {
+    "defaultMessage": "Log shared, link copied"
+  },
   "craftpanel.files.open-failed": {
     "defaultMessage": "Could not open {file}"
   },
+  "craftpanel.files.open-log": {
+    "defaultMessage": "Open"
+  },
   "craftpanel.files.open-missing": {
     "defaultMessage": "There is no {file} on this server yet. A server writes it when it starts for the first time."
+  },
+  "craftpanel.files.share-failed": {
+    "defaultMessage": "Could not share the log"
+  },
+  "craftpanel.files.share-off": {
+    "defaultMessage": "Outbound services are switched off on this panel, so logs cannot be shared to mclo.gs."
   },
   "craftpanel.files.upload-conflict": {
     "defaultMessage": "{file} already exists in this folder."

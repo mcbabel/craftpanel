@@ -86,6 +86,8 @@ import type {
 	ServerProperties,
 	ServerPropertiesPatch,
 	SetPrimaryResponse,
+	SharedLog,
+	ShareLogRequest,
 	StartupOptions,
 	StartupOptionsPatch,
 	Ulid,
@@ -528,6 +530,13 @@ const consoleApi = {
 
 	crashAnalysis: (serverId: Ulid, body: CrashAnalysisRequest = {}, options: Cancellable = {}) =>
 		requestJson<CrashAnalysisResponse>(serverPath(serverId, '/console/crash-analysis'), {
+			method: 'POST',
+			json: body,
+			signal: options.signal,
+		}),
+
+	shareLog: (serverId: Ulid, body: ShareLogRequest, options: Cancellable = {}) =>
+		requestJson<SharedLog>(serverPath(serverId, '/console/logs/share'), {
 			method: 'POST',
 			json: body,
 			signal: options.signal,
