@@ -129,6 +129,25 @@
 			<span>{{ formatMessage(messages.allocationsHelp) }}</span>
 		</div>
 
+		<PlayitPorts
+			v-if="playitAvailable && policy?.owner_has_playit"
+			:server-id="serverId"
+			:ports="heldPorts"
+			:can-manage="ownsServer"
+		/>
+		<Admonition
+			v-else-if="playitAvailable && policy && ownsServer"
+			type="info"
+			:body="formatMessage(messages.playitHint)"
+		>
+			<template #actions>
+				<ButtonLink :to="{ name: 'account' }">
+					<GlobeIcon aria-hidden="true" />
+					{{ formatMessage(messages.playitSetUp) }}
+				</ButtonLink>
+			</template>
+		</Admonition>
+
 		<Teleport to="body">
 			<div class="relative z-[100]">
 				<NewModal ref="renameModal" :header="formatMessage(messages.rename)" width="550px">
@@ -175,6 +194,7 @@
 import {
 	CopyIcon,
 	EditIcon,
+	GlobeIcon,
 	IssuesIcon,
 	PlusIcon,
 	SaveIcon,
@@ -184,6 +204,7 @@ import {
 import {
 	Admonition,
 	Button,
+	ButtonLink,
 	commonMessages,
 	ConfirmModal,
 	CopyCode,
@@ -209,10 +230,11 @@ import { actionsColumnWidth, ICON_BUTTON_REM } from '@/components/table-widths'
 import { useServerTunnel } from '@/composables/playit'
 import { useSession } from '@/composables/session'
 
+import PlayitPorts from './PlayitPorts.vue'
 import { publishedPort, tunnelHoldsPrimaryPort } from './playit-ports'
 
 const { formatMessage } = useVIntl()
-const { isAdmin } = useSession()
+const { isAdmin, user } = useSession()
 const { addNotification } = injectNotificationManager()
 const { server, serverId } = injectModrinthServerContext()
 const { canUseAdvancedSettings, permissionDeniedMessage } = useServerPermissions()
@@ -264,6 +286,12 @@ const messages = defineMessages({
 	actions: { id: 'craftpanel.settings.network.column-actions', defaultMessage: 'Actions' },
 	primary: { id: 'craftpanel.settings.network.primary', defaultMessage: 'Primary' },
 	makePrimary: { id: 'craftpanel.settings.network.make-primary', defaultMessage: 'Make primary' },
+	playitHint: {
+		id: 'craftpanel.network.playit-hint',
+		defaultMessage:
+			'Connect a playit.gg account to give this server and its other ports, like a voice chat, an address that works from outside without port forwarding.',
+	},
+	playitSetUp: { id: 'craftpanel.network.playit-set-up', defaultMessage: 'Set up playit.gg' },
 	portsLocked: {
 		id: 'craftpanel.network.ports-locked',
 		defaultMessage: 'An administrator has locked the ports of servers on this panel.',
@@ -351,6 +379,10 @@ const published = computed(() => publishedPort(tunnel.value, primaryPort.value))
 const publicAddress = computed(() => shareAddress(tunnel.value)?.address ?? null)
 
 const policy = ref<NetworkPolicy | null>(null)
+const ownsServer = computed(() => isAdmin.value || server.value?.owner_id === user.value?.id)
+const heldPorts = computed(() =>
+	rows.value.map((row) => ({ port: row.port, name: row.name, primary: row.primary })),
+)
 const canEditPorts = computed(
 	() => canUseAdvancedSettings.value && (policy.value?.may_change_ports ?? true),
 )

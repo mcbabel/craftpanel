@@ -15,6 +15,7 @@ export type PlayitClaimState = 'waiting_for_visit' | 'waiting_for_user' | 'accep
 export type PlayitTunnelState = 'none' | 'pending' | 'online' | 'offline' | 'missing' | 'failed'
 export type PlayitAddressKind = 'auto' | 'ip4' | 'ip6' | 'addr4' | 'addr6' | 'domain'
 export type PlayitTunnelDisposal = 'delete' | 'keep'
+export type PlayitTunnelKind = 'minecraft-java' | 'minecraft-bedrock' | 'tcp' | 'udp'
 
 export interface PlayitClaim {
 	code: string
@@ -32,6 +33,7 @@ export interface PlayitAgent {
 
 export interface PlayitPorts {
 	used: number
+	udp_used: number
 	limit: number
 	for_others: number
 }
@@ -103,7 +105,7 @@ function failure(status: number, raw: string): ApiRequestError {
 async function send(
 	path: string,
 	method: string,
-	options: Cancellable & { query?: QueryParams } = {},
+	options: Cancellable & { query?: QueryParams; json?: unknown } = {},
 ): Promise<Response> {
 	let response: Response
 	try {
@@ -111,6 +113,12 @@ async function send(
 			method,
 			credentials: 'same-origin',
 			signal: options.signal,
+			...(options.json === undefined
+				? {}
+				: {
+						body: JSON.stringify(options.json),
+						headers: { 'content-type': 'application/json' },
+					}),
 		})
 	} catch (cause) {
 		if (options.signal?.aborted) throw cause
@@ -123,7 +131,7 @@ async function send(
 async function json<T>(
 	path: string,
 	method: string,
-	options: Cancellable & { query?: QueryParams } = {},
+	options: Cancellable & { query?: QueryParams; json?: unknown } = {},
 ): Promise<T> {
 	return (await (await send(path, method, options)).json()) as T
 }
@@ -138,6 +146,18 @@ async function nothing(
 
 function tunnelPath(serverId: Ulid): string {
 	return `/servers/${segment(serverId)}/playit`
+}
+
+export interface PublishedPort extends ServerTunnel {
+	id: Ulid
+	kind: PlayitTunnelKind
+	label: string | null
+}
+
+export interface PublishPortRequest {
+	kind: Exclude<PlayitTunnelKind, 'minecraft-java'>
+	port: number
+	label?: string
 }
 
 export const playit = {
@@ -176,6 +196,15 @@ export const playit = {
 
 	deleteTunnel: (serverId: Ulid, options: Cancellable = {}) =>
 		nothing(tunnelPath(serverId), 'DELETE', options),
+
+	published: (serverId: Ulid, options: Cancellable = {}) =>
+		json<PublishedPort[]>(`${tunnelPath(serverId)}/ports`, 'GET', options),
+
+	publish: (serverId: Ulid, body: PublishPortRequest, options: Cancellable = {}) =>
+		json<PublishedPort[]>(`${tunnelPath(serverId)}/ports`, 'POST', { ...options, json: body }),
+
+	unpublish: (serverId: Ulid, portId: Ulid, options: Cancellable = {}) =>
+		nothing(`${tunnelPath(serverId)}/ports/${segment(portId)}`, 'DELETE', options),
 }
 
 export function tunnelAddresses(tunnel: ServerTunnel | null): PlayitAddress[] {

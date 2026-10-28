@@ -239,6 +239,9 @@
   "account.playit.external-off.body": {
     "defaultMessage": "playit.gg is an outbound service. While an administrator keeps that switch off, no address can be handed out and the tunnel service stays down."
   },
+  "account.playit.fact.udp": {
+    "defaultMessage": "Plus {used} of {limit} UDP ports"
+  },
   "account.playit.intro": {
     "defaultMessage": "playit.gg hands out an address that works from outside, without anyone touching a router. Connect your own account and your servers can ask for one."
   },
@@ -2509,6 +2512,84 @@
   },
   "craftpanel.installation.versions-failed": {
     "defaultMessage": "Failed to load versions from Modrinth"
+  },
+  "craftpanel.network.playit-hint": {
+    "defaultMessage": "Connect a playit.gg account to give this server and its other ports, like a voice chat, an address that works from outside without port forwarding."
+  },
+  "craftpanel.network.playit-set-up": {
+    "defaultMessage": "Set up playit.gg"
+  },
+  "craftpanel.network.playit.action-failed": {
+    "defaultMessage": "playit.gg did not take it"
+  },
+  "craftpanel.network.playit.add-title": {
+    "defaultMessage": "Publish a port"
+  },
+  "craftpanel.network.playit.failed": {
+    "defaultMessage": "Failed"
+  },
+  "craftpanel.network.playit.hint.bedrock": {
+    "defaultMessage": "For Bedrock players through Geyser. Pick the port Geyser listens on; it may be the primary port."
+  },
+  "craftpanel.network.playit.hint.tcp": {
+    "defaultMessage": "For web maps like BlueMap or Dynmap and other TCP services. The primary port is published on the overview page."
+  },
+  "craftpanel.network.playit.hint.udp": {
+    "defaultMessage": "For voice chats like Simple Voice Chat and other UDP services."
+  },
+  "craftpanel.network.playit.intro": {
+    "defaultMessage": "Next to the game address, other ports of this server can get their own public address: a voice chat, a web map, a port for Bedrock players."
+  },
+  "craftpanel.network.playit.kind": {
+    "defaultMessage": "Kind"
+  },
+  "craftpanel.network.playit.kind.bedrock": {
+    "defaultMessage": "Bedrock (UDP)"
+  },
+  "craftpanel.network.playit.kind.java": {
+    "defaultMessage": "Minecraft Java"
+  },
+  "craftpanel.network.playit.kind.tcp": {
+    "defaultMessage": "TCP"
+  },
+  "craftpanel.network.playit.kind.udp": {
+    "defaultMessage": "UDP"
+  },
+  "craftpanel.network.playit.label": {
+    "defaultMessage": "Label, e.g. Voice chat"
+  },
+  "craftpanel.network.playit.local-port": {
+    "defaultMessage": "Port {port} here"
+  },
+  "craftpanel.network.playit.missing": {
+    "defaultMessage": "Removed on playit.gg"
+  },
+  "craftpanel.network.playit.no-port": {
+    "defaultMessage": "Add a port to this server first, under ports above."
+  },
+  "craftpanel.network.playit.offline": {
+    "defaultMessage": "Offline at playit.gg"
+  },
+  "craftpanel.network.playit.pending": {
+    "defaultMessage": "Waiting for playit.gg to hand out an address..."
+  },
+  "craftpanel.network.playit.publish": {
+    "defaultMessage": "Publish"
+  },
+  "craftpanel.network.playit.published": {
+    "defaultMessage": "Asked playit.gg for an address"
+  },
+  "craftpanel.network.playit.removed": {
+    "defaultMessage": "Address taken away"
+  },
+  "craftpanel.network.playit.title": {
+    "defaultMessage": "More ports through playit.gg"
+  },
+  "craftpanel.network.playit.unpublish": {
+    "defaultMessage": "Take the address away"
+  },
+  "craftpanel.network.playit.voice-chat": {
+    "defaultMessage": "Simple Voice Chat: add a port above, publish it here as UDP, then in config/voicechat/voicechat-server.properties set port to that port and voice_host to the address shown here, and restart the server."
   },
   "craftpanel.network.ports-locked": {
     "defaultMessage": "An administrator has locked the ports of servers on this panel."

@@ -13,7 +13,7 @@ function status(over: Partial<PlayitStatus> = {}): PlayitStatus {
 		has_premium: false,
 		agent: { state: 'running', version: '1.0.10', detail: null },
 		binary: { state: 'ready', version: '1.0.10', arch: 'x86_64', detail: null },
-		ports: { used: 1, limit: 4, for_others: 0 },
+		ports: { used: 1, udp_used: 0, limit: 4, for_others: 0 },
 		claim: null,
 		last_error: null,
 		checked_at: '2026-08-13T10:00:30Z',
@@ -26,7 +26,15 @@ describe('The section of the account page', () => {
 		const view = playitView(null)
 
 		expect(view.stage).toBe('unconnected')
-		expect(view.ports).toEqual({ used: 0, limit: 0, free: 0, forOthers: 0, full: false })
+		expect(view.ports).toEqual({
+			used: 0,
+			udpUsed: 0,
+			total: 0,
+			limit: 0,
+			free: 0,
+			forOthers: 0,
+			full: false,
+		})
 		expect(view.notSelfManaged).toBe(false)
 	})
 
@@ -37,7 +45,7 @@ describe('The section of the account page', () => {
 	it('connected without an address is quiet and no fault', () => {
 		const view = playitView(
 			status({
-				ports: { used: 0, limit: 4, for_others: 0 },
+				ports: { used: 0, udp_used: 0, limit: 4, for_others: 0 },
 				agent: { state: 'absent', version: null, detail: null },
 			}),
 		)
@@ -52,13 +60,13 @@ describe('The section of the account page', () => {
 	})
 
 	it('counts the ports against the limit of the account and notices when none is free', () => {
-		const full = playitView(status({ ports: { used: 4, limit: 4, for_others: 2 } }))
+		const full = playitView(status({ ports: { used: 4, udp_used: 0, limit: 4, for_others: 2 } }))
 
 		expect(full.ports.free).toBe(0)
 		expect(full.ports.full).toBe(true)
 		expect(full.ports.forOthers).toBe(2)
 
-		const premium = playitView(status({ has_premium: true, ports: { used: 4, limit: 16, for_others: 0 } }))
+		const premium = playitView(status({ has_premium: true, ports: { used: 4, udp_used: 0, limit: 16, for_others: 0 } }))
 		expect(premium.ports.free).toBe(12)
 		expect(premium.ports.full).toBe(false)
 	})

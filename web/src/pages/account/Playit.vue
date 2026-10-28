@@ -113,6 +113,14 @@
 								})
 							}}
 						</span>
+						<span v-if="view.ports.udpUsed > 0" class="text-sm text-secondary">
+							{{
+								formatMessage(messages.factUdp, {
+									used: formatNumber(view.ports.udpUsed),
+									limit: formatNumber(view.ports.limit),
+								})
+							}}
+						</span>
 						<ProgressBar
 							:progress="Math.min(view.ports.used, view.ports.limit)"
 							:max="Math.max(view.ports.limit, 1)"
@@ -257,8 +265,8 @@
 		<NewModal ref="disconnectModal" :header="formatMessage(messages.disconnect)" width="34rem">
 			<div class="flex flex-col gap-4">
 				<p class="m-0">{{ formatMessage(messages.disconnectBody) }}</p>
-				<p v-if="view.ports.used > 0" class="m-0 text-secondary">
-					{{ formatMessage(messages.disconnectTunnels, { count: view.ports.used }) }}
+				<p v-if="view.ports.total > 0" class="m-0 text-secondary">
+					{{ formatMessage(messages.disconnectTunnels, { count: view.ports.total }) }}
 				</p>
 				<Admonition v-if="disconnectFailure" type="critical" :body="disconnectFailure" />
 
@@ -266,18 +274,18 @@
 					<Button :disabled="busy" @click="disconnectModal?.hide()">
 						{{ formatMessage(commonMessages.cancelButton) }}
 					</Button>
-					<Button v-if="view.ports.used > 0" :disabled="busy" @click="disconnect('keep')">
+					<Button v-if="view.ports.total > 0" :disabled="busy" @click="disconnect('keep')">
 						{{ formatMessage(messages.disconnectKeep) }}
 					</Button>
 					<Button
 						type="colored"
 						color="red"
 						:disabled="busy"
-						@click="disconnect(view.ports.used > 0 ? 'delete' : undefined)"
+						@click="disconnect(view.ports.total > 0 ? 'delete' : undefined)"
 					>
 						<UnlinkIcon aria-hidden="true" />
 						{{
-							view.ports.used > 0
+							view.ports.total > 0
 								? formatMessage(messages.disconnectDelete)
 								: formatMessage(messages.disconnect)
 						}}
@@ -411,6 +419,7 @@ const messages = defineMessages({
 	},
 	factPorts: { id: 'admin.playit.fact.ports', defaultMessage: 'Public addresses' },
 	factPortsValue: { id: 'admin.playit.fact.ports-value', defaultMessage: '{used} of {limit}' },
+	factUdp: { id: 'account.playit.fact.udp', defaultMessage: 'Plus {used} of {limit} UDP ports' },
 	factPortsLeft: { id: 'admin.playit.fact.ports-left', defaultMessage: '{count} still free.' },
 	factPortsFull: {
 		id: 'admin.playit.fact.ports-full',

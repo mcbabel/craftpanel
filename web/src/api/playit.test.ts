@@ -62,7 +62,7 @@ function status(over: Partial<PlayitStatus> = {}): PlayitStatus {
 		has_premium: false,
 		agent: { state: 'running', version: '1.0.10', detail: null },
 		binary: { state: 'ready', version: '1.0.10', arch: 'x86_64', detail: null },
-		ports: { used: 1, limit: 4, for_others: 0 },
+		ports: { used: 1, udp_used: 0, limit: 4, for_others: 0 },
 		claim: null,
 		last_error: null,
 		checked_at: '2026-08-13T10:00:30Z',
@@ -79,7 +79,7 @@ function overview(over: Partial<PlayitOverview> = {}): PlayitOverview {
 		is_self_managed: true,
 		has_premium: false,
 		agent: { state: 'running', version: '1.0.10', detail: null },
-		ports: { used: 1, limit: 4, for_others: 0 },
+		ports: { used: 1, udp_used: 0, limit: 4, for_others: 0 },
 		last_error: null,
 		checked_at: '2026-08-13T10:00:30Z',
 		...over,
@@ -326,9 +326,9 @@ describe('The calls', () => {
 
 describe('Rate and limits', () => {
 	it('counts the free ports against the limit of the plan', () => {
-		expect(portsLeft(status({ ports: { used: 1, limit: 4, for_others: 0 } }))).toBe(3)
-		expect(portsLeft(status({ ports: { used: 4, limit: 4, for_others: 0 } }))).toBe(0)
-		expect(portsLeft(status({ ports: { used: 5, limit: 4, for_others: 1 } }))).toBe(0)
+		expect(portsLeft(status({ ports: { used: 1, udp_used: 0, limit: 4, for_others: 0 } }))).toBe(3)
+		expect(portsLeft(status({ ports: { used: 4, udp_used: 0, limit: 4, for_others: 0 } }))).toBe(0)
+		expect(portsLeft(status({ ports: { used: 5, udp_used: 0, limit: 4, for_others: 1 } }))).toBe(0)
 	})
 
 	it('looks again sooner while the agent is starting or the file is being fetched', () => {

@@ -16,6 +16,7 @@ const WORDS = /[A-Za-zÄÖÜäöüß]+/g
 const SUBSTITUTES = /ae|oe|ue/g
 const SPELLED_OUT = [
 	'aero',
+	'bluemap',
 	'does',
 	'goes',
 	'guest',

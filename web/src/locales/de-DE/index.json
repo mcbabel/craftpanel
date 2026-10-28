@@ -239,6 +239,9 @@
   "account.playit.external-off.body": {
     "defaultMessage": "playit.gg ist ein Dienst nach außen. Solange ein Administrator diesen Schalter aus lässt, wird keine Adresse vergeben und der Tunnel-Dienst bleibt aus."
   },
+  "account.playit.fact.udp": {
+    "defaultMessage": "Dazu {used} von {limit} UDP-Ports"
+  },
   "account.playit.intro": {
     "defaultMessage": "playit.gg vergibt eine Adresse, die von außen funktioniert, ohne dass jemand an einen Router muss. Verbinde dein eigenes Konto, dann können deine Server eine anfordern."
   },
@@ -2509,6 +2512,84 @@
   },
   "craftpanel.installation.versions-failed": {
     "defaultMessage": "Die Versionen konnten nicht von Modrinth geladen werden"
+  },
+  "craftpanel.network.playit-hint": {
+    "defaultMessage": "Verbinde ein playit.gg-Konto, damit dieser Server und seine weiteren Ports, etwa ein Voice-Chat, eine Adresse bekommen, die ohne Portweiterleitung von außen funktioniert."
+  },
+  "craftpanel.network.playit-set-up": {
+    "defaultMessage": "playit.gg einrichten"
+  },
+  "craftpanel.network.playit.action-failed": {
+    "defaultMessage": "playit.gg hat es nicht angenommen"
+  },
+  "craftpanel.network.playit.add-title": {
+    "defaultMessage": "Einen Port veröffentlichen"
+  },
+  "craftpanel.network.playit.failed": {
+    "defaultMessage": "Fehlgeschlagen"
+  },
+  "craftpanel.network.playit.hint.bedrock": {
+    "defaultMessage": "Für Bedrock-Spieler über Geyser. Wähle den Port, auf dem Geyser lauscht; das darf der Hauptport sein."
+  },
+  "craftpanel.network.playit.hint.tcp": {
+    "defaultMessage": "Für Webkarten wie BlueMap oder Dynmap und andere TCP-Dienste. Der Hauptport wird auf der Übersichtsseite veröffentlicht."
+  },
+  "craftpanel.network.playit.hint.udp": {
+    "defaultMessage": "Für Voice-Chats wie Simple Voice Chat und andere UDP-Dienste."
+  },
+  "craftpanel.network.playit.intro": {
+    "defaultMessage": "Neben der Spieladresse können andere Ports dieses Servers eine eigene öffentliche Adresse bekommen: ein Voice-Chat, eine Webkarte, ein Port für Bedrock-Spieler."
+  },
+  "craftpanel.network.playit.kind": {
+    "defaultMessage": "Art"
+  },
+  "craftpanel.network.playit.kind.bedrock": {
+    "defaultMessage": "Bedrock (UDP)"
+  },
+  "craftpanel.network.playit.kind.java": {
+    "defaultMessage": "Minecraft Java"
+  },
+  "craftpanel.network.playit.kind.tcp": {
+    "defaultMessage": "TCP"
+  },
+  "craftpanel.network.playit.kind.udp": {
+    "defaultMessage": "UDP"
+  },
+  "craftpanel.network.playit.label": {
+    "defaultMessage": "Bezeichnung, z. B. Voice-Chat"
+  },
+  "craftpanel.network.playit.local-port": {
+    "defaultMessage": "Hier Port {port}"
+  },
+  "craftpanel.network.playit.missing": {
+    "defaultMessage": "Bei playit.gg entfernt"
+  },
+  "craftpanel.network.playit.no-port": {
+    "defaultMessage": "Füge diesem Server zuerst oben unter Ports einen Port hinzu."
+  },
+  "craftpanel.network.playit.offline": {
+    "defaultMessage": "Bei playit.gg offline"
+  },
+  "craftpanel.network.playit.pending": {
+    "defaultMessage": "Wartet darauf, dass playit.gg eine Adresse vergibt..."
+  },
+  "craftpanel.network.playit.publish": {
+    "defaultMessage": "Veröffentlichen"
+  },
+  "craftpanel.network.playit.published": {
+    "defaultMessage": "playit.gg um eine Adresse gebeten"
+  },
+  "craftpanel.network.playit.removed": {
+    "defaultMessage": "Adresse weggenommen"
+  },
+  "craftpanel.network.playit.title": {
+    "defaultMessage": "Weitere Ports über playit.gg"
+  },
+  "craftpanel.network.playit.unpublish": {
+    "defaultMessage": "Adresse wegnehmen"
+  },
+  "craftpanel.network.playit.voice-chat": {
+    "defaultMessage": "Simple Voice Chat: Füge oben einen Port hinzu, veröffentliche ihn hier als UDP, setze dann in config/voicechat/voicechat-server.properties port auf diesen Port und voice_host auf die hier angezeigte Adresse und starte den Server neu."
   },
   "craftpanel.network.ports-locked": {
     "defaultMessage": "Ein Administrator hat die Ports der Server in diesem Panel gesperrt."

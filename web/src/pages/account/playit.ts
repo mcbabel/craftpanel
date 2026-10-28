@@ -4,6 +4,8 @@ export type PlayitStage = 'unconnected' | 'quiet' | 'live'
 
 export interface PlayitPortsView {
 	used: number
+	udpUsed: number
+	total: number
 	limit: number
 	free: number
 	forOthers: number
@@ -17,7 +19,15 @@ export interface PlayitView {
 	guest: boolean
 }
 
-const NOTHING: PlayitPortsView = { used: 0, limit: 0, free: 0, forOthers: 0, full: false }
+const NOTHING: PlayitPortsView = {
+	used: 0,
+	udpUsed: 0,
+	total: 0,
+	limit: 0,
+	free: 0,
+	forOthers: 0,
+	full: false,
+}
 
 export function playitView(status: PlayitStatus | null): PlayitView {
 	if (status === null) {
@@ -26,7 +36,7 @@ export function playitView(status: PlayitStatus | null): PlayitView {
 
 	const ports = portsView(status)
 	return {
-		stage: !status.configured ? 'unconnected' : ports.used === 0 ? 'quiet' : 'live',
+		stage: !status.configured ? 'unconnected' : ports.total === 0 ? 'quiet' : 'live',
 		ports,
 		notSelfManaged:
 			status.configured && status.checked_at !== null && !status.is_self_managed,
@@ -36,8 +46,11 @@ export function playitView(status: PlayitStatus | null): PlayitView {
 
 function portsView(status: PlayitStatus): PlayitPortsView {
 	const { used, limit, for_others: forOthers } = status.ports
+	const udpUsed = status.ports.udp_used ?? 0
 	return {
 		used,
+		udpUsed,
+		total: used + udpUsed,
 		limit,
 		free: Math.max(0, limit - used),
 		forOthers,

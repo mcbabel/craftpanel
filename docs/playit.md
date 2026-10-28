@@ -20,15 +20,38 @@ reached through the machine's own address and port as usual.
   panel. It is available for x86_64, aarch64, armv7 and i686.
 - Each user's agent key is stored in `<data_dir>/playit/<user-id>/`, readable only by the panel.
 
+## More ports: voice chat, maps, Bedrock
+
+Next to its game address, a server can publish its other ports through playit.gg on the
+**Network** tab of its settings, under **More ports through playit.gg**. Pick the kind and one of
+the server's ports:
+
+| Kind | For |
+|---|---|
+| UDP | Voice chats such as Simple Voice Chat, other UDP services |
+| TCP | Web maps such as BlueMap or Dynmap, other TCP services |
+| Bedrock (UDP) | Bedrock players through Geyser |
+
+The port has to belong to the server first: add it under **Port allocations** on the same tab. A
+port that is published cannot be removed until its address is taken away again.
+
+**Simple Voice Chat:** add a port, publish it as UDP, then set `port` in
+`config/voicechat/voicechat-server.properties` to that port and `voice_host` to the address
+playit.gg shows for it, and restart the server.
+
+Only the owner of the server and administrators can publish ports. The tunnels live on the owner's
+playit.gg account like the game address.
+
 ## Limits
 
-| playit.gg plan | Public addresses at the same time |
-|---|---|
-| Free | 4 |
-| Premium | 16 |
+| playit.gg plan | TCP addresses at the same time | UDP addresses at the same time |
+|---|---|---|
+| Free | 4 | 4 |
+| Premium | 16 | 16 |
 
 The limit belongs to each user's playit.gg account, not to the panel: every connected user has
-their own four (or sixteen). A Minecraft Java server uses one. When all are in use, requesting
+their own. A Minecraft Java game address and a TCP port count against the TCP limit; a UDP port
+and a Bedrock port against the UDP limit. When all are in use, requesting
 another address is refused until a server gives its address back.
 
 Free tunnels use playit.gg's global anycast network; the panel does not offer a region choice.
