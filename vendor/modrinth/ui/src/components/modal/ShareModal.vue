@@ -12,7 +12,7 @@ import {
 import QrcodeVue from 'qrcode.vue'
 import { computed, nextTick, ref } from 'vue'
 
-import { ButtonLink, IconButton } from '#ui/components/base/buttons'
+import { Button, ButtonLink, IconButton } from '#ui/components/base/buttons'
 import { injectNotificationManager } from '#ui/providers'
 
 import { useDebugLogger } from '../../composables/debug-logger'
@@ -222,15 +222,6 @@ defineExpose({
 					<div ref="qrCode">
 						<QrcodeVue :value="url" class="!bg-white rounded-[var(--radius-md)]" margin="3" />
 					</div>
-					<IconButton
-						v-tooltip="formatMessage(messages.copyQrCode)"
-						type="quiet"
-						:label="formatMessage(messages.copyQrCode)"
-						class="!absolute top-0 right-0 m-2"
-						@click="copyImage"
-					>
-						<ClipboardCopyIcon class="h-5 w-5" aria-hidden="true" />
-					</IconButton>
 				</div>
 				<Textarea v-else v-model="content" resize="vertical" wrapper-class="h-full w-[30rem]">
 					<template #right>
@@ -275,6 +266,10 @@ defineExpose({
 						{{ formatMessage(messages.openInNewTab) }}
 						<ExternalIcon aria-hidden="true" />
 					</ButtonLink>
+					<Button v-if="link" class="w-full" @click="copyImage">
+						<ClipboardCopyIcon aria-hidden="true" />
+						{{ formatMessage(messages.copyQrCode) }}
+					</Button>
 					<div v-if="socialButtons" class="flex flex-row gap-1">
 						<IconButton
 							v-if="canShare"
