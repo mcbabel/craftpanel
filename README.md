@@ -24,6 +24,9 @@ and installing mods and plugins feels the way it does on Modrinth.
   checksum-verified.
 - **Content** — search, install, update and remove mods and plugins straight from Modrinth, one at a
   time or in bulk.
+- **Modpacks** — start a server from a Modrinth modpack or an uploaded `.mrpack`, switch its
+  version later or unlink it. Packs for Fabric are supported; the pack's loader and game version
+  are installed with it.
 - **Files** — browse, edit, upload, move and download server files in the browser, pack folders
   or the whole server into a ZIP, unpack archives and share logs to mclo.gs.
 - **Backups** — manual and scheduled backups that save the world consistently, with optional

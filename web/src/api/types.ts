@@ -603,6 +603,8 @@ export type ModpackSource =
 export interface ModpackInstallRequest {
 	source: ModpackSource
 	keep_extra_content: boolean
+	reset?: boolean
+	properties?: PropertiesFields
 }
 
 export interface ModpackUpdateRequest {

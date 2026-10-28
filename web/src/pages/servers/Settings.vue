@@ -117,6 +117,8 @@ provideServerSettings({
 	isApp: ref(false),
 	currentUserId: computed(() => user.value?.id ?? null),
 	currentUserRole: computed(() => user.value?.panel_role ?? null),
-	browseModpacks: () => undefined,
+	browseModpacks: () => {
+		void router.push({ name: 'server-browse', params: { id: serverId }, query: { type: 'modpack' } })
+	},
 })
 </script>

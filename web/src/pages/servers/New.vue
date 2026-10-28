@@ -16,253 +16,110 @@
 			:body="blocked"
 		/>
 
-		<template v-else-if="stage === 'form'">
-			<LoadingIndicator v-if="catalogLoading" />
+		<form v-else-if="stage === 'form'" class="flex flex-col gap-4" @submit.prevent="openSetup">
+			<Card class="!mb-0 flex flex-col gap-1.5">
+				<label class="text-sm font-semibold text-contrast" for="server-name">
+					{{ formatMessage(messages.nameLabel) }}
+				</label>
+				<Input
+					id="server-name"
+					v-model="name"
+					:maxlength="64"
+					:placeholder="formatMessage(messages.namePlaceholder)"
+					:disabled="busy"
+					wrapper-class="w-full"
+				/>
+			</Card>
 
-			<Admonition
-				v-else-if="catalogFailure"
-				type="critical"
-				:header="formatMessage(messages.catalogFailed)"
-			>
-				{{ catalogFailure }}
-				<template #actions>
-					<Button @click="() => loadCatalog()">
-						<RotateCounterClockwiseIcon aria-hidden="true" />
-						{{ formatMessage(messages.retry) }}
-					</Button>
-				</template>
-			</Admonition>
+			<Card class="!mb-0 flex flex-col gap-3">
+				<div class="flex flex-wrap items-baseline gap-2">
+					<span class="text-sm font-semibold text-contrast">
+						{{ formatMessage(messages.memoryLabel) }}
+					</span>
+					<span v-if="!unlimited" class="ml-auto text-sm text-secondary">
+						{{
+							formatMessage(messages.memoryBudget, {
+								free: formatBytes(budgetLeft * 1024 * 1024, 0),
+							})
+						}}
+					</span>
+				</div>
 
-			<form v-else class="flex flex-col gap-4" @submit.prevent="create">
-				<Card class="!mb-0 flex flex-col gap-5">
-					<div class="flex flex-col gap-1.5">
-						<label class="text-sm font-semibold text-contrast" for="server-name">
-							{{ formatMessage(messages.nameLabel) }}
-						</label>
-						<Input
-							id="server-name"
-							v-model="name"
-							:maxlength="64"
-							:placeholder="formatMessage(messages.namePlaceholder)"
-							:disabled="busy"
-							wrapper-class="w-full"
-						/>
-					</div>
+				<LoadingIndicator v-if="ceiling === null" />
+				<Admonition
+					v-else-if="ceiling < MEMORY_MIN"
+					type="warning"
+					:body="formatMessage(messages.noMemoryLeft)"
+				/>
+				<Slider
+					v-else
+					v-model="memory"
+					:min="MEMORY_MIN"
+					:max="ceiling"
+					:step="MEMORY_STEP"
+					:disabled="busy"
+					unit="MiB"
+				/>
 
-					<div class="flex flex-col gap-2">
-						<span class="text-sm font-semibold text-contrast">
-							{{ formatMessage(commonMessages.platformLabel) }}
-						</span>
-						<Chips
-							v-model="loader"
-							:items="loaderIds"
-							:format-label="loaderLabel"
-							:disabled-items="unwiredLoaders"
-							:disabled-tooltip="formatMessage(messages.loaderNotWired)"
-							:capitalize="false"
-							:aria-label="formatMessage(commonMessages.platformLabel)"
-						/>
-					</div>
-
-					<div class="flex flex-col gap-2">
-						<span class="text-sm font-semibold text-contrast">
-							{{ formatMessage(commonMessages.gameVersionLabel) }}
-						</span>
-						<Combobox
-							v-model="gameVersion"
-							searchable
-							:options="versionOptions"
-							:disabled="busy"
-							:aria-label="formatMessage(commonMessages.gameVersionLabel)"
-							:placeholder="formatMessage(commonMessages.selectVersionPlaceholder)"
-							:search-placeholder="formatMessage(commonMessages.searchVersionPlaceholder)"
-							:no-options-message="
-								versionsLoading
-									? formatMessage(commonMessages.loadingLabel)
-									: formatMessage(messages.noVersions)
-							"
-						>
-							<template #dropdown-footer>
-								<button
-									type="button"
-									class="flex w-full cursor-pointer items-center justify-center gap-1.5 border-0 border-t border-solid border-surface-5 bg-transparent py-3 text-center text-sm font-semibold text-secondary transition-colors hover:text-contrast"
-									@mousedown.prevent
-									@click="showSnapshots = !showSnapshots"
-								>
-									<EyeOffIcon v-if="showSnapshots" class="size-4" />
-									<EyeIcon v-else class="size-4" />
-									{{
-										showSnapshots
-											? formatMessage(commonMessages.hideSnapshotsButton)
-											: formatMessage(commonMessages.showAllVersionsButton)
-									}}
-								</button>
-							</template>
-						</Combobox>
-						<span v-if="versionsFailure" class="text-sm text-red">{{ versionsFailure }}</span>
-					</div>
-
-					<div v-if="selectedLoader?.has_loader_versions" class="flex flex-col gap-2">
-						<span class="text-sm font-semibold text-contrast">
-							{{ formatMessage(messages.buildLabel) }}
-						</span>
-						<Combobox
-							v-model="build"
-							searchable
-							:options="buildOptions"
-							:disabled="busy || !gameVersion"
-							:aria-label="formatMessage(messages.buildLabel)"
-							:placeholder="formatMessage(messages.latestStable)"
-							:search-placeholder="formatMessage(commonMessages.searchVersionPlaceholder)"
-							:no-options-message="
-								buildsLoading
-									? formatMessage(commonMessages.loadingLabel)
-									: formatMessage(messages.noBuilds)
-							"
-						>
-							<template v-if="channelled" #option-suffix="{ item }">
-								<PaperChannelBadge :channel="channelOf(item.value)" />
-							</template>
-							<template v-if="channelled" #search-selection-affix="{ option }">
-								<PaperChannelBadge affix :channel="option ? channelOf(option.value) : null" />
-							</template>
-						</Combobox>
-						<span v-if="buildsFailure" class="text-sm text-red">{{ buildsFailure }}</span>
-						<span v-else-if="buildsTruncated" class="text-sm text-secondary">
-							{{ formatMessage(messages.buildsTruncated) }}
-						</span>
-					</div>
-				</Card>
-
-				<Card class="!mb-0 flex flex-col gap-3">
-					<div class="flex flex-wrap items-baseline gap-2">
-						<span class="text-sm font-semibold text-contrast">
-							{{ formatMessage(messages.memoryLabel) }}
-						</span>
-						<span v-if="!unlimited" class="ml-auto text-sm text-secondary">
-							{{
-								formatMessage(messages.memoryBudget, {
-									free: formatBytes(budgetLeft * 1024 * 1024, 0),
-								})
-							}}
-						</span>
-					</div>
-
-					<LoadingIndicator v-if="ceiling === null" />
-					<Admonition
-						v-else-if="ceiling < MEMORY_MIN"
-						type="warning"
-						:body="formatMessage(messages.noMemoryLeft)"
-					/>
-					<Slider
-						v-else
-						v-model="memory"
-						:min="MEMORY_MIN"
-						:max="ceiling"
-						:step="MEMORY_STEP"
-						:disabled="busy"
-						unit="MiB"
-					/>
-
-					<Admonition
-						v-if="capacity.fallback"
-						type="warning"
-						:body="formatMessage(messages.hostUnavailable)"
-					>
-						<template #actions>
-							<Button @click="() => loadHost()">
-								<RotateCounterClockwiseIcon aria-hidden="true" />
-								{{ formatMessage(messages.retry) }}
-							</Button>
-						</template>
-					</Admonition>
-
-					<Admonition
-						v-if="!unlimited && memory > budgetLeft && (ceiling ?? 0) >= MEMORY_MIN"
-						type="warning"
-						:body="formatMessage(messages.overBudget)"
-					/>
-				</Card>
-
-				<Card v-if="worldSettingsShown" class="!mb-0 flex flex-col gap-5">
-					<div class="flex flex-col gap-2">
-						<span class="text-sm font-semibold text-contrast">
-							{{ formatMessage(messages.gamemodeLabel) }}
-						</span>
-						<Chips
-							v-model="gamemode"
-							:items="gamemodes"
-							:format-label="gamemodeLabel"
-							:aria-label="formatMessage(messages.gamemodeLabel)"
-						/>
-					</div>
-
-					<div class="flex flex-col gap-2">
-						<span class="text-sm font-semibold text-contrast">
-							{{ formatMessage(messages.difficultyLabel) }}
-						</span>
-						<Chips
-							v-model="difficulty"
-							:items="difficulties"
-							:format-label="difficultyLabel"
-							:aria-label="formatMessage(messages.difficultyLabel)"
-						/>
-					</div>
-
-					<div class="flex flex-col gap-1.5">
-						<label class="text-sm font-semibold text-contrast" for="world-seed">
-							{{ formatMessage(messages.seedLabel) }}
-						</label>
-						<Input
-							id="world-seed"
-							v-model="seed"
-							:placeholder="formatMessage(messages.seedPlaceholder)"
-							:disabled="busy"
-							wrapper-class="w-full"
-						/>
-					</div>
-				</Card>
-
-				<Card class="!mb-0 flex flex-col gap-4">
-					<div class="flex flex-col gap-1.5">
-						<Checkbox
-							v-model="eula"
-							:disabled="busy"
-							:label="formatMessage(messages.eulaLabel)"
-							label-class="text-sm text-contrast"
-						/>
-						<a
-							href="https://aka.ms/MinecraftEULA"
-							target="_blank"
-							rel="noopener noreferrer"
-							class="ml-8 w-fit text-sm text-brand"
-						>
-							{{ formatMessage(messages.eulaLink) }}
-						</a>
-					</div>
-
-					<Admonition v-if="submitFailure" type="critical" :body="submitFailure" />
-
-					<div class="flex flex-wrap justify-end gap-2">
-						<ButtonLink :to="{ name: 'servers' }" :disabled="busy">
-							{{ formatMessage(commonMessages.cancelButton) }}
-						</ButtonLink>
-						<Button
-							native-type="submit"
-							type="colored"
-							color="brand"
-							size="lg"
-							:disabled="!submittable"
-							:loading="busy"
-						>
-							<SpinnerIcon v-if="busy" class="animate-spin" />
-							<ServerPlusIcon v-else aria-hidden="true" />
-							{{ formatMessage(messages.createButton) }}
+				<Admonition
+					v-if="capacity.fallback"
+					type="warning"
+					:body="formatMessage(messages.hostUnavailable)"
+				>
+					<template #actions>
+						<Button @click="() => loadHost()">
+							<RotateCounterClockwiseIcon aria-hidden="true" />
+							{{ formatMessage(messages.retry) }}
 						</Button>
-					</div>
-				</Card>
-			</form>
-		</template>
+					</template>
+				</Admonition>
+
+				<Admonition
+					v-if="!unlimited && memory > budgetLeft && (ceiling ?? 0) >= MEMORY_MIN"
+					type="warning"
+					:body="formatMessage(messages.overBudget)"
+				/>
+			</Card>
+
+			<Card class="!mb-0 flex flex-col gap-4">
+				<div class="flex flex-col gap-1.5">
+					<Checkbox
+						v-model="eula"
+						:disabled="busy"
+						:label="formatMessage(messages.eulaLabel)"
+						label-class="text-sm text-contrast"
+					/>
+					<a
+						href="https://aka.ms/MinecraftEULA"
+						target="_blank"
+						rel="noopener noreferrer"
+						class="ml-8 w-fit text-sm text-brand"
+					>
+						{{ formatMessage(messages.eulaLink) }}
+					</a>
+				</div>
+
+				<Admonition v-if="submitFailure" type="critical" :body="submitFailure" />
+
+				<div class="flex flex-wrap justify-end gap-2">
+					<ButtonLink :to="{ name: 'servers' }" :disabled="busy">
+						{{ formatMessage(commonMessages.cancelButton) }}
+					</ButtonLink>
+					<Button
+						native-type="submit"
+						type="colored"
+						color="brand"
+						size="lg"
+						:disabled="!submittable"
+						:loading="busy"
+					>
+						<SpinnerIcon v-if="busy" class="animate-spin" />
+						{{ formatMessage(messages.chooseInstallation) }}
+						<RightArrowIcon v-if="!busy" aria-hidden="true" />
+					</Button>
+				</div>
+			</Card>
+		</form>
 
 		<Card v-else class="!mb-0 flex flex-col gap-5">
 			<div class="flex flex-col gap-1">
@@ -281,12 +138,12 @@
 				<ProgressBar
 					full-width
 					show-progress
-					:progress="operation?.progress ?? 0"
-					:waiting="operation?.state === 'queued'"
+					:progress="uploading ? uploadProgress : (operation?.progress ?? 0)"
+					:waiting="!uploading && operation?.state === 'queued'"
 					:label="formatMessage(phaseLabel)"
 					label-class="text-sm font-medium text-secondary"
 				/>
-				<p v-if="operation?.message" class="m-0 truncate text-sm text-secondary">
+				<p v-if="!uploading && operation?.message" class="m-0 truncate text-sm text-secondary">
 					{{ operation.message }}
 				</p>
 			</template>
@@ -323,17 +180,21 @@
 				</ButtonLink>
 			</div>
 		</Card>
+
+		<ServerSetupFlow
+			ref="setup"
+			type="server-onboarding"
+			:submit="create"
+			@browse-modpacks="browseModpacks"
+		/>
 	</div>
 </template>
 
 <script setup lang="ts">
 import {
-	EyeIcon,
-	EyeOffIcon,
 	LeftArrowIcon,
 	RightArrowIcon,
 	RotateCounterClockwiseIcon,
-	ServerPlusIcon,
 	SpinnerIcon,
 	XIcon,
 } from '@modrinth/assets'
@@ -343,11 +204,9 @@ import {
 	ButtonLink,
 	Card,
 	Checkbox,
-	Chips,
-	Combobox,
-	type ComboboxOption,
 	commonMessages,
 	defineMessages,
+	injectNotificationManager,
 	Input,
 	LoadingIndicator,
 	type MessageDescriptor,
@@ -356,18 +215,13 @@ import {
 	useFormatBytes,
 	useVIntl,
 } from '@modrinth/ui'
-import PaperChannelBadge from '@modrinth/ui/src/components/base/PaperChannelBadge.vue'
-import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
-import { useRouter } from 'vue-router'
+import { computed, onBeforeUnmount, onMounted, ref, useTemplateRef, watch } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 
 import {
 	api,
-	type GameVersionEntry,
+	type CreateServerContent,
 	isApiRequestError,
-	type KnownProperties,
-	type LoaderBuild,
-	type LoaderId,
-	type LoaderInfo,
 	type Operation,
 	type OperationPhase,
 	openServerSocket,
@@ -376,25 +230,23 @@ import {
 	type ServerWarning,
 	type Ulid,
 } from '@/api'
+import ServerSetupFlow from '@/components/ServerSetupFlow.vue'
 import { useSession } from '@/composables/session'
+import { modpackFromQuery, type SetupChoice } from '@/providers/creation-catalog'
 
 import { type HostState, memoryCeiling } from './memory-ceiling'
+import { keepDraft, takeDraft } from './new-server-draft'
 
 const MEMORY_MIN = 512
 const MEMORY_STEP = 256
 const MEMORY_DEFAULT = 2048
 const POLL_INTERVAL_MS = 5_000
-const SUPPORTED_WAVE = 1
-
-type Gamemode = 'survival' | 'creative' | 'hardcore'
-type Difficulty = 'peaceful' | 'easy' | 'normal' | 'hard'
-
-const gamemodes: Gamemode[] = ['survival', 'creative', 'hardcore']
-const difficulties: Difficulty[] = ['peaceful', 'easy', 'normal', 'hard']
 
 const { formatMessage } = useVIntl()
 const formatBytes = useFormatBytes()
+const route = useRoute()
 const router = useRouter()
+const { addNotification } = injectNotificationManager()
 const { user, isAdmin, refresh } = useSession()
 
 const messages = defineMessages({
@@ -409,30 +261,6 @@ const messages = defineMessages({
 	namePlaceholder: {
 		id: 'panel.server-new.name.placeholder',
 		defaultMessage: 'My server',
-	},
-	buildLabel: {
-		id: 'panel.server-new.build.label',
-		defaultMessage: 'Build',
-	},
-	latestStable: {
-		id: 'panel.server-new.build.latest-stable',
-		defaultMessage: 'Latest stable build',
-	},
-	buildsTruncated: {
-		id: 'panel.server-new.build.truncated',
-		defaultMessage: 'Only the 500 newest builds are shown.',
-	},
-	noVersions: {
-		id: 'panel.server-new.no-versions',
-		defaultMessage: 'No versions available',
-	},
-	noBuilds: {
-		id: 'panel.server-new.no-builds',
-		defaultMessage: 'No builds available',
-	},
-	loaderNotWired: {
-		id: 'panel.server-new.loader-not-wired',
-		defaultMessage: 'This loader needs an installer step and is not available yet.',
 	},
 	memoryLabel: {
 		id: 'panel.server-new.memory.label',
@@ -456,22 +284,6 @@ const messages = defineMessages({
 		defaultMessage:
 			'This goes past your own budget and into the machine. It will be allowed, but the memory is then overcommitted.',
 	},
-	gamemodeLabel: {
-		id: 'panel.server-new.gamemode.label',
-		defaultMessage: 'Game mode',
-	},
-	difficultyLabel: {
-		id: 'panel.server-new.difficulty.label',
-		defaultMessage: 'Difficulty',
-	},
-	seedLabel: {
-		id: 'panel.server-new.seed.label',
-		defaultMessage: 'World seed',
-	},
-	seedPlaceholder: {
-		id: 'panel.server-new.seed.placeholder',
-		defaultMessage: 'Leave empty for a random world',
-	},
 	eulaLabel: {
 		id: 'panel.server-new.eula.label',
 		defaultMessage: "I accept Minecraft's End User Licence Agreement.",
@@ -480,9 +292,13 @@ const messages = defineMessages({
 		id: 'panel.server-new.eula.link',
 		defaultMessage: 'Read the agreement',
 	},
-	createButton: {
-		id: 'panel.server-new.create',
-		defaultMessage: 'Create server',
+	chooseInstallation: {
+		id: 'panel.server-new.choose-installation',
+		defaultMessage: 'Choose what to install',
+	},
+	createFailed: {
+		id: 'panel.server-new.create-failed',
+		defaultMessage: 'The server could not be created',
 	},
 	openServer: {
 		id: 'panel.server-new.open-server',
@@ -492,10 +308,6 @@ const messages = defineMessages({
 		id: 'panel.server-new.retry',
 		defaultMessage: 'Try again',
 	},
-	catalogFailed: {
-		id: 'panel.server-new.catalog-failed',
-		defaultMessage: 'The loader catalogue could not be loaded',
-	},
 	installFailed: {
 		id: 'panel.server-new.install-failed',
 		defaultMessage: 'Setting the server up failed',
@@ -503,6 +315,14 @@ const messages = defineMessages({
 	working: {
 		id: 'panel.server-new.working',
 		defaultMessage: 'Your server is being set up. This usually takes a minute or two.',
+	},
+	uploading: {
+		id: 'panel.server-new.uploading',
+		defaultMessage: 'Uploading the modpack',
+	},
+	uploadFailed: {
+		id: 'panel.server-new.upload-failed',
+		defaultMessage: 'The modpack could not be uploaded: {reason}',
 	},
 	cancelled: {
 		id: 'panel.server-new.cancelled',
@@ -531,13 +351,6 @@ const messages = defineMessages({
 		id: 'panel.server-new.error.unreachable',
 		defaultMessage: 'The panel could not be reached.',
 	},
-	survival: { id: 'panel.server-new.gamemode.survival', defaultMessage: 'Survival' },
-	creative: { id: 'panel.server-new.gamemode.creative', defaultMessage: 'Creative' },
-	hardcore: { id: 'panel.server-new.gamemode.hardcore', defaultMessage: 'Hardcore' },
-	peaceful: { id: 'panel.server-new.difficulty.peaceful', defaultMessage: 'Peaceful' },
-	easy: { id: 'panel.server-new.difficulty.easy', defaultMessage: 'Easy' },
-	normal: { id: 'panel.server-new.difficulty.normal', defaultMessage: 'Normal' },
-	hard: { id: 'panel.server-new.difficulty.hard', defaultMessage: 'Hard' },
 })
 
 const submitFailures: Record<string, MessageDescriptor> = defineMessages({
@@ -577,6 +390,22 @@ const submitFailures: Record<string, MessageDescriptor> = defineMessages({
 		id: 'panel.server-new.error.network-unreachable',
 		defaultMessage: 'The panel could not be reached.',
 	},
+	modpack_loader_unsupported: {
+		id: 'panel.server-new.error.modpack-loader-unsupported',
+		defaultMessage: 'This modpack needs a loader the panel cannot install yet.',
+	},
+	external_services_disabled: {
+		id: 'panel.server-new.error.external-services-disabled',
+		defaultMessage: 'An administrator has switched off downloads from Modrinth.',
+	},
+	invalid_modpack: {
+		id: 'panel.server-new.error.invalid-modpack',
+		defaultMessage: 'This file is not a modpack the panel can read.',
+	},
+	file_too_large: {
+		id: 'panel.server-new.error.file-too-large',
+		defaultMessage: 'The modpack is larger than the panel accepts.',
+	},
 })
 
 const warningMessages: Record<ServerWarning, MessageDescriptor> = defineMessages({
@@ -601,29 +430,11 @@ const phaseMessages: Record<OperationPhase, MessageDescriptor> = defineMessages(
 	writing_config: { id: 'panel.phase.writing-config', defaultMessage: 'Writing the configuration' },
 })
 
-const loaders = ref<LoaderInfo[]>([])
-const catalogLoading = ref(true)
-const catalogFailure = ref<string | null>(null)
+const setup = useTemplateRef<InstanceType<typeof ServerSetupFlow>>('setup')
 
 const name = ref('')
-const loader = ref<LoaderId | null>(null)
-const gameVersion = ref<string | null>(null)
-const build = ref('')
-const showSnapshots = ref(false)
 const memory = ref(MEMORY_DEFAULT)
 const eula = ref(false)
-const gamemode = ref<Gamemode>('survival')
-const difficulty = ref<Difficulty>('normal')
-const seed = ref('')
-
-const versions = ref<GameVersionEntry[]>([])
-const versionsLoading = ref(false)
-const versionsFailure = ref<string | null>(null)
-
-const builds = ref<LoaderBuild[]>([])
-const buildsLoading = ref(false)
-const buildsFailure = ref<string | null>(null)
-const buildsTruncated = ref(false)
 
 const stage = ref<'form' | 'working' | 'failed' | 'cancelled'>('form')
 const busy = ref(false)
@@ -633,13 +444,13 @@ const operation = ref<Operation | null>(null)
 const warnings = ref<ServerWarning[]>([])
 const cancelling = ref(false)
 const retrying = ref(false)
+const uploading = ref(false)
+const uploadProgress = ref(0)
 const hostState = ref<HostState>('loading')
 const hostAssignable = ref<number | null>(null)
 
 let socket: ServerSocket | null = null
 let poller: ReturnType<typeof setInterval> | null = null
-let versionToken = 0
-let buildToken = 0
 
 const blocked = computed(() => {
 	switch (user.value?.capabilities.blocked_reason) {
@@ -651,44 +462,6 @@ const blocked = computed(() => {
 			return null
 	}
 })
-
-const loaderIds = computed(() => loaders.value.map((entry) => entry.id))
-const unwiredLoaders = computed(() =>
-	loaders.value.filter((entry) => entry.wave > SUPPORTED_WAVE).map((entry) => entry.id),
-)
-const selectedLoader = computed(() =>
-	loaders.value.find((entry) => entry.id === loader.value) ?? null,
-)
-const worldSettingsShown = computed(() => selectedLoader.value?.supports_properties !== false)
-
-function loaderLabel(id: LoaderId): string {
-	return loaders.value.find((entry) => entry.id === id)?.name ?? id
-}
-
-function gamemodeLabel(value: Gamemode): string {
-	return formatMessage(messages[value])
-}
-
-function difficultyLabel(value: Difficulty): string {
-	return formatMessage(messages[value])
-}
-
-const versionOptions = computed<ComboboxOption<string>[]>(() =>
-	versions.value
-		.filter((entry) => showSnapshots.value || entry.version_type === 'release')
-		.map((entry) => ({ value: entry.version, label: entry.version })),
-)
-
-const buildOptions = computed<ComboboxOption<string>[]>(() => [
-	{ value: '', label: formatMessage(messages.latestStable) },
-	...builds.value.map((entry) => ({ value: entry.id, label: entry.label })),
-])
-
-function channelOf(id: string): 'ALPHA' | 'BETA' | null {
-	return builds.value.find((entry) => entry.id === id)?.channel_tag ?? null
-}
-
-const channelled = computed(() => builds.value.some((entry) => entry.channel_tag !== null))
 
 const unlimited = computed(() => user.value?.usage.memory.limit_mib === null)
 
@@ -711,8 +484,6 @@ const submittable = computed(
 	() =>
 		!busy.value &&
 		name.value.trim().length > 0 &&
-		loader.value !== null &&
-		gameVersion.value !== null &&
 		eula.value &&
 		ceiling.value !== null &&
 		ceiling.value >= MEMORY_MIN,
@@ -720,9 +491,10 @@ const submittable = computed(
 
 const cancellable = computed(() => stage.value === 'working' && operation.value?.cancellable === true)
 
-const phaseLabel = computed(() =>
-	operation.value?.phase ? phaseMessages[operation.value.phase] : messages.working,
-)
+const phaseLabel = computed(() => {
+	if (uploading.value) return messages.uploading
+	return operation.value?.phase ? phaseMessages[operation.value.phase] : messages.working
+})
 
 const resultDescription = computed(() => {
 	if (stage.value === 'cancelled') return formatMessage(messages.cancelled)
@@ -736,90 +508,40 @@ function reason(error: unknown, table: Record<string, MessageDescriptor> = {}): 
 	return known ? formatMessage(known) : error.message || formatMessage(messages.unreachable)
 }
 
-async function loadCatalog(): Promise<void> {
-	catalogLoading.value = true
-	catalogFailure.value = null
-	try {
-		const catalog = await api.settings.loaders()
-		loaders.value = catalog.loaders
-		loader.value ??= catalog.loaders.find((entry) => entry.wave <= SUPPORTED_WAVE)?.id ?? null
-	} catch (error) {
-		catalogFailure.value = reason(error)
-	} finally {
-		catalogLoading.value = false
-	}
-}
-
-async function loadVersions(id: LoaderId): Promise<void> {
-	const token = ++versionToken
-	versionsLoading.value = true
-	versionsFailure.value = null
-	versions.value = []
-	try {
-		const list = await api.settings.gameVersions(id)
-		if (token !== versionToken) return
-		versions.value = list.game_versions
-	} catch (error) {
-		if (token !== versionToken) return
-		versionsFailure.value = reason(error, submitFailures)
-	} finally {
-		if (token === versionToken) versionsLoading.value = false
-	}
-}
-
-async function loadBuilds(id: LoaderId, version: string): Promise<void> {
-	const token = ++buildToken
-	buildsLoading.value = true
-	buildsFailure.value = null
-	builds.value = []
-	buildsTruncated.value = false
-	try {
-		const list = await api.settings.builds(id, version)
-		if (token !== buildToken) return
-		builds.value = list.builds
-		buildsTruncated.value = list.truncated
-	} catch (error) {
-		if (token !== buildToken) return
-		buildsFailure.value = reason(error, submitFailures)
-	} finally {
-		if (token === buildToken) buildsLoading.value = false
-	}
-}
-
-watch([versionOptions, versionsLoading], ([options, loading]) => {
-	if (loading) return
-	if (options.length === 0) {
-		gameVersion.value = null
-		return
-	}
-	if (!gameVersion.value || !options.some((option) => option.value === gameVersion.value)) {
-		gameVersion.value = options[0].value
-	}
-})
-
-watch(loader, (id) => {
-	gameVersion.value = null
-	build.value = ''
-	builds.value = []
-	if (id) void loadVersions(id)
-})
-
-watch([loader, gameVersion], ([id, version]) => {
-	build.value = ''
-	if (!id || !version || !selectedLoader.value?.has_loader_versions) {
-		builds.value = []
-		return
-	}
-	void loadBuilds(id, version)
-})
-
 watch(ceiling, (limit) => {
 	if (limit === null || limit < MEMORY_MIN) return
 	memory.value = Math.min(Math.max(memory.value, MEMORY_MIN), limit)
 })
 
-async function create(): Promise<void> {
-	if (!submittable.value || loader.value === null || gameVersion.value === null) return
+function openSetup(): void {
+	if (!submittable.value) return
+	submitFailure.value = null
+	void setup.value?.show()
+}
+
+function browseModpacks(): void {
+	keepDraft({ name: name.value, memory: memory.value, eula: eula.value })
+	void router.push({ name: 'server-new-modpacks' })
+}
+
+function contentOf(choice: SetupChoice): CreateServerContent {
+	switch (choice.kind) {
+		case 'loader':
+			return {
+				kind: 'loader',
+				loader: choice.loader,
+				game_version: choice.gameVersion,
+				loader_version: choice.loaderVersion,
+			}
+		case 'modpack':
+			return { kind: 'modpack_project', project_id: choice.projectId, version_id: choice.versionId }
+		case 'upload':
+			return { kind: 'modpack_upload', file_name: choice.file.name, file_size: choice.file.size }
+	}
+}
+
+async function create(choice: SetupChoice): Promise<boolean> {
+	if (!submittable.value) return false
 	busy.value = true
 	submitFailure.value = null
 
@@ -830,13 +552,8 @@ async function create(): Promise<void> {
 			memory_mib: memory.value,
 			port: null,
 			eula_accepted: true,
-			content: {
-				kind: 'loader',
-				loader: loader.value,
-				game_version: gameVersion.value,
-				loader_version: build.value === '' ? null : build.value,
-			},
-			properties: { known: properties() },
+			content: contentOf(choice),
+			properties: choice.properties,
 		})
 		created.value = response.server
 		warnings.value = response.warnings ?? []
@@ -844,21 +561,34 @@ async function create(): Promise<void> {
 		follow(response.server.id, response.operation.id)
 		apply(response.operation)
 		void refresh()
+		if (choice.kind === 'upload') void deliver(response.server.id, response.operation.id, choice.file)
+		return true
 	} catch (error) {
-		submitFailure.value = reason(error, submitFailures)
+		addNotification({
+			type: 'error',
+			title: formatMessage(messages.createFailed),
+			text: reason(error, submitFailures),
+		})
+		return false
 	} finally {
 		busy.value = false
 	}
 }
 
-function properties(): KnownProperties {
-	if (!worldSettingsShown.value) return {}
-	const isHardcore = gamemode.value === 'hardcore'
-	return {
-		gamemode: isHardcore ? 'survival' : gamemode.value,
-		hardcore: isHardcore ? 'true' : 'false',
-		difficulty: difficulty.value,
-		level_seed: seed.value.trim() || null,
+async function deliver(serverId: Ulid, operationId: Ulid, file: File): Promise<void> {
+	uploading.value = true
+	uploadProgress.value = 0
+	try {
+		const handle = api.operations
+			.putPayload(serverId, operationId, file)
+			.onProgress((progress) => (uploadProgress.value = progress.progress))
+		apply((await handle.promise).operation)
+	} catch (error) {
+		submitFailure.value = formatMessage(messages.uploadFailed, {
+			reason: reason(error, submitFailures),
+		})
+	} finally {
+		uploading.value = false
 	}
 }
 
@@ -942,12 +672,25 @@ async function loadHost(): Promise<void> {
 }
 
 onMounted(() => {
+	const draft = takeDraft()
 	memory.value = unlimited.value
 		? MEMORY_DEFAULT
 		: Math.min(MEMORY_DEFAULT, Math.max(MEMORY_MIN, budgetLeft.value))
-	void loadCatalog()
+	if (draft) {
+		name.value = draft.name
+		memory.value = draft.memory
+		eula.value = draft.eula
+	}
 	if (isAdmin.value) void loadHost()
 	else hostState.value = 'unavailable'
+
+	const pick = modpackFromQuery(route.query)
+	if (pick) {
+		void router.replace({ name: 'server-new' })
+		if (submittable.value || (draft && draft.eula && draft.name.trim())) {
+			void setup.value?.showWithModpack(pick)
+		}
+	}
 })
 
 onBeforeUnmount(unfollow)

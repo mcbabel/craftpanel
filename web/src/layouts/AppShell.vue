@@ -103,7 +103,7 @@ import { setCopyFailureHandler } from '@/clipboard'
 import CraftPanelLogo from '@/components/CraftPanelLogo.vue'
 import { isLocale, useLocale } from '@/composables/locale'
 import { useInvitations } from '@/composables/invitations'
-import { provideNotifications } from '@/composables/modrinth-host'
+import { provideModrinthHost, provideNotifications } from '@/composables/modrinth-host'
 import { useSession } from '@/composables/session'
 import { isChoice, themeChoices, useTheme } from '@/composables/theme'
 import { adminPages } from '@/pages/admin/routes'
@@ -115,6 +115,7 @@ const { choice, systemTheme, setTheme } = useTheme()
 const { locale, setLocale } = useLocale()
 
 const notifications = provideNotifications()
+provideModrinthHost()
 const invitations = useInvitations()
 const invitationCount = invitations.count
 

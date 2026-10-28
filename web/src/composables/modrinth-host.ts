@@ -1,14 +1,22 @@
-import { GenericModrinthClient, type RequestOptions } from '@modrinth/api-client'
+import {
+	type AbstractModrinthClient,
+	GenericModrinthClient,
+	type Labrinth,
+	type RequestOptions,
+} from '@modrinth/api-client'
 import {
 	AbstractWebNotificationManager,
 	type AuthUser,
 	commonMessages,
 	type NotificationPanelLocation,
+	type PickedFile,
 	provideAuth,
+	provideFilePicker,
 	provideModalBehavior,
 	provideModrinthClient,
 	provideNotificationManager,
 	providePageContext,
+	provideTags,
 	useVIntl,
 	type WebNotification,
 } from '@modrinth/ui'
@@ -16,6 +24,7 @@ import { isCancelledError } from '@tanstack/vue-query'
 import { ref } from 'vue'
 
 import { API_BASE, MODRINTH_PROXY_BASE, type PowerAction } from '@/api'
+import { pickFilesFromDocument } from '@/providers/content-manager'
 
 const CLIENT_ROOT = ''
 const PANEL_VERSION = API_BASE.replace(/^\//, '')
@@ -98,13 +107,52 @@ export function provideNotifications(): AbstractWebNotificationManager {
 	return notifications
 }
 
+function provideModrinthTags(client: AbstractModrinthClient): void {
+	const gameVersions = ref<Labrinth.Tags.v2.GameVersion[]>([])
+	const loaders = ref<Labrinth.Tags.v2.Loader[]>([])
+	const request: RequestOptions = { api: 'labrinth', version: 2, method: 'GET' }
+
+	client
+		.request<Labrinth.Tags.v2.GameVersion[]>('/tag/game_version', request)
+		.then((list) => (gameVersions.value = list), () => undefined)
+	client
+		.request<Labrinth.Tags.v2.Loader[]>('/tag/loader', request)
+		.then((list) => (loaders.value = list), () => undefined)
+
+	provideTags({ gameVersions, loaders })
+}
+
+async function pickOne(accept: string): Promise<File | null> {
+	const [file] = await pickFilesFromDocument({ accept, multiple: false })
+	return file ?? null
+}
+
+function picked(file: File, preview = false): PickedFile {
+	return { file, previewUrl: preview ? URL.createObjectURL(file) : '' }
+}
+
 export function provideModrinthHost(): void {
-	provideModrinthClient(
-		new PanelModrinthClient({
-			archonBaseUrl: CLIENT_ROOT,
-			labrinthBaseUrl: MODRINTH_PROXY_BASE,
-		}),
-	)
+	const client = new PanelModrinthClient({
+		archonBaseUrl: CLIENT_ROOT,
+		labrinthBaseUrl: MODRINTH_PROXY_BASE,
+	})
+	provideModrinthClient(client)
+	provideModrinthTags(client)
+
+	provideFilePicker({
+		pickImage: async () => {
+			const file = await pickOne('image/*')
+			return file ? picked(file, true) : null
+		},
+		pickFiles: async (options) => {
+			const files = await pickFilesFromDocument({ accept: '', multiple: options?.multiple ?? false })
+			return files.map((file) => picked(file))
+		},
+		pickModpackFile: async () => {
+			const file = await pickOne('.mrpack')
+			return file ? picked(file) : null
+		},
+	})
 
 	providePageContext({
 		hierarchicalSidebarAvailable: ref(false),

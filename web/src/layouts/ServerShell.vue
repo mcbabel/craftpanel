@@ -29,7 +29,6 @@ import { type Component, computed, onScopeDispose, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 
 import { api, isApiRequestError, type Server } from '@/api'
-import { provideModrinthHost } from '@/composables/modrinth-host'
 import ServerFrame from '@/layouts/ServerFrame.vue'
 
 interface Failure {
@@ -43,8 +42,6 @@ interface Failure {
 const { formatMessage } = useVIntl()
 const route = useRoute()
 const router = useRouter()
-
-provideModrinthHost()
 
 const messages = defineMessages({
 	missingTitle: {

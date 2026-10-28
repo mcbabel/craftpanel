@@ -47,6 +47,11 @@ const routes: RouteRecordRaw[] = [
 				component: () => import('@/pages/servers/New.vue'),
 			},
 			{
+				path: 'new/modpacks',
+				name: 'server-new-modpacks',
+				component: () => import('@/pages/servers/Browse.vue'),
+			},
+			{
 				path: 'servers/:id',
 				name: 'server',
 				component: () => import('@/layouts/ServerShell.vue'),

@@ -2180,11 +2180,20 @@
   "craftpanel.browse.locked.loader": {
     "defaultMessage": "Der Loader kommt von diesem Server"
   },
+  "craftpanel.browse.locked.modpack-loader": {
+    "defaultMessage": "Es werden nur Loader gezeigt, die das Panel installieren kann"
+  },
   "craftpanel.browse.locked.provided-by": {
     "defaultMessage": "Von diesem Server vorgegeben"
   },
   "craftpanel.browse.locked.sync": {
     "defaultMessage": "Wieder an den Server angleichen"
+  },
+  "craftpanel.browse.modpacks-back": {
+    "defaultMessage": "Zurück zur Einrichtung"
+  },
+  "craftpanel.browse.modpacks-heading": {
+    "defaultMessage": "Modpack auswählen"
   },
   "craftpanel.browse.no-write-permission": {
     "defaultMessage": "Du hast keine Berechtigung, Inhalte auf diesem Server zu installieren"
@@ -2380,6 +2389,21 @@
   },
   "craftpanel.installation.repair-failed": {
     "defaultMessage": "Der Server konnte nicht repariert werden"
+  },
+  "craftpanel.installation.reset-description": {
+    "defaultMessage": "Entfernt alles auf dem Server, auch die Welt, Mods und Konfiguration, und richtet ihn mit einem Loader oder Modpack deiner Wahl neu ein. Sicherungen bleiben erhalten und können wiederhergestellt werden."
+  },
+  "craftpanel.installation.reset-properties-failed": {
+    "defaultMessage": "Die Welteinstellungen konnten nicht geschrieben werden"
+  },
+  "craftpanel.installation.reset-running": {
+    "defaultMessage": "Stoppe zuerst den Server."
+  },
+  "craftpanel.installation.reset-started": {
+    "defaultMessage": "Der Server wird zurückgesetzt"
+  },
+  "craftpanel.installation.reset-title": {
+    "defaultMessage": "Server zurücksetzen"
   },
   "craftpanel.installation.save-failed": {
     "defaultMessage": "Die Installation konnte nicht geändert werden"
@@ -2723,6 +2747,9 @@
   "craftpanel.settings.network.swap-needs-give-back": {
     "defaultMessage": "Solange diese Adresse steht, lässt sich der primäre Port nicht verschieben: wohin der Tunnel zeigt, liegt bei playit.gg und ist von hier nicht zu ändern. Der Besitzer oder ein Panel-Administrator gibt die Adresse auf der Übersichtsseite zurück; bis dahin verweigert das Panel den Wechsel."
   },
+  "craftpanel.setup.catalog-failed": {
+    "defaultMessage": "Der Loader-Katalog konnte nicht geladen werden"
+  },
   "format.decimal-bytes.0": {
     "defaultMessage": "{count, plural, one {# Byte} other {# Bytes}}"
   },
@@ -2888,44 +2915,32 @@
   "panel.server-new.blocked.system-user": {
     "defaultMessage": "Dein Systemkonto ist noch nicht bereit. Bis ein Administrator das behoben hat, kann nichts laufen."
   },
-  "panel.server-new.build.label": {
-    "defaultMessage": "Build"
-  },
-  "panel.server-new.build.latest-stable": {
-    "defaultMessage": "Neuester stabiler Build"
-  },
-  "panel.server-new.build.truncated": {
-    "defaultMessage": "Es werden nur die 500 neuesten Builds angezeigt."
-  },
   "panel.server-new.cancelled": {
     "defaultMessage": "Die Einrichtung wurde abgebrochen. Der Server existiert, hat aber noch nichts drauf — richte ihn erneut ein oder lösche ihn."
   },
-  "panel.server-new.catalog-failed": {
-    "defaultMessage": "Der Loader-Katalog konnte nicht geladen werden"
+  "panel.server-new.choose-installation": {
+    "defaultMessage": "Installation auswählen"
   },
-  "panel.server-new.create": {
-    "defaultMessage": "Server erstellen"
-  },
-  "panel.server-new.difficulty.easy": {
-    "defaultMessage": "Einfach"
-  },
-  "panel.server-new.difficulty.hard": {
-    "defaultMessage": "Schwer"
-  },
-  "panel.server-new.difficulty.label": {
-    "defaultMessage": "Schwierigkeit"
-  },
-  "panel.server-new.difficulty.normal": {
-    "defaultMessage": "Normal"
-  },
-  "panel.server-new.difficulty.peaceful": {
-    "defaultMessage": "Friedlich"
+  "panel.server-new.create-failed": {
+    "defaultMessage": "Der Server konnte nicht erstellt werden"
   },
   "panel.server-new.error.budget-exceeded": {
     "defaultMessage": "Das ist mehr Arbeitsspeicher, als dein Budget noch übrig hat."
   },
+  "panel.server-new.error.external-services-disabled": {
+    "defaultMessage": "Ein Administrator hat Downloads von Modrinth abgeschaltet."
+  },
+  "panel.server-new.error.file-too-large": {
+    "defaultMessage": "Das Modpack ist größer, als das Panel annimmt."
+  },
+  "panel.server-new.error.invalid-modpack": {
+    "defaultMessage": "Diese Datei ist kein Modpack, das das Panel lesen kann."
+  },
   "panel.server-new.error.invalid-request": {
     "defaultMessage": "Der Name darf nicht leer und nicht länger als 64 Zeichen sein."
+  },
+  "panel.server-new.error.modpack-loader-unsupported": {
+    "defaultMessage": "Dieses Modpack braucht einen Loader, den das Panel noch nicht installieren kann."
   },
   "panel.server-new.error.network-unreachable": {
     "defaultMessage": "Das Panel konnte nicht erreicht werden."
@@ -2960,23 +2975,8 @@
   "panel.server-new.failed-description": {
     "defaultMessage": "Der Server existiert, hat aber noch nichts drauf."
   },
-  "panel.server-new.gamemode.creative": {
-    "defaultMessage": "Kreativ"
-  },
-  "panel.server-new.gamemode.hardcore": {
-    "defaultMessage": "Hardcore"
-  },
-  "panel.server-new.gamemode.label": {
-    "defaultMessage": "Spielmodus"
-  },
-  "panel.server-new.gamemode.survival": {
-    "defaultMessage": "Überleben"
-  },
   "panel.server-new.install-failed": {
     "defaultMessage": "Das Einrichten des Servers ist fehlgeschlagen"
-  },
-  "panel.server-new.loader-not-wired": {
-    "defaultMessage": "Dieser Loader braucht einen Installationsschritt und ist noch nicht verfügbar."
   },
   "panel.server-new.memory.budget": {
     "defaultMessage": "{free} in deinem Budget übrig"
@@ -2999,26 +2999,20 @@
   "panel.server-new.name.placeholder": {
     "defaultMessage": "Mein Server"
   },
-  "panel.server-new.no-builds": {
-    "defaultMessage": "Keine Builds verfügbar"
-  },
-  "panel.server-new.no-versions": {
-    "defaultMessage": "Keine Versionen verfügbar"
-  },
   "panel.server-new.open-server": {
     "defaultMessage": "Server öffnen"
   },
   "panel.server-new.retry": {
     "defaultMessage": "Erneut versuchen"
   },
-  "panel.server-new.seed.label": {
-    "defaultMessage": "Startwert der Welt"
-  },
-  "panel.server-new.seed.placeholder": {
-    "defaultMessage": "Leer lassen für eine zufällige Welt"
-  },
   "panel.server-new.title": {
     "defaultMessage": "Neuer Server"
+  },
+  "panel.server-new.upload-failed": {
+    "defaultMessage": "Das Modpack konnte nicht hochgeladen werden: {reason}"
+  },
+  "panel.server-new.uploading": {
+    "defaultMessage": "Modpack wird hochgeladen"
   },
   "panel.server-new.warning.memory-overcommitted": {
     "defaultMessage": "Die Maschine verspricht jetzt mehr Arbeitsspeicher, als sie hat."

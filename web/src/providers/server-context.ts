@@ -211,7 +211,11 @@ export function installationKeyOf(operation: Operation, current: Server): Server
 		const file = operation.current_file?.split('/').pop()
 		return file ? { type: 'local_modpack', filename: file } : { type: 'unknown' }
 	}
-	if (operation.kind === 'install_modpack') {
+	const packRun =
+		operation.kind === 'install_modpack' ||
+		(operation.kind === 'server_create' && operation.src !== null)
+	if (packRun) {
+		if (operation.src) return { type: 'local_modpack', filename: operation.src }
 		return {
 			type: 'modrinth_modpack',
 			project_id: current.upstream?.project_id ?? '',

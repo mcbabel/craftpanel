@@ -2180,11 +2180,20 @@
   "craftpanel.browse.locked.loader": {
     "defaultMessage": "The loader comes from this server"
   },
+  "craftpanel.browse.locked.modpack-loader": {
+    "defaultMessage": "Only loaders the panel can install are shown"
+  },
   "craftpanel.browse.locked.provided-by": {
     "defaultMessage": "Set by this server"
   },
   "craftpanel.browse.locked.sync": {
     "defaultMessage": "Match the server again"
+  },
+  "craftpanel.browse.modpacks-back": {
+    "defaultMessage": "Back to setup"
+  },
+  "craftpanel.browse.modpacks-heading": {
+    "defaultMessage": "Choose a modpack"
   },
   "craftpanel.browse.no-write-permission": {
     "defaultMessage": "You do not have permission to install content on this server"
@@ -2380,6 +2389,21 @@
   },
   "craftpanel.installation.repair-failed": {
     "defaultMessage": "Failed to repair the server"
+  },
+  "craftpanel.installation.reset-description": {
+    "defaultMessage": "Removes everything on the server, including the world, mods and configuration, and sets it up again with a loader or a modpack you choose. Backups stay and can be restored."
+  },
+  "craftpanel.installation.reset-properties-failed": {
+    "defaultMessage": "The world settings could not be written"
+  },
+  "craftpanel.installation.reset-running": {
+    "defaultMessage": "Stop the server first."
+  },
+  "craftpanel.installation.reset-started": {
+    "defaultMessage": "The server is being reset"
+  },
+  "craftpanel.installation.reset-title": {
+    "defaultMessage": "Reset server"
   },
   "craftpanel.installation.save-failed": {
     "defaultMessage": "Failed to change the installation"
@@ -2723,6 +2747,9 @@
   "craftpanel.settings.network.swap-needs-give-back": {
     "defaultMessage": "While that address stands, the primary port cannot be moved: where the tunnel points is kept at playit.gg and cannot be changed from here. The owner or a panel administrator gives the address back on the overview page; until then the panel refuses the swap."
   },
+  "craftpanel.setup.catalog-failed": {
+    "defaultMessage": "The loader catalogue could not be loaded"
+  },
   "format.decimal-bytes.0": {
     "defaultMessage": "{count, plural, one {# byte} other {# bytes}}"
   },
@@ -2888,44 +2915,32 @@
   "panel.server-new.blocked.system-user": {
     "defaultMessage": "Your system account is not ready yet. Nothing can run until an administrator has fixed it."
   },
-  "panel.server-new.build.label": {
-    "defaultMessage": "Build"
-  },
-  "panel.server-new.build.latest-stable": {
-    "defaultMessage": "Latest stable build"
-  },
-  "panel.server-new.build.truncated": {
-    "defaultMessage": "Only the 500 newest builds are shown."
-  },
   "panel.server-new.cancelled": {
     "defaultMessage": "Setup was cancelled. The server exists but has nothing on it yet. Set it up again or delete it."
   },
-  "panel.server-new.catalog-failed": {
-    "defaultMessage": "The loader catalogue could not be loaded"
+  "panel.server-new.choose-installation": {
+    "defaultMessage": "Choose what to install"
   },
-  "panel.server-new.create": {
-    "defaultMessage": "Create server"
-  },
-  "panel.server-new.difficulty.easy": {
-    "defaultMessage": "Easy"
-  },
-  "panel.server-new.difficulty.hard": {
-    "defaultMessage": "Hard"
-  },
-  "panel.server-new.difficulty.label": {
-    "defaultMessage": "Difficulty"
-  },
-  "panel.server-new.difficulty.normal": {
-    "defaultMessage": "Normal"
-  },
-  "panel.server-new.difficulty.peaceful": {
-    "defaultMessage": "Peaceful"
+  "panel.server-new.create-failed": {
+    "defaultMessage": "The server could not be created"
   },
   "panel.server-new.error.budget-exceeded": {
     "defaultMessage": "That is more memory than your budget has left."
   },
+  "panel.server-new.error.external-services-disabled": {
+    "defaultMessage": "An administrator has switched off downloads from Modrinth."
+  },
+  "panel.server-new.error.file-too-large": {
+    "defaultMessage": "The modpack is larger than the panel accepts."
+  },
+  "panel.server-new.error.invalid-modpack": {
+    "defaultMessage": "This file is not a modpack the panel can read."
+  },
   "panel.server-new.error.invalid-request": {
     "defaultMessage": "The name may not be empty or longer than 64 characters."
+  },
+  "panel.server-new.error.modpack-loader-unsupported": {
+    "defaultMessage": "This modpack needs a loader the panel cannot install yet."
   },
   "panel.server-new.error.network-unreachable": {
     "defaultMessage": "The panel could not be reached."
@@ -2960,23 +2975,8 @@
   "panel.server-new.failed-description": {
     "defaultMessage": "The server exists but has nothing on it yet."
   },
-  "panel.server-new.gamemode.creative": {
-    "defaultMessage": "Creative"
-  },
-  "panel.server-new.gamemode.hardcore": {
-    "defaultMessage": "Hardcore"
-  },
-  "panel.server-new.gamemode.label": {
-    "defaultMessage": "Game mode"
-  },
-  "panel.server-new.gamemode.survival": {
-    "defaultMessage": "Survival"
-  },
   "panel.server-new.install-failed": {
     "defaultMessage": "Setting the server up failed"
-  },
-  "panel.server-new.loader-not-wired": {
-    "defaultMessage": "This loader needs an installer step and is not available yet."
   },
   "panel.server-new.memory.budget": {
     "defaultMessage": "{free} left in your budget"
@@ -2999,26 +2999,20 @@
   "panel.server-new.name.placeholder": {
     "defaultMessage": "My server"
   },
-  "panel.server-new.no-builds": {
-    "defaultMessage": "No builds available"
-  },
-  "panel.server-new.no-versions": {
-    "defaultMessage": "No versions available"
-  },
   "panel.server-new.open-server": {
     "defaultMessage": "Open server"
   },
   "panel.server-new.retry": {
     "defaultMessage": "Try again"
   },
-  "panel.server-new.seed.label": {
-    "defaultMessage": "World seed"
-  },
-  "panel.server-new.seed.placeholder": {
-    "defaultMessage": "Leave empty for a random world"
-  },
   "panel.server-new.title": {
     "defaultMessage": "New server"
+  },
+  "panel.server-new.upload-failed": {
+    "defaultMessage": "The modpack could not be uploaded: {reason}"
+  },
+  "panel.server-new.uploading": {
+    "defaultMessage": "Uploading the modpack"
   },
   "panel.server-new.warning.memory-overcommitted": {
     "defaultMessage": "The machine now promises more memory than it has."

@@ -76,9 +76,11 @@ import {
 	useVIntl,
 } from '@modrinth/ui'
 import { computed } from 'vue'
+import { type RouteLocationRaw, useRoute } from 'vue-router'
 
 import { useServerPage } from '@/composables/server-page'
-import { useBrowseManager } from '@/providers/browse-manager'
+import { type BrowseManagerOptions, useBrowseManager } from '@/providers/browse-manager'
+import { modpackQuery } from '@/providers/creation-catalog'
 
 const messages = defineMessages({
 	catalogueFailedTitle: {
@@ -97,14 +99,46 @@ const messages = defineMessages({
 })
 
 const { formatMessage } = useVIntl()
-const page = useServerPage()
+const route = useRoute()
 
-const browse = useBrowseManager({
-	serverId: page.serverId,
-	socket: page.socket,
-	busyReasons: page.context.busyReasons,
-	back: { name: 'server-content', params: { id: page.serverId } },
-})
+function browseOptions(): BrowseManagerOptions {
+	if (route.name === 'server-new-modpacks') {
+		return {
+			serverId: null,
+			back: { name: 'server-new' },
+			modpacks: { pick: (pick) => ({ name: 'server-new', query: modpackQuery(pick) }) },
+		}
+	}
+
+	const page = useServerPage()
+	const common = {
+		serverId: page.serverId,
+		socket: page.socket,
+		busyReasons: page.context.busyReasons,
+	}
+	if (route.query.type !== 'modpack') {
+		return { ...common, back: { name: 'server-content', params: { id: page.serverId } } }
+	}
+
+	const installation = (query: Record<string, string> = {}): RouteLocationRaw => ({
+		name: 'server-settings',
+		params: { id: page.serverId, section: 'installation' },
+		query,
+	})
+	const busyReasons = page.context.busyReasons
+	return {
+		...common,
+		back: installation(),
+		modpacks: {
+			pick: (pick) => installation(modpackQuery(pick)),
+			busy: computed(() =>
+				busyReasons.value.length > 0 ? formatMessage(busyReasons.value[0].reason) : null,
+			),
+		},
+	}
+}
+
+const browse = useBrowseManager(browseOptions())
 
 const loading = computed(() => !browse.ready.value && browse.loadError.value === null)
 </script>

@@ -69,6 +69,7 @@ import type {
 	PanelUser,
 	PowerRequest,
 	PowerResponse,
+	PropertiesFields,
 	ReadContentQuery,
 	ReinviteResponse,
 	RenameAllocationRequest,
@@ -756,14 +757,19 @@ const content = {
 		serverId: Ulid,
 		file: File,
 		keepExtraContent: boolean,
-		options: Cancellable = {},
+		options: Cancellable & { reset?: PropertiesFields } = {},
 	) => {
+		const meta: ModpackInstallRequest = {
+			source: { kind: 'upload' },
+			keep_extra_content: keepExtraContent,
+		}
+		if (options.reset) {
+			meta.reset = true
+			meta.properties = options.reset
+		}
 		const form = new FormData()
 		form.append('file', file, file.name)
-		form.append(
-			'meta',
-			JSON.stringify({ source: { kind: 'upload' }, keep_extra_content: keepExtraContent }),
-		)
+		form.append('meta', JSON.stringify(meta))
 		return uploadJson<OperationAccepted>(serverPath(serverId, '/content/modpack/install'), {
 			method: 'POST',
 			body: form,

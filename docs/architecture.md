@@ -132,6 +132,13 @@ backup, and packing or unpacking a ZIP archive.
 Backups are tar archives compressed with zstd. While the archive is built, the server is told
 `save-off` and `save-all flush`, and `save-on` once the archive is complete.
 
+A modpack is a Modrinth `.mrpack`. Installing one reads the loader and game version the pack names
+and puts that loader on the server first; a pack for a loader the panel cannot install yet (only
+Fabric packs work today) is refused before anything on the server changes. The pack's server files
+are then downloaded and checksum-verified, and its overrides are laid out. A pack uploaded while
+creating a server is the creating operation's payload: the operation waits until the browser has
+sent the file.
+
 ## The web interface
 
 The interface in `web/` is a Vue application built on **Modrinth's own UI library**, vendored under

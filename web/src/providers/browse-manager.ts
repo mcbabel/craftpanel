@@ -22,6 +22,8 @@ import {
 import { computed, type ComputedRef, onScopeDispose, ref, type Ref, watch } from 'vue'
 import { type RouteLocationRaw, useRoute, useRouter } from 'vue-router'
 
+import type { ModpackPick } from '@/providers/creation-catalog'
+
 import {
 	api,
 	type ContentListResponse,
@@ -41,6 +43,15 @@ import {
 import { loaderFacet } from '@/providers/loader-facets'
 
 export type DisplayMode = 'list' | 'grid' | 'gallery'
+
+const SERVER_PACKS = [
+	'client_and_server',
+	'server_only',
+	'server_only_client_optional',
+	'dedicated_server_only',
+	'client_or_server',
+	'client_or_server_prefers_both',
+]
 
 const DISPLAY_MODE_KEY = 'craftpanel.browse.display-mode'
 const DISPLAY_MODES: DisplayMode[] = ['list', 'grid', 'gallery']
@@ -95,6 +106,18 @@ const messages = defineMessages({
 	lockedSync: {
 		id: 'craftpanel.browse.locked.sync',
 		defaultMessage: 'Match the server again',
+	},
+	modpacksHeading: {
+		id: 'craftpanel.browse.modpacks-heading',
+		defaultMessage: 'Choose a modpack',
+	},
+	modpacksBack: {
+		id: 'craftpanel.browse.modpacks-back',
+		defaultMessage: 'Back to setup',
+	},
+	modpackLockedLoader: {
+		id: 'craftpanel.browse.locked.modpack-loader',
+		defaultMessage: 'Only loaders the panel can install are shown',
 	},
 })
 
@@ -161,12 +184,18 @@ function browseFacts(list: ContentListResponse): string {
 	].join('|')
 }
 
+export interface ModpackBrowsing {
+	pick: (pick: ModpackPick) => RouteLocationRaw
+	busy?: ComputedRef<string | null>
+}
+
 export interface BrowseManagerOptions {
-	serverId: Ulid
-	socket: ServerEventSource
-	busyReasons: Ref<BusyReason[]> | ComputedRef<BusyReason[]>
+	serverId: Ulid | null
+	socket?: ServerEventSource
+	busyReasons?: Ref<BusyReason[]> | ComputedRef<BusyReason[]>
 	back: RouteLocationRaw
 	client?: PanelApi
+	modpacks?: ModpackBrowsing
 }
 
 export interface BrowseManagerHandle {
@@ -184,7 +213,9 @@ export function useBrowseManager(options: BrowseManagerOptions): BrowseManagerHa
 	const modrinth = injectModrinthClient()
 	const router = useRouter()
 	const client = options.client ?? api
-	const { isBusy, busyMessage } = useBusyState(options.busyReasons)
+	const { isBusy, busyMessage } = useBusyState(options.busyReasons ?? ref<BusyReason[]>([]))
+	const modpacks = options.modpacks ?? null
+	const packLoaders = ref<string[] | null>(null)
 
 	const lifetime = new AbortController()
 
@@ -192,7 +223,11 @@ export function useBrowseManager(options: BrowseManagerOptions): BrowseManagerHa
 	const list = ref<ContentListResponse | null>(null)
 	const loadError = ref<Error | null>(null)
 	const searchError = ref<Error | null>(null)
-	const ready = computed(() => tags.value.loaders.length > 0 && list.value !== null)
+	const ready = computed(
+		() =>
+			tags.value.loaders.length > 0 &&
+			(modpacks ? packLoaders.value !== null : list.value !== null),
+	)
 
 	const query = useRoute().query
 	const selection = ref(new Map<string, BrowseSelectedProject>())
@@ -204,7 +239,9 @@ export function useBrowseManager(options: BrowseManagerOptions): BrowseManagerHa
 	const filtersMenuOpen = ref(false)
 	const displayMode = ref<DisplayMode>(readDisplayMode())
 
-	const projectType = computed<string>(() => list.value?.content_type ?? 'mod')
+	const projectType = computed<string>(() =>
+		modpacks ? 'modpack' : (list.value?.content_type ?? 'mod'),
+	)
 	const canWrite = computed(() => list.value?.permissions.can_write ?? false)
 	const projects = computed(() => installedProjects(list.value))
 	const installedIds = computed(
@@ -212,6 +249,16 @@ export function useBrowseManager(options: BrowseManagerOptions): BrowseManagerHa
 	)
 
 	const providedFilters = computed<FilterValue[]>(() => {
+		if (modpacks) {
+			const known = new Set(
+				tags.value.loaders
+					.filter((tag) => tag.supported_project_types.includes('modpack'))
+					.map((tag) => tag.name),
+			)
+			return (packLoaders.value ?? [])
+				.filter((loader) => known.has(loader))
+				.map((loader) => ({ type: 'modpack_loader', option: loader }))
+		}
 		const filters: FilterValue[] = []
 		const gameVersion = list.value?.game_version
 		if (gameVersion) filters.push({ type: 'game_version', option: gameVersion })
@@ -228,6 +275,7 @@ export function useBrowseManager(options: BrowseManagerOptions): BrowseManagerHa
 
 	const showServerOnly = computed(() => projectType.value === 'mod')
 	const environmentOverride = computed<EnvironmentSearchOverride | undefined>(() => {
+		if (modpacks) return { mode: 'include', values: SERVER_PACKS }
 		if (!showServerOnly.value) return undefined
 		if (serverOnly.value) {
 			return {
@@ -278,7 +326,7 @@ export function useBrowseManager(options: BrowseManagerOptions): BrowseManagerHa
 		environmentOverride,
 		active: ready,
 		search,
-		persistentQueryParams: [],
+		persistentQueryParams: modpacks ? ['type'] : [],
 		getExtraQueryParams: () => ({
 			so: showServerOnly.value && serverOnly.value ? 'true' : undefined,
 			hi: hideInstalled.value ? 'true' : undefined,
@@ -295,6 +343,23 @@ export function useBrowseManager(options: BrowseManagerOptions): BrowseManagerHa
 
 	async function load(): Promise<void> {
 		loadError.value = null
+		if (modpacks) {
+			try {
+				const [fetchedTags, catalog] = await Promise.all([
+					readTags(modrinth, lifetime.signal),
+					client.settings.loaders({ signal: lifetime.signal }),
+				])
+				tags.value = fetchedTags
+				packLoaders.value = catalog.loaders
+					.filter((loader) => loader.kind === 'modloader' && loader.wave <= 1)
+					.map((loader) => loader.id)
+			} catch (cause) {
+				if (isAbortError(cause) || lifetime.signal.aborted) return
+				loadError.value = cause instanceof Error ? cause : new Error(String(cause))
+			}
+			return
+		}
+		if (options.serverId === null) return
 		try {
 			const [fetchedTags, fetchedList] = await Promise.all([
 				readTags(modrinth, lifetime.signal),
@@ -309,7 +374,7 @@ export function useBrowseManager(options: BrowseManagerOptions): BrowseManagerHa
 	}
 
 	async function reloadList(): Promise<void> {
-		if (list.value === null) return
+		if (list.value === null || options.serverId === null) return
 		try {
 			const fetched = await client.content.list(options.serverId, {}, { signal: lifetime.signal })
 			if (list.value !== null && browseFacts(fetched) === browseFacts(list.value)) return
@@ -355,11 +420,13 @@ export function useBrowseManager(options: BrowseManagerOptions): BrowseManagerHa
 
 	async function installSelected(): Promise<void> {
 		if (installing.value || selection.value.size === 0) return
+		if (options.serverId === null) return
+		const serverId = options.serverId
 		installing.value = true
 		const chosen = Array.from(selection.value.keys())
 
 		try {
-			const accepted = await client.content.install(options.serverId, {
+			const accepted = await client.content.install(serverId, {
 				items: chosen.map((projectId) => ({ project_id: projectId, version_id: null })),
 				resolve_dependencies: true,
 			})
@@ -391,6 +458,7 @@ export function useBrowseManager(options: BrowseManagerOptions): BrowseManagerHa
 	}
 
 	function installAction(result: Labrinth.Search.v3.ResultSearchProject): CardAction {
+		if (modpacks) return pickAction(result)
 		const selected = selection.value.has(result.project_id)
 		const state = installState(result.project_id, projects.value, selected)
 		const running = state === 'installing' || (installing.value && selected)
@@ -419,7 +487,46 @@ export function useBrowseManager(options: BrowseManagerOptions): BrowseManagerHa
 		}
 	}
 
-	const installContext = computed<BrowseInstallContext>(() => ({
+	function pickAction(result: Labrinth.Search.v3.ResultSearchProject): CardAction {
+		const blocked = modpacks?.busy?.value ?? null
+		return {
+			key: 'install',
+			label: formatMessage(commonMessages.installButton),
+			icon: DownloadIcon,
+			disabled: blocked !== null,
+			color: 'brand',
+			type: 'outlined',
+			tooltip: blocked ?? undefined,
+			onClick: async () => {
+				if (!modpacks || blocked !== null) return
+				await router.push(
+					modpacks.pick({
+						projectId: result.project_id,
+						name: result.name,
+						iconUrl: result.icon_url ?? undefined,
+					}),
+				)
+			},
+		}
+	}
+
+	const installContext = computed<BrowseInstallContext>(() =>
+		modpacks
+			? {
+					name: formatMessage(messages.modpacksHeading),
+					loader: '',
+					gameVersion: '',
+					serverId: null,
+					upstream: null,
+					iconSrc: null,
+					backUrl: options.back,
+					backLabel: formatMessage(messages.modpacksBack),
+					heading: '',
+				}
+			: contentInstallContext(),
+	)
+
+	const contentInstallContext = (): BrowseInstallContext => ({
 		name: formatMessage(commonMessages.installingContentLabel),
 		loader: list.value?.loader ?? '',
 		gameVersion: list.value?.game_version ?? '',
@@ -436,14 +543,14 @@ export function useBrowseManager(options: BrowseManagerOptions): BrowseManagerHa
 		clearQueued: clearSelection,
 		discardSelectedAndBack: discardAndBack,
 		installSelected,
-	}))
+	})
 
 	watch(displayMode, (mode) => localStorage.setItem(DISPLAY_MODE_KEY, mode))
 
-	const stopContentChanged = options.socket.on('content_changed', () => void reloadList())
+	const stopContentChanged = options.socket?.on('content_changed', () => void reloadList())
 
 	onScopeDispose(() => {
-		stopContentChanged()
+		stopContentChanged?.()
 		lifetime.abort()
 	})
 
@@ -465,7 +572,7 @@ export function useBrowseManager(options: BrowseManagerOptions): BrowseManagerHa
 		showHideSelected: computed(() => selection.value.size > 0),
 		serverOnly,
 		showServerOnly,
-		hiddenFilterTypes: computed(() => (showServerOnly.value ? ['environment'] : [])),
+		hiddenFilterTypes: computed(() => (showServerOnly.value || modpacks ? ['environment'] : [])),
 		advancedFiltersCollapsed,
 		filtersMenuOpen,
 		displayMode,
@@ -477,7 +584,7 @@ export function useBrowseManager(options: BrowseManagerOptions): BrowseManagerHa
 		offline: computed(() => searchError.value !== null),
 		lockedFilterMessages: {
 			gameVersion: formatMessage(messages.lockedGameVersion),
-			modLoader: formatMessage(messages.lockedLoader),
+			modLoader: formatMessage(modpacks ? messages.modpackLockedLoader : messages.lockedLoader),
 			providedBy: formatMessage(messages.lockedProvidedBy),
 			syncButton: formatMessage(messages.lockedSync),
 		},
