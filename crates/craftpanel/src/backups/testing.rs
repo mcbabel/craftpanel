@@ -23,7 +23,8 @@ use super::Backups;
 
 const CONFIRMATION: &str = "[15:04:22] [Server thread/INFO]: Saved the game";
 
-const WAIT_STEPS: usize = 2_000;
+// Generous, because a shared CI runner can be many times slower than a workstation.
+const WAIT_LIMIT: Duration = Duration::from_secs(120);
 
 pub struct FakeServer {
     pub server: Id,
@@ -243,7 +244,8 @@ impl FakeServer {
     }
 
     pub async fn await_backup(&self, backup: Id) -> crate::model::BackupStatus {
-        for _ in 0..WAIT_STEPS {
+        let deadline = tokio::time::Instant::now() + WAIT_LIMIT;
+        while tokio::time::Instant::now() < deadline {
             let seen = crate::backups::store::one(&self.pool, backup)
                 .await
                 .expect("the backup")
@@ -260,7 +262,8 @@ impl FakeServer {
     }
 
     pub async fn await_operation(&self, operation: Id) -> crate::model::OperationState {
-        for _ in 0..WAIT_STEPS {
+        let deadline = tokio::time::Instant::now() + WAIT_LIMIT;
+        while tokio::time::Instant::now() < deadline {
             let seen = self.operations.get(operation).await.expect("the run").state;
             if seen.is_terminal() {
                 return seen;
