@@ -145,7 +145,7 @@ pub fn plan(patch: &StartupOptionsPatch, server: &ServerRow, memory_mib: u32) ->
     Ok(change)
 }
 
-fn read_command(command: Option<&str>, launch: Launch) -> Result<(Vec<String>, Vec<String>)> {
+pub(crate) fn read_command(command: Option<&str>, launch: Launch) -> Result<(Vec<String>, Vec<String>)> {
     let Some(command) = command else {
         return Ok((Vec::new(), Vec::new()));
     };

@@ -193,3 +193,55 @@ Leave out the `mail_settings` or `drive_settings` statement if your database has
 | A server did not stop | Stop it from the old panel, or set a longer `CRAFTPANEL_STOP_GRACE`. |
 | Neither `sqlite3` nor `python3` | Install one (`apt install sqlite3`) and run the installer again. |
 | A service did not stop, or `usermod` failed | Check `systemctl status` and `ps -u <account>` for processes still running. |
+
+## Moving servers over from MCSManager
+
+CraftPanel can take over the Minecraft servers of an [MCSManager](https://github.com/MCSManager/MCSManager)
+daemon running on the same machine. Every instance keeps its name and, where it is free, its port,
+and all of them land on one panel account.
+
+### Before you start
+
+- Install CraftPanel on the same machine and sign in once, so the account that should own the
+  servers has its system account (the users page shows it as ready).
+- Stop the instances in MCSManager. An instance whose folder is still in use is refused.
+- Make a backup of anything you cannot lose.
+
+### Running the import
+
+Look first; nothing is changed:
+
+```bash
+sudo craftpanel import mcsmanager --owner admin --dry-run
+```
+
+Then import everything, or a few instances by name or UUID:
+
+```bash
+sudo craftpanel import mcsmanager --owner admin
+sudo craftpanel import mcsmanager --owner admin --only Lobby --only "Survival 1.21"
+```
+
+`--from` points at another daemon folder than `/opt/mcsmanager/daemon`.
+
+### What happens
+
+For every instance the import:
+
+1. reads its name, folder and start command from `data/InstanceConfig/<uuid>.json`;
+2. tells the server type and version from the folder: Paper, Purpur, Folia and Leaf from
+   `version_history.json` or the jar's name, Fabric from its launcher, Velocity from
+   `velocity.toml`, Vanilla from the jar;
+3. **moves** the folder into the panel's data directory. On the same disk that takes no extra space
+   and no time. Use `--copy` to keep the original, which needs the space twice;
+4. renames the server jar to `server.jar`, keeps `-Xmx` as the server's memory and other JVM flags
+   as extra startup flags;
+5. keeps the port when no other panel server has it, and otherwise takes the next free one from the
+   port pool and writes it into `server.properties` (or `velocity.toml`);
+6. hands the files to the owner's system account.
+
+Bedrock, Forge, NeoForge, BungeeCord and Waterfall instances are skipped with a reason. If a
+server's port had to change and a Velocity proxy points at it, update the proxy's `[servers]`
+section.
+
+Moved instances are gone from MCSManager's folders; remove the instances there afterwards.

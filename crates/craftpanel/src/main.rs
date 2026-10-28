@@ -9,6 +9,7 @@ mod db;
 mod drive;
 mod files;
 mod helper;
+mod import;
 mod java;
 mod loaders;
 mod mail;
@@ -61,6 +62,8 @@ enum Command {
     /// database: `craftpanel mail preview --out /tmp/craftpanel-mail`.
     #[command(subcommand)]
     Mail(mail::cli::MailCommand),
+    #[command(subcommand, about = "Take over servers from another panel on this machine")]
+    Import(import::ImportCommand),
     /// Attend one game process. Started by the privileged helper, never by hand.
     Supervise {
         #[arg(long)]
@@ -91,6 +94,7 @@ async fn main() -> Result<()> {
         }
         Some(Command::Admin(command)) => auth::cli::run(command).await,
         Some(Command::Mail(command)) => mail::cli::run(command).await,
+        Some(Command::Import(command)) => import::run(command).await,
         Some(Command::Serve) | None => serve().await,
     }
 }

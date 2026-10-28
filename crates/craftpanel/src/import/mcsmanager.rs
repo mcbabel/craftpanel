@@ -1,0 +1,551 @@
+use std::path::{Path, PathBuf};
+
+use anyhow::{bail, Context, Result};
+use serde::Deserialize;
+use sqlx::SqlitePool;
+
+use super::detect::{self, Detected};
+use super::McsmanagerArgs;
+use crate::config::Config;
+use crate::helper::Helper;
+use crate::model::{Id, LoaderId, SystemUserState, Timestamp};
+
+const GLOBAL_INSTANCE: &str = "global0001";
+const JAR: &str = "server.jar";
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Instance {
+    pub uuid: String,
+    pub name: String,
+    pub dir: PathBuf,
+    pub start_command: String,
+    pub kind: String,
+}
+
+#[derive(Debug, Clone)]
+pub struct Planned {
+    pub instance: Instance,
+    pub detected: Detected,
+    pub memory_mib: u32,
+    pub flags: Vec<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Imported {
+    pub server: Id,
+    pub port: u16,
+    pub port_changed: bool,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct Stored {
+    #[serde(default)]
+    nickname: String,
+    #[serde(default)]
+    start_command: String,
+    #[serde(default)]
+    cwd: String,
+    #[serde(default, rename = "type")]
+    kind: String,
+}
+
+struct Owner {
+    id: Id,
+    state: SystemUserState,
+}
+
+pub async fn run(args: McsmanagerArgs) -> Result<()> {
+    let config = Config::load(&crate::auth::cli::config_path())?;
+    let pool = crate::db::connect(&config.database_path()).await?;
+    let helper = Helper::new(&config.helper_socket);
+
+    let chosen = select(instances(&args.from)?, &args.only)?;
+    let owner = owner(&pool, &args.owner).await?;
+    if !args.dry_run {
+        helper.ping().await.context("the privileged helper has to run to hand the files over")?;
+        if owner.state != SystemUserState::Ready {
+            bail!("the system account of {} is not ready yet; fix it in the panel first", args.owner);
+        }
+    }
+
+    let (mut imported, mut skipped) = (0, 0);
+    for instance in &chosen {
+        let planned = match plan(instance) {
+            Ok(planned) => planned,
+            Err(why) => {
+                skipped += 1;
+                println!("skip    {} ({}): {why}", instance.name, instance.uuid);
+                continue;
+            }
+        };
+        if args.dry_run {
+            println!("import  {}", describe(&planned));
+            continue;
+        }
+        match import(&pool, &config, &helper, owner.id, &planned, args.copy).await {
+            Ok(done) => {
+                imported += 1;
+                println!("done    {} as {} on port {}", describe(&planned), done.server, done.port);
+                if done.port_changed {
+                    println!(
+                        "        its port {} was taken, so it moved to {}; update any proxy that points at it",
+                        planned.detected.port.map_or("?".to_owned(), |port| port.to_string()),
+                        done.port
+                    );
+                }
+            }
+            Err(err) => {
+                skipped += 1;
+                println!("failed  {} ({}): {err:#}", instance.name, instance.uuid);
+            }
+        }
+    }
+
+    if args.dry_run {
+        println!("{} of {} instances can be imported; nothing was changed", chosen.len() - skipped, chosen.len());
+    } else {
+        println!("{imported} imported, {skipped} skipped");
+    }
+    Ok(())
+}
+
+pub fn instances(daemon: &Path) -> Result<Vec<Instance>> {
+    let folder = daemon.join("data").join("InstanceConfig");
+    let entries = std::fs::read_dir(&folder).with_context(|| format!("reading {}", folder.display()))?;
+
+    let mut found = Vec::new();
+    for entry in entries {
+        let path = entry?.path();
+        if path.extension().and_then(|ext| ext.to_str()) != Some("json") {
+            continue;
+        }
+        let Some(uuid) = path.file_stem().and_then(|stem| stem.to_str()).map(str::to_owned) else {
+            continue;
+        };
+        if uuid == GLOBAL_INSTANCE {
+            continue;
+        }
+        let text = std::fs::read_to_string(&path).with_context(|| format!("reading {}", path.display()))?;
+        let stored: Stored = match serde_json::from_str(&text) {
+            Ok(stored) => stored,
+            Err(err) => {
+                eprintln!("skip    {}: {err}", path.display());
+                continue;
+            }
+        };
+        if stored.cwd.trim().is_empty() || stored.cwd == "." {
+            continue;
+        }
+        let cwd = PathBuf::from(stored.cwd.trim());
+        let dir = if cwd.is_absolute() { cwd } else { daemon.join(cwd) };
+        found.push(Instance {
+            name: name_of(&stored.nickname, &uuid),
+            uuid,
+            dir,
+            start_command: stored.start_command,
+            kind: stored.kind,
+        });
+    }
+    found.sort_by_key(|instance| instance.name.to_lowercase());
+    Ok(found)
+}
+
+fn name_of(nickname: &str, uuid: &str) -> String {
+    let name: String = nickname.trim().chars().take(64).collect();
+    if name.is_empty() { uuid.chars().take(8).collect() } else { name }
+}
+
+fn select(found: Vec<Instance>, only: &[String]) -> Result<Vec<Instance>> {
+    if only.is_empty() {
+        return Ok(found);
+    }
+    let mut chosen = Vec::new();
+    for wanted in only {
+        let hit = found
+            .iter()
+            .find(|instance| instance.uuid == *wanted || instance.name.eq_ignore_ascii_case(wanted))
+            .with_context(|| format!("there is no instance called {wanted}"))?;
+        chosen.push(hit.clone());
+    }
+    Ok(chosen)
+}
+
+pub fn plan(instance: &Instance) -> Result<Planned, String> {
+    if instance.kind == "minecraft/bedrock" {
+        return Err("Bedrock servers are not supported".to_owned());
+    }
+    if !instance.dir.is_dir() {
+        return Err(format!("its folder {} does not exist", instance.dir.display()));
+    }
+    let detected = detect::detect(&instance.dir, &instance.start_command)?;
+    let launch = crate::settings::startup::launch_of(Some(detected.loader));
+    let flags = crate::settings::startup::read_command(Some(&instance.start_command), launch)
+        .map(|(kept, _)| kept)
+        .unwrap_or_default();
+    Ok(Planned {
+        instance: instance.clone(),
+        memory_mib: detect::memory_of(&instance.start_command),
+        flags,
+        detected,
+    })
+}
+
+fn describe(planned: &Planned) -> String {
+    let found = &planned.detected;
+    let word = if found.loader == LoaderId::Fabric { "loader" } else { "build" };
+    let build = found.loader_version.as_deref().map(|build| format!(" {word} {build}")).unwrap_or_default();
+    format!(
+        "{} ({}): {} {}{build}, {} MiB",
+        planned.instance.name,
+        planned.instance.uuid,
+        found.loader.as_str(),
+        found.game_version,
+        planned.memory_mib
+    )
+}
+
+async fn owner(pool: &SqlitePool, username: &str) -> Result<Owner> {
+    let row: Option<(Id, SystemUserState)> =
+        sqlx::query_as("SELECT id, system_state FROM users WHERE username = ? COLLATE NOCASE")
+            .bind(username)
+            .fetch_optional(pool)
+            .await?;
+    let (id, state) = row.with_context(|| format!("there is no panel user called {username}"))?;
+    Ok(Owner { id, state })
+}
+
+pub async fn import(
+    pool: &SqlitePool,
+    config: &Config,
+    helper: &Helper,
+    owner: Id,
+    planned: &Planned,
+    copy: bool,
+) -> Result<Imported> {
+    let source = &planned.instance.dir;
+    if let Some(pid) = running_in(source) {
+        bail!("process {pid} still runs in {}; stop the instance in MCSManager first", source.display());
+    }
+
+    let server = Id::new();
+    let target = crate::files::server_dir(config, owner, server);
+    let parent = target.parent().context("a server folder has a parent")?;
+    if !parent.is_dir() {
+        bail!("{} does not exist; the owner's system account looks incomplete", parent.display());
+    }
+
+    transfer(source, &target, copy)?;
+    let settled = settle(pool, &target, owner, server, planned).await;
+    let imported = match settled {
+        Ok(imported) => imported,
+        Err(err) => {
+            let undone = if copy { std::fs::remove_dir_all(&target) } else { std::fs::rename(&target, source) };
+            if let Err(undo) = undone {
+                eprintln!("        the files could not be put back from {}: {undo}", target.display());
+            }
+            return Err(err);
+        }
+    };
+
+    helper
+        .chown_tree(&owner.to_string(), crate::helper::in_servers(server))
+        .await
+        .context("the server was imported, but its files could not be handed to the owner's account")?;
+    Ok(imported)
+}
+
+async fn settle(
+    pool: &SqlitePool,
+    dir: &Path,
+    owner: Id,
+    server: Id,
+    planned: &Planned,
+) -> Result<Imported> {
+    let found = &planned.detected;
+    let mut tx = pool.begin().await?;
+    let port = free_port(&mut tx, found.port).await?;
+    let now = Timestamp::now();
+    sqlx::query(
+        "INSERT INTO servers (id, name, owner_id, status, loader, loader_version, game_version, \
+         memory_mib, flows_intro, extra_flags, created_at, updated_at) \
+         VALUES (?, ?, ?, 'available', ?, ?, ?, ?, 0, ?, ?, ?)",
+    )
+    .bind(server)
+    .bind(&planned.instance.name)
+    .bind(owner)
+    .bind(found.loader)
+    .bind(&found.loader_version)
+    .bind(&found.game_version)
+    .bind(i64::from(planned.memory_mib))
+    .bind(serde_json::to_string(&planned.flags)?)
+    .bind(now)
+    .bind(now)
+    .execute(&mut *tx)
+    .await?;
+    sqlx::query(
+        "INSERT INTO allocations (port, server_id, name, is_primary, created_at) \
+         VALUES (?, ?, 'primary', 1, ?)",
+    )
+    .bind(i64::from(port))
+    .bind(server)
+    .bind(now)
+    .execute(&mut *tx)
+    .await?;
+    sqlx::query(
+        "INSERT INTO audit_log (id, server_id, actor_user_id, action, metadata, created_at) \
+         VALUES (?, ?, ?, 'server_created', ?, ?)",
+    )
+    .bind(Id::new())
+    .bind(server)
+    .bind(owner)
+    .bind(serde_json::json!({ "imported_from": "mcsmanager", "instance": planned.instance.uuid }).to_string())
+    .bind(now)
+    .execute(&mut *tx)
+    .await?;
+
+    detect::set_port(dir, found.loader, port)?;
+    tx.commit().await?;
+
+    if found.jar != JAR {
+        let existing = dir.join(JAR);
+        if existing.exists() {
+            std::fs::rename(&existing, dir.join("server.jar.before-import"))?;
+        }
+        std::fs::rename(dir.join(&found.jar), &existing)?;
+    }
+    if found.loader != LoaderId::Velocity && !dir.join("eula.txt").exists() {
+        std::fs::write(dir.join("eula.txt"), "eula=true\n")?;
+    }
+
+    Ok(Imported { server, port, port_changed: found.port.is_some_and(|wanted| wanted != port) })
+}
+
+async fn free_port(tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>, wanted: Option<u16>) -> Result<u16> {
+    let taken: Vec<i64> = sqlx::query_scalar("SELECT port FROM allocations").fetch_all(&mut **tx).await?;
+    let free = |port: u16| !taken.contains(&i64::from(port));
+    if let Some(port) = wanted.filter(|port| *port >= 1024 && free(*port)) {
+        return Ok(port);
+    }
+    let (from, to): (i64, i64) =
+        sqlx::query_as("SELECT port_pool_from, port_pool_to FROM panel_settings WHERE id = 1")
+            .fetch_one(&mut **tx)
+            .await?;
+    (from..=to)
+        .filter_map(|port| u16::try_from(port).ok())
+        .find(|port| free(*port))
+        .context("the port pool has no free port left; widen it with `craftpanel admin ports`")
+}
+
+fn transfer(source: &Path, target: &Path, copy: bool) -> Result<()> {
+    if copy {
+        return copy_tree(source, target);
+    }
+    match std::fs::rename(source, target) {
+        Ok(()) => Ok(()),
+        Err(err) if err.raw_os_error() == Some(libc::EXDEV) => bail!(
+            "{} lies on another disk than the panel's data; run again with --copy",
+            source.display()
+        ),
+        Err(err) => Err(err).with_context(|| format!("moving {}", source.display())),
+    }
+}
+
+fn copy_tree(source: &Path, target: &Path) -> Result<()> {
+    for entry in walkdir::WalkDir::new(source).follow_links(false) {
+        let entry = entry?;
+        let relative = entry.path().strip_prefix(source)?;
+        let destination = target.join(relative);
+        let kind = entry.file_type();
+        if kind.is_dir() {
+            std::fs::create_dir_all(&destination)?;
+        } else if kind.is_symlink() {
+            std::os::unix::fs::symlink(std::fs::read_link(entry.path())?, &destination)?;
+        } else {
+            std::fs::copy(entry.path(), &destination)
+                .with_context(|| format!("copying {}", entry.path().display()))?;
+        }
+    }
+    Ok(())
+}
+
+fn running_in(dir: &Path) -> Option<u32> {
+    let dir = dir.canonicalize().ok()?;
+    std::fs::read_dir("/proc").ok()?.filter_map(|entry| entry.ok()).find_map(|entry| {
+        let pid: u32 = entry.file_name().to_str()?.parse().ok()?;
+        let cwd = std::fs::read_link(entry.path().join("cwd")).ok()?;
+        cwd.starts_with(&dir).then_some(pid)
+    })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::auth::harness::{an_admin, test_pool, FakeHelper};
+
+    struct Setup {
+        daemon: PathBuf,
+        data: PathBuf,
+    }
+
+    fn setup() -> Setup {
+        let root = std::env::temp_dir().join(format!("craftpanel-import-{}", Id::new()));
+        let daemon = root.join("daemon");
+        std::fs::create_dir_all(daemon.join("data/InstanceConfig")).unwrap();
+        std::fs::create_dir_all(daemon.join("data/InstanceData")).unwrap();
+        Setup { daemon, data: root.join("panel") }
+    }
+
+    impl Setup {
+        fn instance(&self, uuid: &str, config: serde_json::Value) {
+            let path = self.daemon.join("data/InstanceConfig").join(format!("{uuid}.json"));
+            std::fs::write(path, config.to_string()).unwrap();
+        }
+
+        fn folder(&self, name: &str) -> PathBuf {
+            let dir = self.daemon.join("data/InstanceData").join(name);
+            std::fs::create_dir_all(&dir).unwrap();
+            dir
+        }
+
+        fn config(&self) -> Config {
+            Config { data_dir: self.data.clone(), ..Config::default() }
+        }
+    }
+
+    fn paper(dir: &Path, port: u16) {
+        std::fs::write(dir.join("paper-1.21.4-130.jar"), b"jar").unwrap();
+        std::fs::write(dir.join("server.properties"), format!("motd=hi\nserver-port={port}\n")).unwrap();
+        std::fs::create_dir_all(dir.join("world")).unwrap();
+        std::fs::write(dir.join("world/level.dat"), b"world").unwrap();
+    }
+
+    #[test]
+    fn instances_are_read_with_their_names_and_folders() {
+        let setup = setup();
+        setup.instance("aaa", serde_json::json!({
+            "nickname": "  Lobby  ", "cwd": "data/InstanceData/lobby", "type": "minecraft/java",
+            "startCommand": "java -Xmx4G -jar paper.jar nogui"
+        }));
+        setup.instance("bbb", serde_json::json!({ "nickname": "", "cwd": "/srv/elsewhere" }));
+        setup.instance("global0001", serde_json::json!({ "nickname": "global", "cwd": "/" }));
+
+        let found = instances(&setup.daemon).unwrap();
+        assert_eq!(found.len(), 2);
+        let lobby = found.iter().find(|one| one.uuid == "aaa").unwrap();
+        assert_eq!(lobby.name, "Lobby");
+        assert_eq!(lobby.dir, setup.daemon.join("data/InstanceData/lobby"));
+        let unnamed = found.iter().find(|one| one.uuid == "bbb").unwrap();
+        assert_eq!((unnamed.name.as_str(), unnamed.dir.as_path()), ("bbb", Path::new("/srv/elsewhere")));
+    }
+
+    #[tokio::test]
+    async fn a_server_moves_over_with_its_name_port_and_memory() {
+        let setup = setup();
+        let pool = test_pool().await;
+        let owner = an_admin(&pool, "admin").await;
+        let config = setup.config();
+        std::fs::create_dir_all(config.users_dir().join(owner.to_string()).join("servers")).unwrap();
+        let helper_fake = FakeHelper::obliging().await;
+        let helper = Helper::new(helper_fake.socket());
+
+        let dir = setup.folder("f00");
+        paper(&dir, 25590);
+        setup.instance("f00", serde_json::json!({
+            "nickname": "Survival", "cwd": dir.display().to_string(), "type": "minecraft/java",
+            "startCommand": "java -Xmx6G -XX:+UseG1GC -jar paper-1.21.4-130.jar nogui"
+        }));
+
+        let planned = plan(&instances(&setup.daemon).unwrap()[0]).unwrap();
+        let done = import(&pool, &config, &helper, owner, &planned, false).await.unwrap();
+
+        assert_eq!(done.port, 25590);
+        assert!(!done.port_changed);
+        assert!(!dir.exists(), "moved, not copied");
+        let target = crate::files::server_dir(&config, owner, done.server);
+        assert_eq!(std::fs::read(target.join("world/level.dat")).unwrap(), b"world");
+        assert!(target.join("server.jar").is_file());
+        assert!(target.join("eula.txt").is_file());
+
+        let row: (String, String, Option<String>, String, i64, i64, String, String) = sqlx::query_as(
+            "SELECT name, loader, loader_version, game_version, memory_mib, flows_intro, status, extra_flags \
+             FROM servers WHERE id = ?",
+        )
+        .bind(done.server)
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+        assert_eq!(row.0, "Survival");
+        assert_eq!((row.1.as_str(), row.2.as_deref(), row.3.as_str()), ("paper", Some("130"), "1.21.4"));
+        assert_eq!((row.4, row.5, row.6.as_str()), (6144, 0, "available"));
+        assert_eq!(row.7, r#"["-XX:+UseG1GC"]"#);
+        assert_eq!(helper_fake.calls().len(), 1, "the files were handed to the owner");
+    }
+
+    #[tokio::test]
+    async fn a_taken_port_gives_way_and_the_properties_follow() {
+        let setup = setup();
+        let pool = test_pool().await;
+        let owner = an_admin(&pool, "admin").await;
+        let config = setup.config();
+        std::fs::create_dir_all(config.users_dir().join(owner.to_string()).join("servers")).unwrap();
+        let helper_fake = FakeHelper::obliging().await;
+        let helper = Helper::new(helper_fake.socket());
+
+        for (uuid, name) in [("one", "First"), ("two", "Second")] {
+            let dir = setup.folder(uuid);
+            paper(&dir, 25565);
+            setup.instance(uuid, serde_json::json!({
+                "nickname": name, "cwd": dir.display().to_string(), "type": "minecraft/java",
+                "startCommand": "java -jar paper-1.21.4-130.jar"
+            }));
+        }
+
+        let found = instances(&setup.daemon).unwrap();
+        let first = import(&pool, &config, &helper, owner, &plan(&found[0]).unwrap(), true).await.unwrap();
+        let second = import(&pool, &config, &helper, owner, &plan(&found[1]).unwrap(), true).await.unwrap();
+
+        assert_eq!(first.port, 25565);
+        assert_ne!(second.port, 25565);
+        assert!(second.port_changed);
+        let properties = std::fs::read_to_string(
+            crate::files::server_dir(&config, owner, second.server).join("server.properties"),
+        )
+        .unwrap();
+        assert!(properties.contains(&format!("server-port={}", second.port)));
+        assert!(setup.daemon.join("data/InstanceData/one").exists(), "copied, the original stays");
+    }
+
+    #[tokio::test]
+    async fn a_failed_import_puts_the_folder_back() {
+        let setup = setup();
+        let pool = test_pool().await;
+        let owner = an_admin(&pool, "admin").await;
+        let config = setup.config();
+        std::fs::create_dir_all(config.users_dir().join(owner.to_string()).join("servers")).unwrap();
+        let helper = Helper::new(setup.data.join("nobody.sock"));
+        sqlx::query("UPDATE panel_settings SET port_pool_from = 30000, port_pool_to = 30000 WHERE id = 1")
+            .execute(&pool)
+            .await
+            .unwrap();
+        sqlx::query("INSERT INTO servers (id, name, owner_id, status, memory_mib, created_at, updated_at) VALUES (?, 'x', ?, 'available', 1024, ?, ?)")
+            .bind(Id::new()).bind(owner).bind(Timestamp::now()).bind(Timestamp::now())
+            .execute(&pool).await.unwrap();
+        let other: Id = sqlx::query_scalar("SELECT id FROM servers LIMIT 1").fetch_one(&pool).await.unwrap();
+        sqlx::query("INSERT INTO allocations (port, server_id, name, is_primary, created_at) VALUES (30000, ?, 'primary', 1, ?)")
+            .bind(other).bind(Timestamp::now()).execute(&pool).await.unwrap();
+
+        let dir = setup.folder("full");
+        paper(&dir, 30000);
+        setup.instance("full", serde_json::json!({
+            "nickname": "Full", "cwd": dir.display().to_string(), "startCommand": "java -jar paper-1.21.4-130.jar"
+        }));
+
+        let planned = plan(&instances(&setup.daemon).unwrap()[0]).unwrap();
+        let refused = import(&pool, &config, &helper, owner, &planned, false).await.unwrap_err();
+        assert!(format!("{refused:#}").contains("no free port"), "{refused:#}");
+        assert!(dir.join("world/level.dat").is_file(), "the folder is back where it was");
+        let count: i64 = sqlx::query_scalar("SELECT count(*) FROM servers").fetch_one(&pool).await.unwrap();
+        assert_eq!(count, 1);
+    }
+}
