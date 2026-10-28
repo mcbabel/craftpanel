@@ -11,7 +11,7 @@ argon2 = "0.5.3"
 axum = { version = "0.8.9", features = ["ws", "macros"] }
 axum-extra = { version = "0.12.6", features = ["cookie"] }
 clap = { version = "4.6.6", features = ["derive"] }
-craftpanel-proto = { version = "0.1.0", path = "../craftpanel-proto" }
+craftpanel-proto = { path = "../craftpanel-proto" }
 flate2 = "1.1.9"
 futures = "0.3.34"
 hex = "0.4.3"

@@ -82,6 +82,10 @@ code does not type-check under this project's configuration.
 with build provenance attestations, and publishes the release with a `.sha256` file for every asset.
 The workflow refuses a tag that does not match `Cargo.toml` and never replaces an existing release.
 
+A version with a suffix, such as `0.1.0-dev.1` tagged `v0.1.0-dev.1`, is published as a GitHub
+pre-release. The one-line installer only installs full releases, so a pre-release is installed by
+naming it: its own `install.sh` with `CRAFTPANEL_VERSION=0.1.0-dev.1`.
+
 `scripts/release.sh` can also be run locally to build a bundle for testing
 (`CRAFTPANEL_BUNDLE=dist/craftpanel-linux-x86_64.tar.gz ./install.sh`). It needs the musl target:
 `rustup target add x86_64-unknown-linux-musl` and the `musl-tools` package.

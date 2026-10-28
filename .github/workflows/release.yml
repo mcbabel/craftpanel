@@ -44,6 +44,7 @@ jobs:
       tag: ${{ steps.read.outputs.tag }}
       version: ${{ steps.read.outputs.version }}
       sha: ${{ steps.read.outputs.sha }}
+      prerelease: ${{ steps.read.outputs.prerelease }}
     steps:
       # No `ref:` on purpose. This checks out the commit the run was started from,
       # which is the commit `tests` will test and the commit everything after it
@@ -64,21 +65,29 @@ jobs:
           TAG: ${{ inputs.tag || github.ref_name }}
         run: |
           # install.sh asks the API for releases/latest, and that endpoint skips
-          # drafts and pre-releases: a v1.0.0-rc1 published as a normal release
-          # would go out to every machine that runs the installer, and published
-          # as a pre-release it would be invisible to all of them. Neither is what
-          # somebody tagging an rc means. Three numbers, or do it by hand.
+          # pre-releases: a tag like v1.0.0-dev.1 is published as one, never as the
+          # latest, so only somebody who names it gets it.
+          core="${TAG#v}"
+          suffix=""
+          case "$core" in *-*) suffix="${core#*-}"; core="${core%%-*}" ;; esac
           case "$TAG" in
-            v[0-9]*.[0-9]*.[0-9]*)
-              case "${TAG#v}" in
-                *[!0-9.]*)
-                  echo "::error::$TAG is not a plain version tag. install.sh installs whatever releases/latest names, and that endpoint has no idea an -rc is meant to be tried out first. Publish such a build by hand."
-                  exit 1 ;;
-              esac ;;
+            v[0-9]*.[0-9]*.[0-9]*) ;;
             *)
-              echo "::error::$TAG is not a version tag. This workflow makes releases for tags like v0.1.0."
+              echo "::error::$TAG is not a version tag. This workflow makes releases for tags like v0.1.0 or v0.1.0-dev.1."
               exit 1 ;;
           esac
+          case "$core" in
+            *[!0-9.]*|"")
+              echo "::error::$TAG is not a version tag. This workflow makes releases for tags like v0.1.0 or v0.1.0-dev.1."
+              exit 1 ;;
+          esac
+          case "$suffix" in
+            *[!0-9A-Za-z.]*)
+              echo "::error::the part of $TAG after the dash may only hold letters, digits and dots, like -dev.1 or -rc.2."
+              exit 1 ;;
+          esac
+          prerelease=false
+          [ -z "$suffix" ] || prerelease=true
 
           # The tests run on the commit this run was started from — a called
           # workflow cannot be pointed at some other ref — so a release is only
@@ -116,6 +125,7 @@ jobs:
           echo "tag=$TAG" >> "$GITHUB_OUTPUT"
           echo "version=$version" >> "$GITHUB_OUTPUT"
           echo "sha=$here" >> "$GITHUB_OUTPUT"
+          echo "prerelease=$prerelease" >> "$GITHUB_OUTPUT"
           echo "releasing $TAG from $here" >> "$GITHUB_STEP_SUMMARY"
 
   # The guards, the web tests and the three cargo test runs, exactly as a pull
@@ -299,10 +309,44 @@ jobs:
           REPO: ${{ github.repository }}
           TAG: ${{ needs.check.outputs.tag }}
           VERSION: ${{ needs.check.outputs.version }}
+          PRERELEASE: ${{ needs.check.outputs.prerelease }}
         run: |
           x86_64_sum="$(cat dist/craftpanel-linux-x86_64.tar.gz.sha256)"
           aarch64_sum="$(cat dist/craftpanel-linux-aarch64.tar.gz.sha256)"
           installer_sum="$(cat dist/install.sh.sha256)"
+          if [ "$PRERELEASE" = true ]; then
+            cat > notes.md <<NOTES
+          **This is a pre-release for testing.** It is not offered by the usual one-line
+          installer, which only installs full releases. Expect rough edges, and keep backups of
+          anything you cannot lose.
+
+          On the machine that is to run the servers:
+
+          \`\`\`bash
+          curl -fsSL -o install.sh https://github.com/$REPO/releases/download/$TAG/install.sh
+          sudo CRAFTPANEL_VERSION=$VERSION bash install.sh
+          \`\`\`
+
+          **Needs:** Linux with systemd and cgroup v2, on x86_64 or aarch64. Java is not needed.
+
+          Both bundles and the installer carry build provenance attestations:
+
+          \`\`\`bash
+          gh attestation verify craftpanel-linux-x86_64.tar.gz \\
+            --repo $REPO \\
+            --signer-workflow $REPO/.github/workflows/release.yml
+          \`\`\`
+
+          **SHA-256**
+
+          \`\`\`
+          $x86_64_sum  craftpanel-linux-x86_64.tar.gz
+          $aarch64_sum  craftpanel-linux-aarch64.tar.gz
+          $installer_sum  install.sh
+          \`\`\`
+          NOTES
+            exit 0
+          fi
           cat > notes.md <<NOTES
           On the machine that is to run the servers:
 
@@ -395,6 +439,7 @@ jobs:
           TAG: ${{ needs.check.outputs.tag }}
           VERSION: ${{ needs.check.outputs.version }}
           SHA: ${{ needs.check.outputs.sha }}
+          PRERELEASE: ${{ needs.check.outputs.prerelease }}
         run: |
           if gh release view "$TAG" >/dev/null 2>&1; then
             echo "::error::$TAG gained a release while this run was building. Nothing was uploaded, so nothing was overwritten."
@@ -411,9 +456,11 @@ jobs:
             echo "::error::$TAG named $SHA when this run started and names $now now. Nothing was uploaded. The bundles here were built and tested at $SHA; tag the new commit with a new version instead."
             exit 1
           fi
+          kind=(--latest)
+          [ "$PRERELEASE" != true ] || kind=(--prerelease --latest=false)
           gh release create "$TAG" \
             --verify-tag \
-            --latest \
+            "${kind[@]}" \
             --title "CraftPanel $VERSION" \
             --notes-file notes.md \
             dist/craftpanel-linux-x86_64.tar.gz \

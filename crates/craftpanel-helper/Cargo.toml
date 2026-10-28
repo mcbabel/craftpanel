@@ -7,7 +7,7 @@ rust-version.workspace = true
 
 [dependencies]
 anyhow.workspace = true
-craftpanel-proto = { version = "0.1.0", path = "../craftpanel-proto" }
+craftpanel-proto = { path = "../craftpanel-proto" }
 libc = "0.2.189"
 serde = { workspace = true, features = ["derive"] }
 serde_json.workspace = true
