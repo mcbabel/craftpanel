@@ -33,7 +33,11 @@ pub async fn builds(http: &Http, version: &str) -> Result<Vec<Build>> {
     let body = http.maybe_fetch(SERVICE, &url).await?.ok_or_else(|| {
         LoaderError::UnknownVersion { loader: LOADER, version: version.to_owned() }
     })?;
-    Ok(vec![build_of(http::parse(SERVICE, &body)?)])
+    let jar: Jar = http::parse(SERVICE, &body)?;
+    if !jar.download_url.starts_with('/') || jar.download_url.starts_with("//") {
+        return Err(LoaderError::UnknownVersion { loader: LOADER, version: version.to_owned() });
+    }
+    Ok(vec![build_of(jar)])
 }
 
 fn parse_versions(body: &[u8]) -> Result<Vec<Version>> {

@@ -141,6 +141,12 @@ impl Sources {
     }
 
     pub async fn versions(&self, loader: Loader) -> Result<Vec<Version>> {
+        let mut versions = self.versions_from_upstream(loader).await?;
+        versions.retain(|version| safe_name(&version.id));
+        Ok(versions)
+    }
+
+    async fn versions_from_upstream(&self, loader: Loader) -> Result<Vec<Version>> {
         match loader {
             Loader::Vanilla => vanilla::versions(&self.http).await,
             Loader::Paper | Loader::Folia | Loader::Velocity => {
@@ -155,6 +161,12 @@ impl Sources {
     }
 
     pub async fn builds(&self, loader: Loader, version: &str) -> Result<Vec<Build>> {
+        let mut builds = self.builds_from_upstream(loader, version).await?;
+        builds.retain(sane);
+        Ok(builds)
+    }
+
+    async fn builds_from_upstream(&self, loader: Loader, version: &str) -> Result<Vec<Build>> {
         match loader {
             Loader::Vanilla => vanilla::builds(&self.http, version).await,
             Loader::Paper | Loader::Folia | Loader::Velocity => {
@@ -169,10 +181,18 @@ impl Sources {
     }
 
     pub async fn resolve(&self, loader: Loader, version: &str, wanted: &Wanted) -> Result<Build> {
-        if loader == Loader::Purpur {
-            return purpur::resolve(&self.http, version, wanted).await;
+        let build = if loader == Loader::Purpur {
+            purpur::resolve(&self.http, version, wanted).await?
+        } else {
+            pick(self.builds(loader, version).await?, loader, version, wanted)?
+        };
+        if !sane(&build) {
+            return Err(LoaderError::Unreadable {
+                service: loader.label(),
+                reason: format!("it named a build that cannot be stored safely: {:?}", build.filename),
+            });
         }
-        pick(self.builds(loader, version).await?, loader, version, wanted)
+        Ok(build)
     }
 
     pub async fn download(&self, loader: Loader, build: &Build, dest: &Path) -> Result<u64> {
@@ -180,6 +200,21 @@ impl Sources {
         checksum::write_verified(response.bytes_stream(), dest, build.checksum.as_ref(), &build.url)
             .await
     }
+}
+
+fn safe_name(name: &str) -> bool {
+    !name.is_empty()
+        && name.len() <= 128
+        && name != "."
+        && !name.contains("..")
+        && name.chars().all(|c| c.is_ascii_alphanumeric() || matches!(c, '.' | '-' | '_' | '+'))
+}
+
+fn sane(build: &Build) -> bool {
+    safe_name(&build.id)
+        && safe_name(&build.filename)
+        && build.filename.ends_with(".jar")
+        && build.url.starts_with("https://")
 }
 
 fn pick(builds: Vec<Build>, loader: Loader, version: &str, wanted: &Wanted) -> Result<Build> {
@@ -354,5 +389,26 @@ mod tests {
         assert_eq!(ids[0], "4.0.0-SNAPSHOT");
         assert_eq!(ids[1], "1.21.11");
         assert!(ids[2..].iter().all(|id| id.contains('-')), "{ids:?}");
+    }
+
+    #[test]
+    fn a_source_cannot_name_a_build_that_climbs_out_of_the_cache() {
+        let good = Build {
+            id: "2026.0.3-ALPHA".to_owned(),
+            channel: Channel::Stable,
+            url: "https://cdn.modrinth.com/data/x/Limbo.jar".to_owned(),
+            filename: "Limbo-2026.0.3-ALPHA-26.3.jar".to_owned(),
+            checksum: None,
+            size: None,
+            java_major: None,
+        };
+        assert!(sane(&good));
+        assert!(!sane(&Build { filename: "../../etc/cron.d/x.jar".to_owned(), ..good.clone() }));
+        assert!(!sane(&Build { filename: "server.sh".to_owned(), ..good.clone() }));
+        assert!(!sane(&Build { id: "../1".to_owned(), ..good.clone() }));
+        assert!(!sane(&Build { id: "a/b".to_owned(), ..good.clone() }));
+        assert!(!sane(&Build { url: "http://cdn.modrinth.com/x.jar".to_owned(), ..good.clone() }));
+        assert!(!safe_name(".."));
+        assert!(safe_name("1.21.4") && safe_name("3.4.0-SNAPSHOT") && safe_name("1.20.1+build.10"));
     }
 }
