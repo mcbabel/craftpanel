@@ -12,8 +12,8 @@
 					:to="link.href"
 					replace
 					class="flex h-14 flex-col items-center justify-center gap-0.5 px-0.5 text-[11px] font-semibold"
-					:class="isActive(link.href) ? 'text-brand' : 'text-secondary'"
-					:aria-current="isActive(link.href) ? 'page' : undefined"
+					:class="isActive(link) ? 'text-brand' : 'text-secondary'"
+					:aria-current="isActive(link) ? 'page' : undefined"
 					:aria-label="link.label"
 				>
 					<component :is="link.icon" class="size-5 shrink-0" aria-hidden="true" />
@@ -29,7 +29,14 @@ import { type Component, computed } from 'vue'
 import { RouterLink, useRoute } from 'vue-router'
 
 const props = defineProps<{
-	links: { label: string; shortLabel?: string; href: string; icon: Component; shown?: boolean }[]
+	links: {
+		label: string
+		shortLabel?: string
+		href: string
+		icon: Component
+		shown?: boolean
+		subpages?: string[]
+	}[]
 	label: string
 }>()
 
@@ -38,8 +45,9 @@ const route = useRoute()
 const visible = computed(() => props.links.filter((link) => link.shown ?? true))
 const home = computed(() => props.links[0]?.href)
 
-function isActive(href: string): boolean {
-	if (route.path === href) return true
-	return href !== home.value && route.path.startsWith(`${href}/`)
+function isActive(link: { href: string; subpages?: string[] }): boolean {
+	if (route.path === link.href) return true
+	if (link.subpages?.some((page) => route.path === page)) return true
+	return link.href !== home.value && route.path.startsWith(`${link.href}/`)
 }
 </script>

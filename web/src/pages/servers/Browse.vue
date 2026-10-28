@@ -24,7 +24,7 @@
 	</div>
 
 	<template v-else>
-		<BrowseInstallHeader divider />
+		<BrowseInstallHeader divider bottom-padding />
 
 		<Admonition
 			v-if="browse.searchError.value"

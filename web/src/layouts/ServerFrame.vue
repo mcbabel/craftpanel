@@ -247,6 +247,10 @@ const messages = defineMessages({
 const base = computed(() => `/servers/${encodeURIComponent(server.value.id)}`)
 const setupPending = computed(() => server.value.flows.intro)
 
+// Browsing has its own address next to the tabs; it belongs to whichever tab sent you there.
+const browsePages = computed(() => [`${base.value}/browse`])
+const browsingModpacks = computed(() => route.name === 'server-browse' && route.query.type === 'modpack')
+
 const tabs = computed(() => [
 	{
 		label: formatMessage(messages.overview),
@@ -257,6 +261,7 @@ const tabs = computed(() => [
 		label: formatMessage(commonMessages.contentLabel),
 		href: `${base.value}/content`,
 		icon: BoxesIcon,
+		subpages: browsingModpacks.value ? [] : browsePages.value,
 	},
 	{
 		label: formatMessage(messages.files),
@@ -279,6 +284,7 @@ const tabs = computed(() => [
 		shortLabel: formatMessage(messages.settingsShort),
 		href: `${base.value}/settings`,
 		icon: SettingsIcon,
+		subpages: browsingModpacks.value ? browsePages.value : [],
 	},
 ])
 
