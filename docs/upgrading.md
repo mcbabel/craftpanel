@@ -226,8 +226,8 @@ sudo craftpanel import mcsmanager --owner admin --only Lobby --only "Survival 1.
 MCSManager's `data/InstanceData` are taken; an instance kept somewhere else needs
 `--allow-outside`. Linked folders, system paths and the panel's own data directory are always
 refused, and files inside a server folder are never written through a link. Every folder above an
-instance has to belong to root and must not be writable by other users, so nothing can be swapped
-while it moves.
+instance has to belong to root or to the user MCSManager runs as, and must not be writable by
+anyone else, so nothing can be swapped while it moves.
 
 ### What happens
 

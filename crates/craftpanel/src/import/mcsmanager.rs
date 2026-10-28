@@ -207,25 +207,53 @@ impl Guard<'_> {
                 folder.display()
             ));
         }
-        guarded_ancestors(folder)
+        guarded_ancestors(folder, &self.trusted())
+    }
+
+    fn trusted(&self) -> Vec<u32> {
+        use std::os::unix::fs::MetadataExt;
+        let mut trusted = vec![0, effective_uid()];
+        if let Ok(meta) = std::fs::symlink_metadata(self.daemon) {
+            trusted.push(meta.uid());
+        }
+        trusted
     }
 }
 
-fn guarded_ancestors(folder: &Path) -> Result<(), String> {
+fn guarded_ancestors(folder: &Path, trusted: &[u32]) -> Result<(), String> {
     use std::os::unix::fs::MetadataExt;
-    let me = effective_uid();
     for ancestor in folder.ancestors().skip(1) {
         let meta = std::fs::symlink_metadata(ancestor).map_err(|err| err.to_string())?;
         let mode = meta.mode();
-        let shared = mode & 0o022 != 0 && mode & 0o1000 == 0;
-        if (meta.uid() != 0 && meta.uid() != me) || shared {
+        if mode & 0o022 != 0 && mode & 0o1000 == 0 {
             return Err(format!(
-                "{} can be changed by other users, so a folder below it could be swapped while it moves",
+                "{} can be written by other users, so a folder below it could be swapped while it moves",
                 ancestor.display()
+            ));
+        }
+        if !trusted.contains(&meta.uid()) {
+            return Err(format!(
+                "{} belongs to {}, who is neither root nor the owner of the MCSManager folder",
+                ancestor.display(),
+                user_name(meta.uid())
             ));
         }
     }
     Ok(())
+}
+
+fn user_name(uid: u32) -> String {
+    std::fs::read_to_string("/etc/passwd")
+        .ok()
+        .and_then(|passwd| {
+            passwd.lines().find_map(|line| {
+                let mut fields = line.split(':');
+                let name = fields.next()?;
+                let id: u32 = fields.nth(1)?.parse().ok()?;
+                (id == uid).then(|| name.to_owned())
+            })
+        })
+        .unwrap_or_else(|| format!("user {uid}"))
 }
 
 fn effective_uid() -> u32 {
@@ -702,7 +730,7 @@ mod tests {
         let guard = Guard { daemon: &setup.daemon, data_dir: &setup.data, allow_outside: false };
 
         let refused = guard.check_resolved(&open.join("server").canonicalize().unwrap()).unwrap_err();
-        assert!(refused.contains("can be changed by other users"), "{refused}");
+        assert!(refused.contains("can be written by other users"), "{refused}");
 
         std::fs::set_permissions(&open, std::fs::Permissions::from_mode(0o1777)).unwrap();
         assert!(guard.check_resolved(&open.join("server").canonicalize().unwrap()).is_ok(), "sticky like /tmp");
