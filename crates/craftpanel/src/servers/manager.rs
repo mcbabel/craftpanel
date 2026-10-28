@@ -1841,8 +1841,7 @@ fn wire(state: RunState) -> PowerState {
 fn argv(loader: Option<LoaderId>, memory_mib: u32, extra: &[String], launcher: Option<&[String]>) -> Vec<String> {
     let mut args = vec![format!("-Xmx{memory_mib}M")];
     for flag in extra {
-        let owned = ["-Xmx", "-Xms", "-XX:MaxRAM", "-XX:MaxHeapSize"];
-        if owned.iter().any(|prefix| flag.starts_with(prefix)) {
+        if crate::settings::startup::is_panel_memory_flag(flag) {
             continue;
         }
         args.push(flag.clone());

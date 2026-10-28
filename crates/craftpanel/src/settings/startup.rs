@@ -7,7 +7,20 @@ use crate::model::{JreVendor, LoaderId};
 
 pub const MIN_MEMORY_MIB: u32 = 512;
 
-const PANEL_MEMORY_FLAGS: [&str; 4] = ["-Xmx", "-Xms", "-XX:MaxRAM", "-XX:MaxHeapSize"];
+const PANEL_MEMORY_FLAGS: [&str; 12] = [
+    "-Xmx",
+    "-Xms",
+    "-Xmn",
+    "-XX:MaxRAM",
+    "-XX:MaxHeapSize",
+    "-XX:InitialHeapSize",
+    "-XX:MinHeapSize",
+    "-XX:InitialRAM",
+    "-XX:MinRAM",
+    "-XX:+AggressiveHeap",
+    "-XX:VMOptionsFile",
+    "-XX:Flags",
+];
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct StartupOptions {
@@ -92,10 +105,14 @@ const ARGS_FILE_LIMIT: u64 = 256 * 1024;
 pub fn args_from_file(dir: &std::path::Path, relative: &str) -> Option<Vec<String>> {
     use std::io::Read;
     use std::os::unix::fs::OpenOptionsExt;
+    let path = dir.join(relative);
+    if !path.canonicalize().ok()?.starts_with(dir.canonicalize().ok()?) {
+        return None;
+    }
     let file = std::fs::OpenOptions::new()
         .read(true)
         .custom_flags(libc::O_NOFOLLOW)
-        .open(dir.join(relative))
+        .open(path)
         .ok()?;
     if !file.metadata().ok()?.is_file() {
         return None;
@@ -105,7 +122,7 @@ pub fn args_from_file(dir: &std::path::Path, relative: &str) -> Option<Vec<Strin
     let args: Vec<String> = text
         .split_whitespace()
         .filter(|word| !word.starts_with('#'))
-        .filter(|word| !is_panel_memory_flag(word) && !word.starts_with("-XX:MaxRAMPercentage"))
+        .filter(|word| !is_panel_memory_flag(word))
         .map(str::to_owned)
         .collect();
     (!args.is_empty()).then_some(args)
@@ -241,8 +258,8 @@ pub(crate) fn read_command(command: Option<&str>, launch: Launch) -> Result<(Vec
     Ok((kept, stripped))
 }
 
-fn is_panel_memory_flag(token: &str) -> bool {
-    PANEL_MEMORY_FLAGS.iter().any(|flag| token.starts_with(flag))
+pub(crate) fn is_panel_memory_flag(token: &str) -> bool {
+    token.starts_with('@') || PANEL_MEMORY_FLAGS.iter().any(|flag| token.starts_with(flag))
 }
 
 fn refuse(message: &'static str) -> Failure {
@@ -542,7 +559,7 @@ mod tests {
         std::fs::create_dir_all(&dir).unwrap();
         std::fs::write(
             dir.join("unix_args.txt"),
-            "-Xmx64G -XX:MaxRAMPercentage=90 -Xms8G\n-p libraries/a.jar\ncpw.Main --launchTarget forge_server\n",
+            "-Xmx64G -XX:MaxRAMPercentage=90 -Xms8G @more.txt -XX:+AggressiveHeap -XX:InitialRAMPercentage=50\n-p libraries/a.jar\ncpw.Main --launchTarget forge_server\n",
         )
         .unwrap();
         assert_eq!(
@@ -551,5 +568,11 @@ mod tests {
         );
         std::os::unix::fs::symlink("/etc/hostname", dir.join("linked.txt")).unwrap();
         assert_eq!(args_from_file(&dir, "linked.txt"), None);
+
+        let elsewhere = std::env::temp_dir().join(format!("craftpanel-other-{}", crate::model::Id::new()));
+        std::fs::create_dir_all(&elsewhere).unwrap();
+        std::fs::write(elsewhere.join("unix_args.txt"), "-p secret.jar Main").unwrap();
+        std::os::unix::fs::symlink(&elsewhere, dir.join("libraries")).unwrap();
+        assert_eq!(args_from_file(&dir, "libraries/unix_args.txt"), None, "a linked folder leads nowhere");
     }
 }
