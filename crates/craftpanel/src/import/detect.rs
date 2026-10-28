@@ -43,6 +43,8 @@ pub fn detect(dir: &Path, start_command: &str) -> Result<Detected, String> {
         LoaderId::Velocity => velocity_version(dir, &jar)?,
         LoaderId::Fabric => fabric_version(&jar)?,
         LoaderId::Vanilla => (vanilla_version(dir, &jar)?, None),
+        LoaderId::CraftBukkit => (craftbukkit_version(&jar)?, None),
+        LoaderId::Limbo => limbo_version(&jar)?,
         _ => paper_version(dir, &jar, loader)?,
     };
 
@@ -149,6 +151,12 @@ fn jar_of(dir: &Path, start_command: &str) -> Result<String, String> {
 }
 
 fn loader_of(dir: &Path, jar: &str) -> LoaderId {
+    if jar.starts_with("limbo") {
+        return LoaderId::Limbo;
+    }
+    if jar.contains("craftbukkit") {
+        return LoaderId::CraftBukkit;
+    }
     if dir.join("velocity.toml").is_file() || jar.contains("velocity") {
         return LoaderId::Velocity;
     }
@@ -261,6 +269,26 @@ fn velocity_version(dir: &Path, jar: &str) -> Result<(String, Option<String>), S
         .filter(|value| !value.is_empty())
         .ok_or_else(|| format!("the Velocity version cannot be read from {jar}"))?;
     Ok((version, None))
+}
+
+fn craftbukkit_version(jar: &str) -> Result<String, String> {
+    let lower = jar.to_ascii_lowercase();
+    let stem = lower.strip_suffix(".jar").unwrap_or(&lower);
+    stem.strip_prefix("craftbukkit-")
+        .and_then(|rest| rest.split('-').next())
+        .filter(|version| looks_like_game_version(version))
+        .map(str::to_owned)
+        .ok_or_else(|| format!("the Minecraft version cannot be read from {jar}"))
+}
+
+fn limbo_version(jar: &str) -> Result<(String, Option<String>), String> {
+    let stem = jar.strip_suffix(".jar").unwrap_or(jar);
+    let (rest, game) = stem
+        .rsplit_once('-')
+        .filter(|(_, game)| looks_like_game_version(game))
+        .ok_or_else(|| format!("the Minecraft version cannot be read from {jar}"))?;
+    let build = rest.split_once('-').map(|(_, build)| build.to_owned()).filter(|build| !build.is_empty());
+    Ok((game.to_owned(), build))
 }
 
 fn vanilla_version(dir: &Path, jar: &str) -> Result<String, String> {
@@ -495,6 +523,22 @@ mod tests {
 
         std::fs::remove_file(dir.join("server.jar")).unwrap();
         assert!(detect(&dir, "java -jar fabric-server-launch.jar").unwrap_err().contains("missing"));
+    }
+
+    #[test]
+    fn craftbukkit_and_limbo_are_told_by_their_jars() {
+        let old = folder();
+        std::fs::write(old.join("craftbukkit-1.6.4-R2.0.jar"), b"").unwrap();
+        let found = detect(&old, "java -jar craftbukkit-1.6.4-R2.0.jar").unwrap();
+        assert_eq!((found.loader, found.game_version.as_str()), (LoaderId::CraftBukkit, "1.6.4"));
+
+        let lobby = folder();
+        std::fs::write(lobby.join("Limbo-2026.0.1-ALPHA-26.1.2.jar"), b"").unwrap();
+        std::fs::write(lobby.join("server.properties"), "server-port=30000\n").unwrap();
+        let found = detect(&lobby, "java -jar Limbo-2026.0.1-ALPHA-26.1.2.jar --nogui").unwrap();
+        assert_eq!((found.loader, found.game_version.as_str()), (LoaderId::Limbo, "26.1.2"));
+        assert_eq!(found.loader_version.as_deref(), Some("2026.0.1-ALPHA"));
+        assert_eq!(found.port, Some(30000));
     }
 
     #[test]
