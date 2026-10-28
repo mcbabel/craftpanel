@@ -2765,8 +2765,65 @@
   "craftpanel.settings.network.swap-needs-give-back": {
     "defaultMessage": "Solange diese Adresse steht, lässt sich der primäre Port nicht verschieben: wohin der Tunnel zeigt, liegt bei playit.gg und ist von hier nicht zu ändern. Der Besitzer oder ein Panel-Administrator gibt die Adresse auf der Übersichtsseite zurück; bis dahin verweigert das Panel den Wechsel."
   },
+  "craftpanel.settings.tabs.shared-logs": {
+    "defaultMessage": "Geteilte Logs"
+  },
   "craftpanel.setup.catalog-failed": {
     "defaultMessage": "Der Loader-Katalog konnte nicht geladen werden"
+  },
+  "craftpanel.shared-logs.actions": {
+    "defaultMessage": "Aktionen"
+  },
+  "craftpanel.shared-logs.console": {
+    "defaultMessage": "Konsole"
+  },
+  "craftpanel.shared-logs.copied": {
+    "defaultMessage": "Link kopiert"
+  },
+  "craftpanel.shared-logs.copy-link": {
+    "defaultMessage": "Link kopieren"
+  },
+  "craftpanel.shared-logs.empty-hint": {
+    "defaultMessage": "Logs, die du aus der Konsole oder den Dateien teilst, erscheinen hier."
+  },
+  "craftpanel.shared-logs.empty-title": {
+    "defaultMessage": "Keine geteilten Logs"
+  },
+  "craftpanel.shared-logs.former-user": {
+    "defaultMessage": "Gelöschter Nutzer"
+  },
+  "craftpanel.shared-logs.help": {
+    "defaultMessage": "Logs, die von diesem Server auf mclo.gs geteilt wurden. Jeder mit dem Link kann sie lesen, bis du sie hier löschst; sonst entfernt mclo.gs ein Log 90 Tage nach dem letzten Aufruf."
+  },
+  "craftpanel.shared-logs.load-failed": {
+    "defaultMessage": "Die geteilten Logs konnten nicht geladen werden"
+  },
+  "craftpanel.shared-logs.not-yours": {
+    "defaultMessage": "Nur wer es geteilt hat oder der Besitzer des Servers kann es löschen"
+  },
+  "craftpanel.shared-logs.remove": {
+    "defaultMessage": "Log löschen"
+  },
+  "craftpanel.shared-logs.remove-body": {
+    "defaultMessage": "Der Link funktioniert dann für niemanden mehr, der ihn hat. Das lässt sich nicht rückgängig machen."
+  },
+  "craftpanel.shared-logs.remove-failed": {
+    "defaultMessage": "Das Log konnte nicht gelöscht werden"
+  },
+  "craftpanel.shared-logs.remove-title": {
+    "defaultMessage": "Dieses Log von mclo.gs löschen?"
+  },
+  "craftpanel.shared-logs.removed": {
+    "defaultMessage": "Log gelöscht"
+  },
+  "craftpanel.shared-logs.shared": {
+    "defaultMessage": "Geteilt"
+  },
+  "craftpanel.shared-logs.source": {
+    "defaultMessage": "Log"
+  },
+  "craftpanel.shared-logs.title": {
+    "defaultMessage": "Geteilte Logs"
   },
   "format.decimal-bytes.0": {
     "defaultMessage": "{count, plural, one {# Byte} other {# Bytes}}"

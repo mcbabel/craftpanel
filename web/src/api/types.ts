@@ -261,6 +261,22 @@ export interface SharedLog {
 	raw: string
 }
 
+export interface ShareTextRequest {
+	content: string
+}
+
+export interface SharedLogEntry {
+	id: Ulid
+	url: string
+	source: string
+	shared_by: { id: Ulid; username: string } | null
+	created_at: Rfc3339
+}
+
+export interface SharedLogList {
+	logs: SharedLogEntry[]
+}
+
 export interface CrashAnalysisEntry {
 	level: number
 	time: string | null

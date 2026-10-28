@@ -2765,8 +2765,65 @@
   "craftpanel.settings.network.swap-needs-give-back": {
     "defaultMessage": "While that address stands, the primary port cannot be moved: where the tunnel points is kept at playit.gg and cannot be changed from here. The owner or a panel administrator gives the address back on the overview page; until then the panel refuses the swap."
   },
+  "craftpanel.settings.tabs.shared-logs": {
+    "defaultMessage": "Shared logs"
+  },
   "craftpanel.setup.catalog-failed": {
     "defaultMessage": "The loader catalogue could not be loaded"
+  },
+  "craftpanel.shared-logs.actions": {
+    "defaultMessage": "Actions"
+  },
+  "craftpanel.shared-logs.console": {
+    "defaultMessage": "Console"
+  },
+  "craftpanel.shared-logs.copied": {
+    "defaultMessage": "Link copied"
+  },
+  "craftpanel.shared-logs.copy-link": {
+    "defaultMessage": "Copy link"
+  },
+  "craftpanel.shared-logs.empty-hint": {
+    "defaultMessage": "Logs you share from the console or the files show up here."
+  },
+  "craftpanel.shared-logs.empty-title": {
+    "defaultMessage": "No shared logs"
+  },
+  "craftpanel.shared-logs.former-user": {
+    "defaultMessage": "Deleted user"
+  },
+  "craftpanel.shared-logs.help": {
+    "defaultMessage": "Logs shared from this server to mclo.gs. Anyone with the link can read them until you delete them here; otherwise mclo.gs removes a log 90 days after it was last viewed."
+  },
+  "craftpanel.shared-logs.load-failed": {
+    "defaultMessage": "The shared logs could not be loaded"
+  },
+  "craftpanel.shared-logs.not-yours": {
+    "defaultMessage": "Only the person who shared it or the server owner can delete it"
+  },
+  "craftpanel.shared-logs.remove": {
+    "defaultMessage": "Delete log"
+  },
+  "craftpanel.shared-logs.remove-body": {
+    "defaultMessage": "The link stops working for everyone who has it. This cannot be undone."
+  },
+  "craftpanel.shared-logs.remove-failed": {
+    "defaultMessage": "The log could not be deleted"
+  },
+  "craftpanel.shared-logs.remove-title": {
+    "defaultMessage": "Delete this log from mclo.gs?"
+  },
+  "craftpanel.shared-logs.removed": {
+    "defaultMessage": "Log deleted"
+  },
+  "craftpanel.shared-logs.shared": {
+    "defaultMessage": "Shared"
+  },
+  "craftpanel.shared-logs.source": {
+    "defaultMessage": "Log"
+  },
+  "craftpanel.shared-logs.title": {
+    "defaultMessage": "Shared logs"
   },
   "format.decimal-bytes.0": {
     "defaultMessage": "{count, plural, one {# byte} other {# bytes}}"

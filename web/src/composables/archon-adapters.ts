@@ -153,6 +153,18 @@ function buildModules(serverId: Ulid) {
 	return { backups_queue_v1, backups_v1, properties_v1 }
 }
 
+// The console shares what is on screen straight from the browser upstream. Here it goes
+// through the panel instead, which honours the switch for outgoing calls and keeps the
+// token that takes the log down again.
+function buildLogSharing(serverId: Ulid, real: AbstractModrinthClient) {
+	return Object.assign(Object.create(real.mclogs.logs_v1), {
+		create: async (content: string) => {
+			const shared = await api.console.shareText(serverId, { content }).catch(rethrow)
+			return { success: true, id: shared.id, url: shared.url, raw: shared.raw }
+		},
+	})
+}
+
 function withFilesystemAuth(real: AbstractModrinthClient) {
 	return Object.assign(Object.create(real.archon.servers_v0), {
 		getFilesystemAuth: async (): Promise<Archon.Servers.v0.JWTAuth> => ({ url: '', token: '' }),
@@ -168,6 +180,10 @@ export function provideArchonAdapters(serverId: Ulid): void {
 	})
 	Object.defineProperty(shim, 'kyros', {
 		value: { ...real.kyros, files_v0: buildIconFiles(serverId) },
+		enumerable: true,
+	})
+	Object.defineProperty(shim, 'mclogs', {
+		value: { ...real.mclogs, logs_v1: buildLogSharing(serverId, real) },
 		enumerable: true,
 	})
 	provideModrinthClient(shim)

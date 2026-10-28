@@ -88,7 +88,9 @@ import type {
 	ServerPropertiesPatch,
 	SetPrimaryResponse,
 	SharedLog,
+	SharedLogList,
 	ShareLogRequest,
+	ShareTextRequest,
 	StartupOptions,
 	StartupOptionsPatch,
 	Ulid,
@@ -540,6 +542,25 @@ const consoleApi = {
 		requestJson<SharedLog>(serverPath(serverId, '/console/logs/share'), {
 			method: 'POST',
 			json: body,
+			signal: options.signal,
+		}),
+
+	shareText: (serverId: Ulid, body: ShareTextRequest, options: Cancellable = {}) =>
+		requestJson<SharedLog>(serverPath(serverId, '/console/share'), {
+			method: 'POST',
+			json: body,
+			signal: options.signal,
+		}),
+
+	sharedLogs: (serverId: Ulid, options: Cancellable = {}) =>
+		requestJson<SharedLogList>(serverPath(serverId, '/shared-logs'), {
+			method: 'GET',
+			signal: options.signal,
+		}),
+
+	removeSharedLog: (serverId: Ulid, logId: Ulid, options: Cancellable = {}) =>
+		requestVoid(serverPath(serverId, `/shared-logs/${segment(logId)}`), {
+			method: 'DELETE',
 			signal: options.signal,
 		}),
 

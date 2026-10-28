@@ -28,7 +28,8 @@ and installing mods and plugins feels the way it does on Modrinth.
   version later or unlink it. Packs for Fabric are supported; the pack's loader and game version
   are installed with it.
 - **Files** — browse, edit, upload, move and download server files in the browser, pack folders
-  or the whole server into a ZIP, unpack archives and share logs to mclo.gs.
+  or the whole server into a ZIP, unpack archives and share logs to mclo.gs — and delete those
+  shared logs again from the server's settings.
 - **Backups** — manual and scheduled backups that save the world consistently, with optional
   off-site copies in each user's own Google Drive.
 - **Users and access** — admin and user roles, per-server roles (owner, editor, viewer),
