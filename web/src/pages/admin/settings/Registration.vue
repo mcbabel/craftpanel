@@ -13,11 +13,15 @@
 		</div>
 
 		<Admonition
-			v-if="settings.registration_enabled && !mailReady"
+			v-if="settings.registration_enabled && mailProblem !== null"
 			type="warning"
-			:title="formatMessage(messages.mailMissingTitle)"
+			:title="formatMessage(mailProblem === 'no-mail' ? messages.mailMissingTitle : messages.linkBaseMissingTitle)"
 		>
-			{{ formatMessage(messages.mailMissingBody) }}
+			{{
+				formatMessage(
+					mailProblem === 'no-mail' ? messages.mailMissingBody : messages.linkBaseMissingBody,
+				)
+			}}
 			<RouterLink class="text-link hover:underline" :to="{ name: 'admin-mail' }">
 				{{ formatMessage(messages.mailMissingLink) }}
 			</RouterLink>
@@ -99,6 +103,15 @@ const messages = defineMessages({
 		defaultMessage:
 			'A sign-up needs a confirmation mail, so the form stays closed until sending works — this switch alone does nothing.',
 	},
+	linkBaseMissingTitle: {
+		id: 'admin.settings.registration.link-base-missing-title',
+		defaultMessage: 'The panel address is missing',
+	},
+	linkBaseMissingBody: {
+		id: 'admin.settings.registration.link-base-missing-body',
+		defaultMessage:
+			'Mail works, but the confirmation mail needs a link back to this panel. Until the panel address is filled in under mail, the sign-up form stays closed.',
+	},
 	mailMissingLink: {
 		id: 'admin.settings.registration.mail-missing-link',
 		defaultMessage: 'Set up mail',
@@ -110,11 +123,13 @@ const messages = defineMessages({
 	queueLink: { id: 'admin.settings.registration.queue-link', defaultMessage: 'Sign-ups' },
 })
 
-const mailReady = ref(true)
+const mailProblem = ref<'no-mail' | 'no-link-base' | null>(null)
 
 onMounted(async () => {
 	try {
-		mailReady.value = (await mail.settings()).state !== 'not_configured'
+		const current = await mail.settings()
+		if (current.state === 'not_configured') mailProblem.value = 'no-mail'
+		else if (current.link_base === null) mailProblem.value = 'no-link-base'
 	} catch {
 	}
 })

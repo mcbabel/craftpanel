@@ -1397,6 +1397,12 @@
   "admin.settings.registration.description": {
     "defaultMessage": "Let people create their own account instead of you typing every one in."
   },
+  "admin.settings.registration.link-base-missing-body": {
+    "defaultMessage": "Mail works, but the confirmation mail needs a link back to this panel. Until the panel address is filled in under mail, the sign-up form stays closed."
+  },
+  "admin.settings.registration.link-base-missing-title": {
+    "defaultMessage": "The panel address is missing"
+  },
   "admin.settings.registration.mail-missing-body": {
     "defaultMessage": "A sign-up needs a confirmation mail, so the form stays closed until sending works — this switch alone does nothing."
   },

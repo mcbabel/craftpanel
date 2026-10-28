@@ -1397,6 +1397,12 @@
   "admin.settings.registration.description": {
     "defaultMessage": "Lass Leute ihr Konto selbst anlegen, statt jedes einzelne einzutippen."
   },
+  "admin.settings.registration.link-base-missing-body": {
+    "defaultMessage": "Mail funktioniert, aber die Bestätigungsmail braucht einen Link zurück zu diesem Panel. Solange unter Mail keine Adresse des Panels eingetragen ist, bleibt das Registrierungsformular zu."
+  },
+  "admin.settings.registration.link-base-missing-title": {
+    "defaultMessage": "Die Adresse des Panels fehlt"
+  },
   "admin.settings.registration.mail-missing-body": {
     "defaultMessage": "Eine Registrierung braucht eine Bestätigungsmail, also bleibt das Formular zu, bis das Versenden funktioniert — dieser Schalter allein bewirkt nichts."
   },
