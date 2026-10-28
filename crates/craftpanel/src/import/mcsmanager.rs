@@ -255,10 +255,16 @@ pub async fn import(
     planned: &Planned,
     copy: bool,
 ) -> Result<Imported> {
-    let source = &planned.instance.dir;
-    if let Some(pid) = running_in(source) {
+    let source = planned.instance.dir.canonicalize().with_context(|| format!("finding {}", planned.instance.dir.display()))?;
+    let opened = open_dir(&source).with_context(|| format!("opening {}", source.display()))?;
+    if std::fs::read_link(fd_path(&opened))? != source {
+        bail!("{} changed while it was being checked", source.display());
+    }
+    let identity = identity_of(&opened.metadata()?);
+    if let Some(pid) = running_in(&source) {
         bail!("process {pid} still runs in {}; stop the instance in MCSManager first", source.display());
     }
+    let source = source.as_path();
 
     let server = Id::new();
     let target = crate::files::server_dir(config, owner, server);
@@ -267,7 +273,11 @@ pub async fn import(
         bail!("{} does not exist; the owner's system account looks incomplete", parent.display());
     }
 
-    transfer(source, &target, copy)?;
+    if copy {
+        copy_dir(&opened, &target, 0)?;
+    } else {
+        move_dir(source, &target, identity)?;
+    }
     let settled = settle(pool, &target, owner, server, planned).await;
     let imported = match settled {
         Ok(imported) => imported,
@@ -377,54 +387,83 @@ async fn free_port(tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>, wanted: Option<
         .context("the port pool has no free port left; widen it with `craftpanel admin ports`")
 }
 
-fn transfer(source: &Path, target: &Path, copy: bool) -> Result<()> {
-    if copy {
-        return copy_tree(source, target);
-    }
+const MAX_DEPTH: usize = 256;
+
+fn open_dir(path: &Path) -> std::io::Result<std::fs::File> {
+    std::fs::OpenOptions::new()
+        .read(true)
+        .custom_flags(libc::O_DIRECTORY | libc::O_NOFOLLOW | libc::O_CLOEXEC)
+        .open(path)
+}
+
+fn fd_path(file: &std::fs::File) -> PathBuf {
+    PathBuf::from(format!("/proc/self/fd/{}", std::os::fd::AsRawFd::as_raw_fd(file)))
+}
+
+fn identity_of(meta: &std::fs::Metadata) -> (u64, u64) {
+    use std::os::unix::fs::MetadataExt;
+    (meta.dev(), meta.ino())
+}
+
+fn move_dir(source: &Path, target: &Path, identity: (u64, u64)) -> Result<()> {
     match std::fs::rename(source, target) {
-        Ok(()) => Ok(()),
+        Ok(()) => {}
         Err(err) if err.raw_os_error() == Some(libc::EXDEV) => bail!(
             "{} lies on another disk than the panel's data; run again with --copy",
             source.display()
         ),
-        Err(err) => Err(err).with_context(|| format!("moving {}", source.display())),
+        Err(err) => return Err(err).with_context(|| format!("moving {}", source.display())),
     }
+    let moved = std::fs::symlink_metadata(target)?;
+    if !moved.is_dir() || identity_of(&moved) != identity {
+        let _ = std::fs::rename(target, source);
+        bail!("{} was swapped for something else while it was being moved", source.display());
+    }
+    Ok(())
 }
 
-fn copy_tree(source: &Path, target: &Path) -> Result<()> {
-    for entry in walkdir::WalkDir::new(source).follow_links(false) {
-        let entry = entry?;
-        let relative = entry.path().strip_prefix(source)?;
-        let destination = target.join(relative);
-        let kind = entry.file_type();
-        if kind.is_dir() {
-            std::fs::create_dir_all(&destination)?;
-        } else if kind.is_symlink() {
-            std::os::unix::fs::symlink(std::fs::read_link(entry.path())?, &destination)?;
-        } else if kind.is_file() {
-            copy_plain(entry.path(), &destination)
-                .with_context(|| format!("copying {}", entry.path().display()))?;
+fn copy_dir(dir: &std::fs::File, target: &Path, depth: usize) -> Result<()> {
+    if depth > MAX_DEPTH {
+        bail!("{} nests too deep", target.display());
+    }
+    std::fs::create_dir(target).with_context(|| format!("creating {}", target.display()))?;
+    let base = fd_path(dir);
+    for entry in std::fs::read_dir(&base)? {
+        let name = entry?.file_name();
+        let inside = base.join(&name);
+        let destination = target.join(&name);
+        let opened = std::fs::OpenOptions::new()
+            .read(true)
+            .custom_flags(libc::O_NOFOLLOW | libc::O_NONBLOCK | libc::O_CLOEXEC)
+            .open(&inside);
+        let file = match opened {
+            Ok(file) => file,
+            Err(err) if err.raw_os_error() == Some(libc::ELOOP) => {
+                std::os::unix::fs::symlink(std::fs::read_link(&inside)?, &destination)?;
+                continue;
+            }
+            Err(err) => return Err(err).with_context(|| format!("opening {}", destination.display())),
+        };
+        let meta = file.metadata()?;
+        if meta.is_dir() {
+            copy_dir(&file, &destination, depth + 1)?;
+        } else if meta.is_file() && std::os::unix::fs::MetadataExt::nlink(&meta) == 1 {
+            copy_file(file, &destination)?;
         } else {
-            bail!("{} is neither a file, a folder nor a link", entry.path().display());
+            bail!("{} is not a plain file, folder or link", destination.display());
         }
     }
     Ok(())
 }
 
-fn copy_plain(source: &Path, destination: &Path) -> std::io::Result<()> {
-    let mut from = std::fs::OpenOptions::new()
-        .read(true)
-        .custom_flags(libc::O_NOFOLLOW)
-        .open(source)?;
-    if !from.metadata()?.is_file() {
-        return Err(std::io::Error::other("not a plain file"));
-    }
+fn copy_file(mut from: std::fs::File, destination: &Path) -> Result<()> {
     let mut to = std::fs::OpenOptions::new()
         .write(true)
         .create_new(true)
         .mode(0o660)
         .custom_flags(libc::O_NOFOLLOW)
-        .open(destination)?;
+        .open(destination)
+        .with_context(|| format!("creating {}", destination.display()))?;
     std::io::copy(&mut from, &mut to)?;
     Ok(())
 }
@@ -604,6 +643,30 @@ mod tests {
         .unwrap();
         assert!(properties.contains(&format!("server-port={}", second.port)));
         assert!(setup.daemon.join("data/InstanceData/one").exists(), "copied, the original stays");
+    }
+
+    #[test]
+    fn a_copy_keeps_links_as_links_and_refuses_hard_links() {
+        let setup = setup();
+        let secret = setup.daemon.join("secret.txt");
+        std::fs::write(&secret, "outside").unwrap();
+
+        let source = setup.folder("linked");
+        std::fs::create_dir_all(source.join("plugins")).unwrap();
+        std::fs::write(source.join("plugins/config.yml"), "a: 1").unwrap();
+        std::os::unix::fs::symlink(&secret, source.join("plugins/peek.txt")).unwrap();
+        let target = setup.data.join("copied");
+        std::fs::create_dir_all(&setup.data).unwrap();
+
+        copy_dir(&open_dir(&source).unwrap(), &target, 0).unwrap();
+        assert_eq!(std::fs::read_to_string(target.join("plugins/config.yml")).unwrap(), "a: 1");
+        let peek = std::fs::symlink_metadata(target.join("plugins/peek.txt")).unwrap();
+        assert!(peek.file_type().is_symlink(), "the link stays a link, its target is not read");
+
+        std::fs::hard_link(&secret, source.join("hard.txt")).unwrap();
+        let again = setup.data.join("again");
+        let refused = copy_dir(&open_dir(&source).unwrap(), &again, 0).unwrap_err();
+        assert!(format!("{refused:#}").contains("hard.txt"), "{refused:#}");
     }
 
     #[tokio::test]
