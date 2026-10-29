@@ -21,6 +21,7 @@ pub use ring::Ring;
 const RECONNECT_DELAY: Duration = Duration::from_secs(2);
 const RING_CAPACITY: usize = 2000;
 const SHUTDOWN_GRACE: Duration = Duration::from_secs(10);
+const LAST_WORDS: Duration = Duration::from_secs(2);
 
 pub struct Options {
     pub server_id: String,
@@ -55,8 +56,10 @@ pub async fn run(options: Options) -> Result<()> {
     let ring = Arc::new(Mutex::new(Ring::new(RING_CAPACITY)));
     let (lines_tx, lines_rx) = mpsc::channel::<SupervisorMessage>(256);
 
-    spawn_reader(stdout, OutputStream::Stdout, ring.clone(), lines_tx.clone());
-    spawn_reader(stderr, OutputStream::Stderr, ring.clone(), lines_tx.clone());
+    let readers = vec![
+        spawn_reader(stdout, OutputStream::Stdout, ring.clone(), lines_tx.clone()),
+        spawn_reader(stderr, OutputStream::Stderr, ring.clone(), lines_tx.clone()),
+    ];
 
     let (gone_tx, gone_rx) = watch::channel(false);
     let forced = Arc::new(AtomicBool::new(false));
@@ -69,7 +72,7 @@ pub async fn run(options: Options) -> Result<()> {
             forced: Arc::clone(&forced),
         },
     });
-    let exit = watch_exit(child, lines_tx, gone_tx, forced, was_oom_killed);
+    let exit = watch_exit(child, readers, lines_tx, gone_tx, forced, was_oom_killed);
 
     connect_loop(&options, &token, pid, ring, lines_rx, controls, exit).await
 }
@@ -135,7 +138,8 @@ fn spawn_reader<R>(
     stream: OutputStream,
     ring: Arc<Mutex<Ring>>,
     tx: mpsc::Sender<SupervisorMessage>,
-) where
+) -> tokio::task::JoinHandle<()>
+where
     R: tokio::io::AsyncRead + Unpin + Send + 'static,
 {
     tokio::spawn(async move {
@@ -144,11 +148,12 @@ fn spawn_reader<R>(
             let seq = ring.lock().await.push(&line, stream);
             let _ = tx.send(SupervisorMessage::Output { seq, line, stream }).await;
         }
-    });
+    })
 }
 
 fn watch_exit(
     mut child: Child,
+    readers: Vec<tokio::task::JoinHandle<()>>,
     tx: mpsc::Sender<SupervisorMessage>,
     gone: watch::Sender<bool>,
     forced: Arc<AtomicBool>,
@@ -157,6 +162,7 @@ fn watch_exit(
     tokio::spawn(async move {
         let ended = child.wait().await;
         let _ = gone.send(true);
+        let _ = tokio::time::timeout(LAST_WORDS, futures::future::join_all(readers)).await;
 
         let status = match ended {
             Ok(status) => status,
@@ -385,7 +391,7 @@ mod tests {
             let (lines_tx, ends) = mpsc::channel(8);
             let (gone_tx, gone) = watch::channel(false);
             let forced = Arc::new(AtomicBool::new(false));
-            watch_exit(child, lines_tx, gone_tx, Arc::clone(&forced), ceiling);
+            watch_exit(child, Vec::new(), lines_tx, gone_tx, Arc::clone(&forced), ceiling);
 
             Self {
                 controls: Arc::new(Controls {
@@ -442,6 +448,43 @@ mod tests {
 
     fn size_of(path: &PathBuf) -> u64 {
         std::fs::metadata(path).map(|meta| meta.len()).unwrap_or(0)
+    }
+
+    #[tokio::test]
+    async fn what_a_process_says_just_before_it_dies_arrives_before_its_death() {
+        let mut child = Command::new("/bin/sh")
+            .arg("-c")
+            .arg("seq 1 5000 >&2; echo 'Error: Could not create the Java Virtual Machine.' >&2; exit 1")
+            .stdin(Stdio::null())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .spawn()
+            .expect("a shell");
+        let ring = Arc::new(Mutex::new(Ring::new(RING_CAPACITY)));
+        let (tx, mut rx) = mpsc::channel(8);
+        let readers = vec![
+            spawn_reader(child.stdout.take().unwrap(), OutputStream::Stdout, ring.clone(), tx.clone()),
+            spawn_reader(child.stderr.take().unwrap(), OutputStream::Stderr, ring.clone(), tx.clone()),
+        ];
+        let (gone_tx, _gone) = watch::channel(false);
+        watch_exit(child, readers, tx, gone_tx, Arc::new(AtomicBool::new(false)), || false);
+
+        let mut last_words = None;
+        loop {
+            match rx.recv().await.expect("a message") {
+                SupervisorMessage::Output { line, .. } => last_words = Some(line),
+                SupervisorMessage::Exited { code, .. } => {
+                    assert_eq!(code, Some(1));
+                    break;
+                }
+                other => panic!("unexpected {other:?}"),
+            }
+        }
+        assert_eq!(
+            last_words.as_deref(),
+            Some("Error: Could not create the Java Virtual Machine."),
+            "the exit overtook the last words"
+        );
     }
 
     #[tokio::test]
