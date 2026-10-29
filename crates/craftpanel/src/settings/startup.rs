@@ -250,6 +250,15 @@ pub(crate) fn read_command(command: Option<&str>, launch: Launch) -> Result<(Vec
             at += 1;
             continue;
         }
+        if VALUE_FLAGS.contains(&token.as_str()) {
+            match rest.get(at + 1).filter(|value| !value.starts_with('-')) {
+                Some(value) if token.starts_with("--") => kept.push(format!("{token}={value}")),
+                Some(value) => kept.extend([token.clone(), value.clone()]),
+                None => stripped.push(token.clone()),
+            }
+            at += 2;
+            continue;
+        }
         if is_panel_memory_flag(token) || !token.starts_with('-') {
             stripped.push(token.clone());
         } else {
@@ -260,6 +269,21 @@ pub(crate) fn read_command(command: Option<&str>, launch: Launch) -> Result<(Vec
 
     Ok((kept, stripped))
 }
+
+pub(crate) const VALUE_FLAGS: [&str; 12] = [
+    "--add-modules",
+    "--add-opens",
+    "--add-exports",
+    "--add-reads",
+    "--enable-native-access",
+    "--module-path",
+    "--upgrade-module-path",
+    "--patch-module",
+    "--limit-modules",
+    "-cp",
+    "-classpath",
+    "--class-path",
+];
 
 fn is_nogui(token: &str) -> bool {
     matches!(token, "nogui" | "-nogui" | "--nogui")
@@ -439,6 +463,27 @@ mod tests {
             ["mine.jar", "&&", "echo", "hi"],
             "another jar, a shell operator and its arguments are not flags"
         );
+    }
+
+    #[test]
+    fn a_flag_keeps_the_value_that_follows_it_as_its_own_word() {
+        let server = a_server(LoaderId::Folia, &[]);
+        let change = plan(
+            &patched("java -XX:+UseZGC --add-modules jdk.incubator.vector --add-opens java.base/java.lang=ALL-UNNAMED -jar server.jar nogui"),
+            &server,
+            4096,
+        )
+        .unwrap();
+
+        assert_eq!(
+            change.extra_flags,
+            ["-XX:+UseZGC", "--add-modules=jdk.incubator.vector", "--add-opens=java.base/java.lang=ALL-UNNAMED"]
+        );
+        assert!(change.stripped_flags.is_empty(), "{change:?}");
+
+        let dangling = plan(&patched("java --add-modules -jar server.jar"), &server, 4096).unwrap();
+        assert!(dangling.extra_flags.is_empty(), "a flag without its value would stop Java");
+        assert_eq!(dangling.stripped_flags, ["--add-modules"]);
     }
 
     #[test]

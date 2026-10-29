@@ -1062,10 +1062,7 @@ impl Manager {
                 self.ask_to_stop(Some(caller.id()), server, PowerTarget::Restart).await?;
                 (PowerState::Stopping, Some(PowerTarget::Restart))
             }
-            PowerAction::Kill => {
-                self.kill(Some(caller.id()), server).await?;
-                (PowerState::Stopping, None)
-            }
+            PowerAction::Kill => (self.kill(Some(caller.id()), server).await?, None),
         })
     }
 
@@ -1205,13 +1202,19 @@ impl Manager {
         Ok(())
     }
 
-    async fn kill(self: &Arc<Self>, actor: Option<Id>, server: Id) -> Result<()> {
+    async fn kill(self: &Arc<Self>, actor: Option<Id>, server: Id) -> Result<PowerState> {
         let undelivered = match self.hub.link(&server.to_string()).await {
             Some(link) => {
                 link.kill().await.map_err(Failure::internal)?;
                 false
             }
-            None => self.expects_a_supervisor(server).await?,
+            None if self.expects_a_supervisor(server).await? => true,
+            None => {
+                self.set_wish(server, Wish::default());
+                self.write_state(server, PowerState::Stopped, false).await?;
+                self.report(server, PowerState::Stopped, None, false).await;
+                return Ok(PowerState::Stopped);
+            }
         };
         self.set_wish(server, Wish { target: None, killed: true, undelivered });
         self.write_state(server, PowerState::Stopping, false).await?;
@@ -1220,7 +1223,7 @@ impl Manager {
             self.note(server, actor, AuditAction::ServerKilled, None).await?;
         }
         self.watch(server);
-        Ok(())
+        Ok(PowerState::Stopping)
     }
 
     pub async fn current(&self, server: Id) -> Result<RunState> {
@@ -3654,6 +3657,30 @@ mod tests {
         let wish = fixture.manager.wish(server);
         assert!(wish.killed);
         assert!(wish.undelivered, "the supervisor was not there to hear it");
+    }
+
+    #[tokio::test]
+    async fn a_kill_on_a_server_whose_process_is_already_gone_settles_it_as_stopped() {
+        let fixture = Fixture::new().await;
+        let max = a_user(&fixture.pool, "max").await;
+        let caller = fixture.caller(max).await;
+        let made = fixture
+            .manager
+            .create(&caller, fixture.loader_wish("survival", max, 1024))
+            .await
+            .unwrap();
+        fixture.manager.run(made.operation.id).await;
+        let server = made.server.id;
+        sqlx::query("UPDATE servers SET power_state = 'stopping' WHERE id = ?")
+            .bind(server)
+            .execute(&fixture.pool)
+            .await
+            .unwrap();
+
+        let (state, _) = fixture.manager.power(&caller, server, PowerAction::Kill).await.unwrap();
+        assert_eq!(state, PowerState::Stopped);
+        assert_eq!(power_of(&fixture, server).await, PowerState::Stopped);
+        assert!(!fixture.manager.wish(server).killed, "nothing is left waiting for a process");
     }
 
     #[tokio::test]
