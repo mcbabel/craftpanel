@@ -1,4 +1,5 @@
-use std::path::Path;
+use std::os::unix::fs::PermissionsExt;
+use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result};
 use sqlx::sqlite::{SqliteConnectOptions, SqliteJournalMode, SqlitePoolOptions, SqliteSynchronous};
@@ -19,14 +20,35 @@ pub async fn connect(path: &Path) -> Result<SqlitePool> {
         .busy_timeout(std::time::Duration::from_secs(10));
 
     migrate(options.clone()).await?;
+    keep_to_the_panel(path);
 
     let pool = SqlitePoolOptions::new()
         .max_connections(8)
         .connect_with(options)
         .await
         .with_context(|| format!("opening database at {}", path.display()))?;
+    keep_to_the_panel(path);
 
     Ok(pool)
+}
+
+fn keep_to_the_panel(path: &Path) {
+    for file in beside(path) {
+        match std::fs::set_permissions(&file, std::fs::Permissions::from_mode(0o600)) {
+            Ok(()) => {}
+            Err(err) if err.kind() == std::io::ErrorKind::NotFound => {}
+            Err(err) => tracing::warn!("could not close {} to other accounts: {err}", file.display()),
+        }
+    }
+}
+
+fn beside(path: &Path) -> [PathBuf; 3] {
+    let with = |suffix: &str| {
+        let mut name = path.as_os_str().to_owned();
+        name.push(suffix);
+        PathBuf::from(name)
+    };
+    [path.to_path_buf(), with("-wal"), with("-shm")]
 }
 
 pub async fn migrate(options: SqliteConnectOptions) -> Result<()> {
@@ -49,9 +71,34 @@ pub async fn migrate(options: SqliteConnectOptions) -> Result<()> {
 
 #[cfg(test)]
 mod tests {
+    use std::os::unix::fs::PermissionsExt;
+
     use sqlx::Row;
 
     use crate::model::{Id, Timestamp};
+
+    #[tokio::test]
+    async fn the_database_and_its_journal_are_readable_by_the_panel_alone() {
+        let path = std::env::temp_dir().join(format!("craftpanel-private-{}.db", Id::new()));
+        std::fs::write(&path, b"").unwrap();
+        std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o644)).unwrap();
+
+        let pool = super::connect(&path).await.expect("a migrated database");
+        sqlx::query("SELECT 1").execute(&pool).await.unwrap();
+
+        let modes: Vec<_> = super::beside(&path)
+            .iter()
+            .filter_map(|file| std::fs::metadata(file).ok())
+            .map(|meta| meta.permissions().mode() & 0o777)
+            .collect();
+        pool.close().await;
+        for file in super::beside(&path) {
+            let _ = std::fs::remove_file(file);
+        }
+
+        assert!(modes.len() >= 2, "the journal sits beside the database while it is open");
+        assert!(modes.iter().all(|mode| *mode == 0o600), "{modes:?}");
+    }
 
     #[tokio::test]
     async fn rebuilding_servers_keeps_every_row_that_hangs_off_them() {

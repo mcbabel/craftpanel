@@ -976,6 +976,7 @@ hand_database_back() {
 	getent passwd "$SERVICE_USER" >/dev/null || return 0
 
 	chown "$SERVICE_USER:$SERVICE_GROUP" "$db" "$db-wal" "$db-shm" 2>/dev/null || true
+	chmod 600 "$db" "$db-wal" "$db-shm" 2>/dev/null || true
 	return 0
 }
 
