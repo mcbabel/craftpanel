@@ -40,7 +40,7 @@ pub enum Request {
 #[derive(Debug, Serialize, Deserialize)]
 pub enum Answer {
     Owner { id: Id, state: SystemUserState },
-    Ports { taken: Vec<u16>, from: u16, to: u16 },
+    Ports { taken: Vec<u16> },
     Done,
     Failed(String),
 }
@@ -69,16 +69,16 @@ impl Ledger {
     }
 
     pub async fn free_port(&self, wanted: Option<u16>) -> Result<u16> {
-        let Answer::Ports { taken, from, to } = self.ask(Request::Ports).await? else {
+        let Answer::Ports { taken } = self.ask(Request::Ports).await? else {
             bail!("the database step answered something other than the ports");
         };
         let free = |port: u16| !taken.contains(&port);
         if let Some(port) = wanted.filter(|port| *port >= 1024 && free(*port)) {
             return Ok(port);
         }
-        (from..=to)
+        (crate::settings::allocations::FIRST_PORT..=u16::MAX)
             .find(|port| free(*port))
-            .context("the port pool has no free port left; widen it with `craftpanel admin ports`")
+            .context("every port from 25565 up is taken")
     }
 
     pub async fn record(&self, entry: Entry) -> Result<()> {
@@ -170,14 +170,8 @@ async fn owner(pool: &SqlitePool, username: &str) -> Result<Answer> {
 
 async fn ports(pool: &SqlitePool) -> Result<Answer> {
     let taken: Vec<i64> = sqlx::query_scalar("SELECT port FROM ports_in_use").fetch_all(pool).await?;
-    let (from, to): (i64, i64) =
-        sqlx::query_as("SELECT port_pool_from, port_pool_to FROM panel_settings WHERE id = 1")
-            .fetch_one(pool)
-            .await?;
     Ok(Answer::Ports {
         taken: taken.into_iter().filter_map(|port| u16::try_from(port).ok()).collect(),
-        from: u16::try_from(from).unwrap_or(u16::MAX),
-        to: u16::try_from(to).unwrap_or(u16::MAX),
     })
 }
 

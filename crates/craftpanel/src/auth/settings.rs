@@ -2,16 +2,13 @@ use sqlx::SqlitePool;
 
 use super::error::{Failure, Result};
 use super::limits;
-use crate::model::{CpuMode, PanelSettings, PortRange, Timestamp, UserLimits, UserPorts};
+use crate::model::{CpuMode, PanelSettings, Timestamp, UserLimits, UserPorts};
 
-const MIN_PORT: u16 = 1024;
 const MAX_BACKUPS: u32 = 50;
 
 #[derive(sqlx::FromRow)]
 struct Row {
     public_address: Option<String>,
-    port_pool_from: u16,
-    port_pool_to: u16,
     default_memory_mib: u32,
     default_cpu_mode: CpuMode,
     default_cpu_cores: f64,
@@ -31,7 +28,7 @@ struct Row {
 
 pub async fn load(pool: &SqlitePool) -> sqlx::Result<PanelSettings> {
     let row = sqlx::query_as::<_, Row>(
-        "SELECT public_address, port_pool_from, port_pool_to, default_memory_mib, \
+        "SELECT public_address, default_memory_mib, \
          default_cpu_mode, default_cpu_cores, default_pids_max, default_disk_mib, \
          max_upload_bytes, max_backups_per_server, external_services_enabled, \
          max_concurrent_operations, stop_grace_seconds, registration_enabled, \
@@ -43,7 +40,6 @@ pub async fn load(pool: &SqlitePool) -> sqlx::Result<PanelSettings> {
 
     Ok(PanelSettings {
         public_address: row.public_address,
-        port_pool: PortRange { from: row.port_pool_from, to: row.port_pool_to },
         default_limits: UserLimits {
             memory_mib: row.default_memory_mib,
             cpu_mode: row.default_cpu_mode,
@@ -65,10 +61,10 @@ pub async fn load(pool: &SqlitePool) -> sqlx::Result<PanelSettings> {
 }
 
 pub async fn save(pool: &SqlitePool, settings: &PanelSettings) -> Result<()> {
-    check(pool, settings).await?;
+    check(settings)?;
 
     sqlx::query(
-        "UPDATE panel_settings SET public_address = ?, port_pool_from = ?, port_pool_to = ?, \
+        "UPDATE panel_settings SET public_address = ?, \
          default_memory_mib = ?, default_cpu_mode = ?, default_cpu_cores = ?, \
          default_pids_max = ?, default_disk_mib = ?, max_upload_bytes = ?, \
          max_backups_per_server = ?, \
@@ -77,8 +73,6 @@ pub async fn save(pool: &SqlitePool, settings: &PanelSettings) -> Result<()> {
          java_auto_install = ?, user_ports = ?, network_needs_playit = ?, updated_at = ? WHERE id = 1",
     )
     .bind(settings.public_address.as_deref())
-    .bind(settings.port_pool.from)
-    .bind(settings.port_pool.to)
     .bind(settings.default_limits.memory_mib)
     .bind(settings.default_limits.cpu_mode)
     .bind(settings.default_limits.cpu_cores)
@@ -101,27 +95,7 @@ pub async fn save(pool: &SqlitePool, settings: &PanelSettings) -> Result<()> {
     Ok(())
 }
 
-async fn check(pool: &SqlitePool, settings: &PanelSettings) -> Result<()> {
-    let PortRange { from, to } = settings.port_pool;
-    if from > to {
-        return Err(Failure::invalid_request("the port pool ends before it begins"));
-    }
-    if from < MIN_PORT {
-        return Err(Failure::invalid_request(format!("the port pool starts at {MIN_PORT}")));
-    }
-
-    let stranded: Option<u16> =
-        sqlx::query_scalar("SELECT port FROM allocations WHERE port < ? OR port > ? LIMIT 1")
-            .bind(from)
-            .bind(to)
-            .fetch_optional(pool)
-            .await?;
-    if let Some(port) = stranded {
-        return Err(Failure::invalid_request(format!(
-            "port {port} is in use and would fall outside the pool"
-        )));
-    }
-
+fn check(settings: &PanelSettings) -> Result<()> {
     limits::check(&settings.default_limits)?;
 
     if settings.max_upload_bytes == 0 {
@@ -144,12 +118,11 @@ async fn check(pool: &SqlitePool, settings: &PanelSettings) -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::auth::harness::{a_server, a_user, test_pool};
+    use crate::auth::harness::test_pool;
 
     fn changed(base: &PanelSettings) -> PanelSettings {
         PanelSettings {
             public_address: Some("minecraft.example".to_owned()),
-            port_pool: PortRange { from: 30000, to: 30100 },
             max_upload_bytes: 1024,
             max_backups_per_server: 5,
             external_services_enabled: false,
@@ -167,7 +140,6 @@ mod tests {
         let pool = test_pool().await;
         let settings = load(&pool).await.unwrap();
 
-        assert_eq!(settings.port_pool, PortRange { from: 25565, to: 25700 });
         assert_eq!(settings.public_address, None, "12.10: the machine cannot know it");
         assert!(settings.external_services_enabled, "17.8: on by default");
         assert_eq!(settings.max_backups_per_server, 10);
@@ -186,46 +158,11 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn a_pool_that_ends_before_it_begins_is_refused() {
-        let pool = test_pool().await;
-        let mut wanted = load(&pool).await.unwrap();
-        wanted.port_pool = PortRange { from: 30000, to: 29000 };
-
-        assert_eq!(save(&pool, &wanted).await.unwrap_err().code(), "invalid_request");
-    }
-
-    #[tokio::test]
-    async fn a_pool_may_not_strand_a_port_that_is_already_in_use() {
-        let pool = test_pool().await;
-        let max = a_user(&pool, "max").await;
-        let server = a_server(&pool, max, "one", 2048).await;
-        sqlx::query(
-            "INSERT INTO allocations (port, server_id, name, is_primary, created_at) \
-             VALUES (25565, ?, 'game', 1, ?)",
-        )
-        .bind(server)
-        .bind(Timestamp::now())
-        .execute(&pool)
-        .await
-        .unwrap();
-
-        let mut wanted = load(&pool).await.unwrap();
-        wanted.port_pool = PortRange { from: 26000, to: 26100 };
-        let refusal = save(&pool, &wanted).await.unwrap_err();
-        assert_eq!(refusal.code(), "invalid_request");
-        assert!(refusal.to_string().contains("25565"), "{refusal}");
-
-        wanted.port_pool = PortRange { from: 25000, to: 26100 };
-        assert!(save(&pool, &wanted).await.is_ok(), "a pool that still holds it is fine");
-    }
-
-    #[tokio::test]
     async fn the_remaining_bounds_are_each_refused_on_their_own() {
         let pool = test_pool().await;
         let good = load(&pool).await.unwrap();
 
         let cases: Vec<(&str, PanelSettings)> = vec![
-            ("below 1024", PanelSettings { port_pool: PortRange { from: 80, to: 90 }, ..good.clone() }),
             ("no upload", PanelSettings { max_upload_bytes: 0, ..good.clone() }),
             ("too many backups", PanelSettings { max_backups_per_server: 51, ..good.clone() }),
             ("no backups", PanelSettings { max_backups_per_server: 0, ..good.clone() }),

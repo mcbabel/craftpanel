@@ -411,35 +411,6 @@ fn plain(file: &File) -> std::io::Result<()> {
     Ok(())
 }
 
-pub fn set_port(dir: &Path, loader: LoaderId, port: u16) -> std::io::Result<()> {
-    if loader == LoaderId::Velocity {
-        let path = dir.join("velocity.toml");
-        let Some(text) = read_plain(&path)? else { return Ok(()) };
-        let rewritten: Vec<String> = text
-            .lines()
-            .map(|line| match line.split_once('=') {
-                Some((key, value)) if key.trim() == "bind" => {
-                    let host = value.trim().trim_matches('"').rsplit_once(':').map_or("0.0.0.0", |(host, _)| host).to_owned();
-                    format!("bind = \"{host}:{port}\"")
-                }
-                _ => line.to_owned(),
-            })
-            .collect();
-        return write_plain(&path, &(rewritten.join("\n") + "\n"));
-    }
-
-    let path = dir.join("server.properties");
-    let text = read_plain(&path)?.unwrap_or_default();
-    let mut lines: Vec<String> = text
-        .lines()
-        .filter(|line| !line.starts_with("server-port=") && !line.starts_with("query.port="))
-        .map(str::to_owned)
-        .collect();
-    lines.push(format!("server-port={port}"));
-    lines.push(format!("query.port={port}"));
-    write_plain(&path, &(lines.join("\n") + "\n"))
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -528,12 +499,12 @@ mod tests {
         std::fs::write(&elsewhere, "untouched\n").unwrap();
         std::os::unix::fs::symlink(&elsewhere, dir.join("server.properties")).unwrap();
 
-        assert!(set_port(&dir, LoaderId::Paper, 25601).is_err());
+        assert!(write_plain(&dir.join("server.properties"), "server-port=25601\n").is_err());
         assert_eq!(std::fs::read_to_string(&elsewhere).unwrap(), "untouched\n");
 
         let hard = folder();
         std::fs::hard_link(&elsewhere, hard.join("server.properties")).unwrap();
-        assert!(set_port(&hard, LoaderId::Paper, 25601).is_err());
+        assert!(write_plain(&hard.join("server.properties"), "server-port=25601\n").is_err());
         assert_eq!(std::fs::read_to_string(&elsewhere).unwrap(), "untouched\n");
     }
 
@@ -620,16 +591,12 @@ mod tests {
     }
 
     #[test]
-    fn a_new_port_lands_in_the_properties() {
+    fn the_port_is_read_from_the_file_each_kind_of_server_uses() {
         let dir = folder();
-        std::fs::write(dir.join("server.properties"), "motd=hi\nserver-port=25565\nquery.port=25565\n").unwrap();
-        set_port(&dir, LoaderId::Paper, 25601).unwrap();
-        let text = std::fs::read_to_string(dir.join("server.properties")).unwrap();
-        assert!(text.contains("motd=hi") && text.contains("server-port=25601") && text.contains("query.port=25601"));
-        assert!(!text.contains("25565"));
+        std::fs::write(dir.join("server.properties"), "motd=hi\nserver-port=25571\n").unwrap();
+        assert_eq!(port_of(&dir, LoaderId::Leaf), Some(25571));
 
-        std::fs::write(dir.join("velocity.toml"), "motd = \"x\"\nbind = \"0.0.0.0:25577\"\n").unwrap();
-        set_port(&dir, LoaderId::Velocity, 25602).unwrap();
-        assert!(std::fs::read_to_string(dir.join("velocity.toml")).unwrap().contains("bind = \"0.0.0.0:25602\""));
+        std::fs::write(dir.join("velocity.toml"), "motd = \"x\"\nbind = \"0.0.0.0:25564\"\n").unwrap();
+        assert_eq!(port_of(&dir, LoaderId::Velocity), Some(25564));
     }
 }

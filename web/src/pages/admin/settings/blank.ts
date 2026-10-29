@@ -5,7 +5,6 @@ const MIB = 1024 * 1024
 export function blankSettings(): PanelSettings {
 	return {
 		public_address: null,
-		port_pool: { from: 25565, to: 25665 },
 		default_limits: {
 			memory_mib: 2048,
 			cpu_mode: 'share',

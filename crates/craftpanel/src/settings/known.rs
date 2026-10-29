@@ -26,19 +26,13 @@ const INTEGER: [&str; 7] = [
 const DIFFICULTY: [&str; 4] = ["peaceful", "easy", "normal", "hard"];
 const GAMEMODE: [&str; 4] = ["survival", "creative", "adventure", "spectator"];
 
-pub const PANEL_OWNED: [&str; 2] = ["server-port", "query.port"];
+pub const PORT_KEYS: [&str; 2] = ["server-port", "query.port"];
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Key {
     pub file: String,
     pub wire: String,
     pub known: bool,
-}
-
-impl Key {
-    pub fn is_panel_owned(&self) -> bool {
-        PANEL_OWNED.contains(&self.file.as_str())
-    }
 }
 
 pub fn resolve(name: &str) -> Result<Key> {
@@ -130,13 +124,6 @@ mod tests {
         assert_eq!(resolve("level-name").unwrap().file, "level-name");
         assert_eq!(from_file("level-name"), ("level-name".to_owned(), false));
         assert_eq!(from_file("spawn-protection"), ("spawn_protection".to_owned(), true));
-    }
-
-    #[test]
-    fn the_two_panel_owned_keys_are_recognised_under_both_spellings() {
-        assert!(resolve("server-port").unwrap().is_panel_owned());
-        assert!(resolve("query.port").unwrap().is_panel_owned());
-        assert!(!resolve("rcon.port").unwrap().is_panel_owned());
     }
 
     #[test]

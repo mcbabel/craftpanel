@@ -62,51 +62,6 @@
 						:body="formatMessage(messages.publicAddressEmpty)"
 					/>
 				</div>
-
-				<div class="flex flex-col gap-2">
-					<SettingsLabel
-						:title="formatMessage(messages.portPool)"
-						:description="formatMessage(messages.portPoolDescription)"
-					/>
-					<div class="flex flex-wrap items-end gap-3">
-						<div class="flex flex-col gap-1.5">
-							<label class="text-sm font-semibold text-contrast" for="port-from">
-								{{ formatMessage(messages.portFrom) }}
-							</label>
-							<Input
-								id="port-from"
-								:model-value="draft.port_pool.from"
-								type="number"
-								:min="PORT_MIN"
-								:max="PORT_MAX"
-								:error="!portsValid"
-								wrapper-class="w-32"
-								@update:model-value="setPortFrom"
-							/>
-						</div>
-						<div class="flex flex-col gap-1.5">
-							<label class="text-sm font-semibold text-contrast" for="port-to">
-								{{ formatMessage(messages.portTo) }}
-							</label>
-							<Input
-								id="port-to"
-								:model-value="draft.port_pool.to"
-								type="number"
-								:min="PORT_MIN"
-								:max="PORT_MAX"
-								:error="!portsValid"
-								wrapper-class="w-32"
-								@update:model-value="setPortTo"
-							/>
-						</div>
-						<span class="pb-2 text-sm text-secondary">
-							{{ formatMessage(messages.portCount, { count: formatNumber(portCount) }) }}
-						</span>
-					</div>
-					<span v-if="!portsValid" class="text-sm font-medium text-red">
-						{{ formatMessage(messages.portPoolInvalid) }}
-					</span>
-				</div>
 			</Card>
 
 			<Card class="!mb-0 flex flex-col gap-6">
@@ -258,7 +213,6 @@ import {
 	Toggle,
 	UnsavedChangesPopup,
 	useFormatBytes,
-	useFormatNumber,
 	useVIntl,
 } from '@modrinth/ui'
 import { computed, onMounted, onUnmounted, ref, toRaw } from 'vue'
@@ -271,11 +225,8 @@ import UserLimitFields from '@/pages/admin/UserLimitFields.vue'
 
 const { formatMessage } = useVIntl()
 const formatBytes = useFormatBytes()
-const formatNumber = useFormatNumber()
 
 const MIB = 1024 * 1024
-const PORT_MIN = 1024
-const PORT_MAX = 65535
 const MEMORY_MIN = 512
 const PIDS_MIN = 64
 const DISK_MIN = 1024
@@ -303,24 +254,11 @@ const messages = defineMessages({
 	publicAddressHint: {
 		id: 'admin.settings.public-address.hint',
 		defaultMessage:
-			'Shown next to every server port. A name is allowed. The panel does not guess it: behind NAT or a reverse proxy every guess would be wrong.',
+			'Shown with the port of every server that has no address of its own. Leave it empty and a server shows only what is set on the server itself.',
 	},
 	publicAddressEmpty: {
 		id: 'admin.settings.public-address.empty',
-		defaultMessage: 'No address is set, so the network page has nothing to show next to the port.',
-	},
-	portPool: { id: 'admin.settings.port-pool', defaultMessage: 'Port pool' },
-	portPoolDescription: {
-		id: 'admin.settings.port-pool.description',
-		defaultMessage: 'Every server port is handed out from this range.',
-	},
-	portFrom: { id: 'admin.settings.port-from', defaultMessage: 'From' },
-	portTo: { id: 'admin.settings.port-to', defaultMessage: 'To' },
-	portCount: { id: 'admin.settings.port-count', defaultMessage: '{count} port(s)' },
-	portPoolInvalid: {
-		id: 'admin.settings.port-pool.invalid',
-		defaultMessage:
-			'The range must run upwards and stay between 1024 and 65535. A range that leaves out an already assigned port is refused when saving.',
+		defaultMessage: 'No address is set, so servers show only an address set on the server itself.',
 	},
 	defaultsTitle: {
 		id: 'admin.settings.defaults.title',
@@ -391,26 +329,10 @@ const saveFailure = ref<string | null>(null)
 
 let savedTimer: ReturnType<typeof setTimeout> | undefined
 
-const portCount = computed(() =>
-	Math.max(0, draft.value.port_pool.to - draft.value.port_pool.from + 1),
-)
-
-const portsValid = computed(() => {
-	const pool = draft.value.port_pool
-	return (
-		Number.isInteger(pool.from) &&
-		Number.isInteger(pool.to) &&
-		pool.from >= PORT_MIN &&
-		pool.to <= PORT_MAX &&
-		pool.from <= pool.to
-	)
-})
-
 const uploadMib = computed(() => Math.round(draft.value.max_upload_bytes / MIB))
 
 const valid = computed(
 	() =>
-		portsValid.value &&
 		draft.value.max_upload_bytes >= MIB &&
 		draft.value.max_backups_per_server >= 1 &&
 		draft.value.max_concurrent_operations >= 1 &&
@@ -479,14 +401,6 @@ function numberFrom(value: string | number | undefined, fallback: number): numbe
 function setPublicAddress(value: string | number | undefined): void {
 	const text = String(value ?? '').trim()
 	draft.value.public_address = text.length > 0 ? text : null
-}
-
-function setPortFrom(value: string | number | undefined): void {
-	draft.value.port_pool.from = numberFrom(value, draft.value.port_pool.from)
-}
-
-function setPortTo(value: string | number | undefined): void {
-	draft.value.port_pool.to = numberFrom(value, draft.value.port_pool.to)
 }
 
 function setUploadMib(value: string | number | undefined): void {

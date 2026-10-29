@@ -130,6 +130,9 @@ async fn write_properties(
     store::apply(&mut properties, &wanted);
     store::write(&directory, &properties)?;
     crate::settings::give_back(&helper(&state), row.owner_id, row.id).await?;
+    if !running {
+        let _ = allocations::follow_files(&state.pool, &state.config.users_dir(), server).await;
+    }
 
     if running {
         store::queue(&state.pool, server, &wanted).await?;
@@ -322,6 +325,7 @@ async fn list_allocations(
     Path(server): Path<Id>,
 ) -> Result<Json<Vec<Allocation>>> {
     seen(&state, &caller, server, Permission::BaseRead).await?;
+    let _ = allocations::follow_files(&state.pool, &state.config.users_dir(), server).await;
     Ok(Json(allocations::list(&state.pool, server).await?))
 }
 
@@ -343,10 +347,7 @@ async fn add_allocation(
     }
     operations.guard_write(server).await.map_err(crate::settings::from_fault)?;
 
-    let settings = crate::auth::settings::load(&state.pool).await?;
-    let made =
-        allocations::create(&state.pool, server, settings.port_pool, &request, caller.is_admin())
-            .await?;
+    let made = allocations::create(&state.pool, server, &request).await?;
 
     audit::record(&state.pool, access, &caller, Event::PortAllocationAdded { port: made.port })
         .await;
@@ -653,7 +654,7 @@ async fn network_policy(state: &AppState, caller: &Caller, owner: Id) -> Result<
     .fetch_one(&state.pool)
     .await?;
     let admin = caller.is_admin();
-    let network_visible = admin || !settings.network_needs_playit || owner_has_playit;
+    let network_visible = !settings.network_needs_playit || owner_has_playit;
     let may_change_ports = admin || (network_visible && settings.user_ports != UserPorts::Locked);
     let may_choose_port = admin || (may_change_ports && settings.user_ports == UserPorts::Choose);
     Ok(NetworkPolicy {
@@ -1001,11 +1002,12 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn the_two_panel_owned_lines_can_only_be_moved_by_changing_the_port() {
+    async fn the_port_written_into_the_file_becomes_the_servers_port() {
         let world = world().await;
         let secret = world.as_owner().await;
+        an_allocation(&world.pool, world.server, 25565, "game", true).await;
 
-        let refused = world
+        let written = world
             .call(
                 send(
                     "PATCH",
@@ -1015,27 +1017,24 @@ mod tests {
                 &secret,
             )
             .await;
-        assert_eq!(refused.status(), StatusCode::CONFLICT);
-        assert_eq!(body_json(refused).await["error"], "property_is_panel_owned");
+        assert_eq!(written.status(), StatusCode::OK);
+        assert_eq!(allocations::primary(&world.pool, world.server).await.unwrap(), Some(25599));
 
-        an_allocation(&world.pool, world.server, 25565, "game", true).await;
-        an_allocation(&world.pool, world.server, 25599, "second", false).await;
-
+        an_allocation(&world.pool, world.server, 25600, "second", false).await;
         let swapped = world
             .call(
-                empty("PUT", &format!("/servers/{}/allocations/25599/primary", world.server)),
+                empty("PUT", &format!("/servers/{}/allocations/25600/primary", world.server)),
                 &secret,
             )
             .await;
         assert_eq!(swapped.status(), StatusCode::OK);
         let body = body_json(swapped).await;
-        assert_eq!(body["primary_port"], 25599);
-        assert_eq!(body["restart_required"], true);
-        assert_eq!(body["allocations"][0]["port"], 25565, "the old primary stays with the server");
+        assert_eq!(body["primary_port"], 25600);
+        assert_eq!(body["allocations"][0]["port"], 25599, "the old primary stays with the server");
 
         let file = std::fs::read_to_string(world.server_dir().join("server.properties")).unwrap();
-        assert!(file.contains("server-port=25599\n"), "{file}");
-        assert!(file.contains("query.port=25599\n"), "{file}");
+        assert!(file.contains("server-port=25600\n"), "{file}");
+        assert!(file.contains("query.port=25600\n"), "{file}");
     }
 
     #[tokio::test]
@@ -1432,6 +1431,14 @@ mod tests {
         let boss = sign_in(&world.pool, crate::auth::harness::an_admin(&world.pool, "boss").await).await;
         let admin = body_json(world.call(policy(), &boss).await).await;
         assert_eq!((admin["may_change_ports"].as_bool(), admin["may_choose_port"].as_bool()), (Some(true), Some(true)));
+
+        sqlx::query("DELETE FROM playit_accounts WHERE user_id = ?")
+            .bind(world.owner)
+            .execute(&world.pool)
+            .await
+            .unwrap();
+        let admin = body_json(world.call(policy(), &boss).await).await;
+        assert_eq!(admin["network_visible"], false, "the switch hides the tab from administrators too");
     }
 
     #[tokio::test]

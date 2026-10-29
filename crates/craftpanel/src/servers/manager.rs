@@ -250,6 +250,14 @@ impl Manager {
         &self.operations
     }
 
+    pub async fn follow_port(&self, server: Id) {
+        if let Err(err) =
+            crate::settings::allocations::follow_files(&self.pool, &self.config.users_dir(), server).await
+        {
+            tracing::warn!(%server, "the port in the server's files could not be read: {err}");
+        }
+    }
+
     pub fn dir(&self, owner: Id, server: Id) -> PathBuf {
         self.config.users_dir().join(owner.to_string()).join("servers").join(server.to_string())
     }
@@ -334,8 +342,26 @@ impl Manager {
         server: Id,
         name: Option<&str>,
         channel: Option<UpdateChannel>,
+        address: Option<Option<&str>>,
     ) -> Result<Server> {
         self.operations.guard_write(server).await.map_err(fault)?;
+        if let Some(address) = address {
+            let address = address.map(str::trim).filter(|text| !text.is_empty());
+            if address.is_some_and(|text| {
+                text.len() > 253 || text.chars().any(|letter| letter.is_whitespace() || letter.is_control())
+            }) {
+                return Err(Failure::bad_request(
+                    "invalid_address",
+                    "an address is up to 253 characters without spaces",
+                ));
+            }
+            sqlx::query("UPDATE servers SET public_address = ?, updated_at = ? WHERE id = ?")
+                .bind(address)
+                .bind(Timestamp::now())
+                .bind(server)
+                .execute(&self.pool)
+                .await?;
+        }
         if let Some(name) = name {
             check_name(name).map_err(|_| {
                 Failure::bad_request("invalid_name", "a name is 1 to 64 printable characters")
@@ -1080,6 +1106,8 @@ impl Manager {
             ));
         }
 
+        self.follow_port(row.id).await;
+
         let program = self.java(actor, row).await?;
 
         let token = hex::encode(rand::random::<[u8; 32]>());
@@ -1526,6 +1554,11 @@ impl Manager {
         }
 
         found.resumed = self.resume_deletes().await?;
+        if let Err(err) =
+            crate::settings::allocations::follow_everyone(&self.pool, &self.config.users_dir()).await
+        {
+            tracing::warn!("the ports in the servers' files could not be read: {err}");
+        }
 
         tracing::info!(
             attached = found.attached.len(),
@@ -1710,6 +1743,7 @@ const SELECT: &str = "SELECT s.id, s.name, s.owner_id, s.status, s.loader, s.loa
             m.project_id AS project_id, m.version_id AS version_id,
             (SELECT count(*) FROM backups b WHERE b.server_id = s.id) AS used_backup_quota,
             p.public_address AS public_address,
+            s.public_address AS own_address,
             p.max_backups_per_server AS backup_quota
        FROM servers s
        LEFT JOIN server_modpacks m ON m.server_id = s.id
@@ -1733,6 +1767,7 @@ struct Row {
     version_id: Option<String>,
     used_backup_quota: u32,
     public_address: Option<String>,
+    own_address: Option<String>,
     backup_quota: u32,
 }
 
@@ -1750,7 +1785,7 @@ impl Row {
             net: ServerNet {
                 ip: self.public_address,
                 port: self.port.unwrap_or_default(),
-                domain: String::new(),
+                domain: self.own_address.unwrap_or_default(),
             },
             memory_mib: self.memory_mib,
             upstream: match (self.project_id, self.version_id) {
@@ -1815,26 +1850,15 @@ async fn allocated_mib(tx: &mut Transaction<'_, Sqlite>, owner: Id) -> Result<u3
 }
 
 async fn next_free_port(tx: &mut Transaction<'_, Sqlite>) -> Result<u16> {
-    let (from, to): (u16, u16) =
-        sqlx::query_as("SELECT port_pool_from, port_pool_to FROM panel_settings WHERE id = 1")
-            .fetch_one(&mut **tx)
-            .await?;
-    let taken: Vec<(u16,)> =
-        sqlx::query_as("SELECT port FROM ports_in_use WHERE port BETWEEN ? AND ? ORDER BY port")
-            .bind(from)
-            .bind(to)
+    let first = crate::settings::allocations::FIRST_PORT;
+    let taken: Vec<u16> =
+        sqlx::query_scalar("SELECT port FROM ports_in_use WHERE port >= ? ORDER BY port")
+            .bind(first)
             .fetch_all(&mut **tx)
             .await?;
-
-    let mut used = taken.into_iter().map(|(port,)| port);
-    let mut next = used.next();
-    for candidate in from..=to {
-        match next {
-            Some(port) if port == candidate => next = used.next(),
-            _ => return Ok(candidate),
-        }
-    }
-    Err(Failure::conflict("port_pool_exhausted", "the port pool has nothing free left"))
+    (first..=u16::MAX)
+        .find(|port| !taken.contains(port))
+        .ok_or_else(|| Failure::conflict("no_free_port", "every port from 25565 up is taken"))
 }
 
 fn taken_port(err: sqlx::Error) -> Failure {
@@ -1937,7 +1961,7 @@ fn properties_text(fields: &PropertiesFields, port: u16) -> String {
     lines.insert("server-port".to_owned(), port.to_string());
     lines.insert("query.port".to_owned(), port.to_string());
 
-    let mut text = String::from("# Written by the panel; server-port belongs to it.\n");
+    let mut text = String::from("# Written by the panel when this server was made.\n");
     for (key, value) in lines {
         text.push_str(&format!("{key}={value}\n"));
     }
@@ -2653,36 +2677,6 @@ mod tests {
             fixture.manager.create(&caller, fixture.loader_wish("two", max, 512)).await.unwrap();
         assert_eq!(first.server.net.port, 25565);
         assert_eq!(second.server.net.port, 25566);
-    }
-
-    #[tokio::test]
-    async fn a_pool_the_installer_set_is_the_one_the_first_server_draws_from() {
-        let fixture = Fixture::new().await;
-        let wanted = crate::model::PortRange { from: 25800, to: 25810 };
-        crate::auth::cli::set_ports(&fixture.pool, wanted).await.unwrap();
-
-        let max = a_user(&fixture.pool, "max").await;
-        let caller = fixture.caller(max).await;
-        let first =
-            fixture.manager.create(&caller, fixture.loader_wish("one", max, 512)).await.unwrap();
-
-        assert_eq!(first.server.net.port, 25800, "not 25565 out of the migration");
-    }
-
-    #[tokio::test]
-    async fn an_exhausted_pool_is_a_conflict_and_not_a_second_server_on_one_port() {
-        let fixture = Fixture::new().await;
-        let max = a_user(&fixture.pool, "max").await;
-        let caller = fixture.caller(max).await;
-        sqlx::query("UPDATE panel_settings SET port_pool_from = 25565, port_pool_to = 25565")
-            .execute(&fixture.pool)
-            .await
-            .unwrap();
-
-        fixture.manager.create(&caller, fixture.loader_wish("one", max, 512)).await.unwrap();
-        let refused =
-            fixture.manager.create(&caller, fixture.loader_wish("two", max, 512)).await.unwrap_err();
-        assert_eq!(refused.code(), "port_pool_exhausted");
     }
 
     #[tokio::test]

@@ -21,7 +21,7 @@ helper_socket = "/run/craftpanel/helper.sock"
 | `helper_socket` | `/run/craftpanel/helper.sock` | Unix socket of the privileged helper. The supervisor socket `supervise.sock` is created next to it. |
 
 If the file does not exist, all defaults apply. Unknown keys and tables are ignored; a `[ports]`
-table written by older installers has no effect (the port range is a panel setting, see below).
+table written by older installers has no effect (each server takes its port from its own files, see below).
 
 After editing the file, restart the panel:
 
@@ -70,20 +70,14 @@ are never stored in the database or returned by the API.
 | Port | Purpose |
 |---|---|
 | Web port (`bind`) | Web interface and API. |
-| Port pool, default `25565`–`25700` | Ports handed out to Minecraft servers. |
+| Each server's port | What its `server.properties` (`server-port`) or `velocity.toml` (`bind`) says. |
 
-The panel assigns each new server a free port from the pool. Administrators may assign any port,
-also outside the pool, and servers can have additional ports. Open the web port and the pool in your
-firewall if players connect directly. For access without port forwarding, see
+A server's port is whatever its own files say. The panel reads it from there when the server starts,
+when its pages load and when its properties are saved, and never writes over it. Only a brand-new
+server gets a port from the panel: the first one from `25565` up that no other server has. Two
+servers may name the same port in their files; they just cannot run at the same time. Open in your
+firewall only the ports players connect to directly. For access without port forwarding, see
 [Public addresses](playit.md).
-
-Change the pool under **Administration → Panel settings → Port pool** or from the command line:
-
-```bash
-sudo runuser -u craftpanel -- craftpanel admin ports --from 25565 --to 25600
-```
-
-A range that would leave an existing server's port outside it is refused.
 
 ## Panel settings
 
@@ -91,8 +85,7 @@ A range that would leave an existing server's port outside it is refused.
 
 | Setting | Default | Meaning |
 |---|---|---|
-| Public address | not set | Host name or IP players connect to; shown next to each server's port. The panel cannot detect it behind NAT or a proxy. |
-| Port pool | `25565`–`25700` | See above. |
+| Public address | not set | Host name or IP shown with the port of every server that has no address of its own. Each server can set its own address under **Settings → General**; leave both empty for servers players only reach through a proxy. |
 | Defaults for new accounts: memory | 4096 MiB | Applied to accounts created after the change. |
 | Defaults: processor | 2 cores, hard cap | Cap or share; see [Accounts](accounts.md#resource-limits). |
 | Defaults: processes | 512 | |

@@ -2061,11 +2061,10 @@ mod tests {
             app(&pool, &fake).oneshot(as_user(fetch("/admin/settings"), &secret)).await.unwrap(),
         )
         .await;
-        assert_eq!(before["port_pool"]["from"], 25565);
+        assert!(before.get("port_pool").is_none(), "the panel hands out no port range any more");
         assert_eq!(before["external_services_enabled"], true);
 
         let mut wanted = before.clone();
-        wanted["port_pool"] = serde_json::json!({ "from": 30000, "to": 30100 });
         wanted["external_services_enabled"] = serde_json::json!(false);
         wanted["public_address"] = serde_json::json!("minecraft.example");
 
@@ -2077,7 +2076,6 @@ mod tests {
         assert_eq!(body_json(response).await, wanted);
 
         let stored = settings::load(&pool).await.unwrap();
-        assert_eq!(stored.port_pool.from, 30000);
         assert_eq!(stored.public_address.as_deref(), Some("minecraft.example"));
         assert!(!stored.external_services_enabled);
     }
@@ -2090,7 +2088,7 @@ mod tests {
 
         let before = settings::load(&pool).await.unwrap();
         let mut wanted = serde_json::to_value(&before).unwrap();
-        wanted["port_pool"] = serde_json::json!({ "from": 30000, "to": 20000 });
+        wanted["max_backups_per_server"] = serde_json::json!(0);
 
         let response = app(&pool, &fake)
             .oneshot(as_user(send("PUT", "/admin/settings", wanted), &secret))
@@ -2152,7 +2150,7 @@ mod tests {
                 vec![
                     "default_limits", "external_services_enabled", "java_auto_install",
                     "max_backups_per_server", "max_concurrent_operations", "max_upload_bytes",
-                    "network_needs_playit", "port_pool", "public_address", "registration_enabled",
+                    "network_needs_playit", "public_address", "registration_enabled",
                     "registration_requires_approval", "stop_grace_seconds", "user_ports",
                 ],
             ),

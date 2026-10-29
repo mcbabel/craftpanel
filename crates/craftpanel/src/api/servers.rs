@@ -84,6 +84,16 @@ struct UpdateServerRequest {
     name: Option<String>,
     #[serde(default)]
     update_channel: Option<UpdateChannel>,
+    #[serde(default, deserialize_with = "field_that_may_be_null")]
+    public_address: Option<Option<String>>,
+}
+
+fn field_that_may_be_null<'de, D, T>(reader: D) -> std::result::Result<Option<Option<T>>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+    T: serde::Deserialize<'de>,
+{
+    Option::deserialize(reader).map(Some)
 }
 
 #[derive(Debug, Deserialize)]
@@ -197,6 +207,7 @@ async fn one(
     OfServer(server): OfServer,
 ) -> Result<Json<Server>> {
     let access = access::require(manager.pool(), &caller, server, Permission::BaseRead).await?;
+    manager.follow_port(server).await;
     Ok(Json(manager.read(server, access.permissions).await?))
 }
 
@@ -207,12 +218,21 @@ async fn amend(
     JsonBody(body): JsonBody<UpdateServerRequest>,
 ) -> Result<Json<Server>> {
     let access = access::require(manager.pool(), &caller, server, Permission::Advanced).await?;
-    if body.name.is_none() && body.update_channel.is_none() {
-        return Err(Failure::invalid_request("name or update_channel, and this is neither"));
+    if body.name.is_none() && body.update_channel.is_none() && body.public_address.is_none() {
+        return Err(Failure::invalid_request(
+            "name, update_channel or public_address, and this is none of them",
+        ));
     }
 
-    let mut object =
-        manager.amend(&caller, server, body.name.as_deref(), body.update_channel).await?;
+    let mut object = manager
+        .amend(
+            &caller,
+            server,
+            body.name.as_deref(),
+            body.update_channel,
+            body.public_address.as_ref().map(Option::as_deref),
+        )
+        .await?;
     object.current_user_permissions = access.permissions;
     Ok(Json(object))
 }
@@ -552,6 +572,28 @@ mod tests {
         .unwrap();
         assert_eq!(action, "changed_server_name");
         assert!(metadata.unwrap().contains("new"));
+    }
+
+    #[tokio::test]
+    async fn a_server_shows_the_address_its_owner_wrote_and_nothing_once_it_is_cleared() {
+        let panel = Panel::new().await;
+        let max = a_user(&panel.pool, "max").await;
+        let server = panel.a_ready_server(max, "proxy").await;
+        let cookie = panel.as_who(max).await;
+        let patch = |body: serde_json::Value| {
+            as_user(send("PATCH", &format!("/servers/{server}"), body), &cookie)
+        };
+
+        let set = panel.call(patch(serde_json::json!({ "public_address": " mc.example.org " }))).await;
+        assert_eq!(set.status(), StatusCode::OK);
+        assert_eq!(body_json(set).await["net"]["domain"], "mc.example.org");
+
+        let refused = panel.call(patch(serde_json::json!({ "public_address": "two words" }))).await;
+        assert_eq!(refused.status(), StatusCode::BAD_REQUEST);
+
+        let cleared = panel.call(patch(serde_json::json!({ "public_address": null }))).await;
+        assert_eq!(cleared.status(), StatusCode::OK);
+        assert_eq!(body_json(cleared).await["net"]["domain"], "");
     }
 
     #[tokio::test]

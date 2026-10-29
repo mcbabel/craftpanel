@@ -294,9 +294,10 @@ async fn server_object(
         UpdateChannel,
         bool,
         Timestamp,
+        Option<String>,
     )> = sqlx::query_as(
         "SELECT id, name, owner_id, status, loader, loader_version, game_version,
-                memory_mib, update_channel, flows_intro, created_at
+                memory_mib, update_channel, flows_intro, created_at, public_address
            FROM servers WHERE id = ?",
     )
     .bind(server)
@@ -315,6 +316,7 @@ async fn server_object(
         update_channel,
         flows_intro,
         created_at,
+        own_address,
     )) = row
     else {
         return Err(ops::Fault::server_not_found());
@@ -353,7 +355,7 @@ async fn server_object(
         net: ServerNet {
             ip: address,
             port: port.map(|(port,)| port as u16).unwrap_or_default(),
-            domain: String::new(),
+            domain: own_address.unwrap_or_default(),
         },
         memory_mib: memory_mib.max(0) as u32,
         upstream: modpack.and_then(|(project_id, version_id)| {

@@ -13,7 +13,7 @@
 
 			<template #badges>
 				<Badge :type="formatMessage(STATE_LABELS[powerState])" :color="STATE_COLORS[powerState]" />
-				<CopyCode :text="address" />
+				<CopyCode v-if="address" :text="address" />
 			</template>
 
 			<template #metadata>
@@ -104,6 +104,7 @@ import { computed, onScopeDispose, watch } from 'vue'
 import { RouterView, useRoute, useRouter } from 'vue-router'
 
 import { api, isApiRequestError, type PowerState, type Server, ServerSocket } from '@/api'
+import { serverAddress } from '@/api/address'
 import { publicAddress } from '@/api/playit'
 import PanelServerIcon from '@/components/PanelServerIcon.vue'
 import ServerTabBar from '@/components/ServerTabBar.vue'
@@ -307,10 +308,7 @@ const notice = computed(() => {
 })
 
 const { tunnel } = useServerTunnel(props.server.id)
-const address = computed(() => {
-	const { ip, port } = server.value.net
-	return publicAddress(tunnel.value) ?? `${ip ?? location.hostname}:${port}`
-})
+const address = computed(() => publicAddress(tunnel.value) ?? serverAddress(server.value.net))
 
 const GONE_CODES = new Set([4401, 4403, 4404])
 

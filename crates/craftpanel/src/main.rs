@@ -55,8 +55,7 @@ enum Command {
     /// Run the panel (the default when no subcommand is given).
     Serve,
     /// Look after the panel from the command line, before anything is listening:
-    /// the installer makes the first administrator this way, and sets the range
-    /// the servers' ports are handed out from.
+    /// the installer makes the first administrator this way.
     #[command(subcommand)]
     Admin(auth::cli::AdminCommand),
     /// Look at the mails the panel sends, without a Resend key and without a

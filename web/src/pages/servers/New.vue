@@ -365,9 +365,9 @@ const submitFailures: Record<string, MessageDescriptor> = defineMessages({
 		id: 'panel.server-new.error.over-limit',
 		defaultMessage: 'Your servers already claim more memory than your budget allows.',
 	},
-	port_pool_exhausted: {
-		id: 'panel.server-new.error.port-pool-exhausted',
-		defaultMessage: 'No free port is left in the pool. An administrator has to widen it.',
+	no_free_port: {
+		id: 'panel.server-new.error.no-free-port',
+		defaultMessage: 'No free port is left from 25565 up.',
 	},
 	port_in_use: {
 		id: 'panel.server-new.error.port-in-use',

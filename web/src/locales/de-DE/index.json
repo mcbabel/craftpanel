@@ -1325,29 +1325,11 @@
   "admin.settings.network.title": {
     "defaultMessage": "Netzwerk"
   },
-  "admin.settings.port-count": {
-    "defaultMessage": "{count} Port(s)"
-  },
-  "admin.settings.port-from": {
-    "defaultMessage": "Von"
-  },
-  "admin.settings.port-pool": {
-    "defaultMessage": "Portbereich"
-  },
-  "admin.settings.port-pool.description": {
-    "defaultMessage": "Jeder Serverport wird aus diesem Bereich vergeben."
-  },
-  "admin.settings.port-pool.invalid": {
-    "defaultMessage": "Der Bereich muss aufwärts laufen und zwischen 1024 und 65535 bleiben. Ein Bereich, der einen bereits vergebenen Port auslässt, wird beim Speichern abgelehnt."
-  },
-  "admin.settings.port-to": {
-    "defaultMessage": "Bis"
-  },
   "admin.settings.ports.choose": {
     "defaultMessage": "Nummer wählen"
   },
   "admin.settings.ports.choose-hint": {
-    "defaultMessage": "Nutzer können auch die gewünschte Portnummer eintippen, solange sie frei ist und im Bereich liegt."
+    "defaultMessage": "Nutzer können auch selbst eine Portnummer eintippen, solange sie frei ist."
   },
   "admin.settings.ports.description": {
     "defaultMessage": "Was Nutzer im Netzwerk-Tab ihrer Server tun dürfen. Administratoren dürfen immer alles."
@@ -1362,13 +1344,13 @@
     "defaultMessage": "Netzwerk-Tab nur mit playit.gg"
   },
   "admin.settings.ports.needs-playit-hint": {
-    "defaultMessage": "Blendet den Netzwerk-Tab für Nutzer aus, hinter deren Servern kein playit.gg-Konto steht, zum Beispiel wenn von außerhalb deines Netzwerks ohnehin niemand die Portnummern erreicht."
+    "defaultMessage": "Blendet den Netzwerk-Tab aus, auch für Administratoren, bei jedem Server, dessen Besitzer kein playit.gg-Konto verbunden hat, zum Beispiel wenn die Ports ohnehin von Hand weitergeleitet werden."
   },
   "admin.settings.ports.pool": {
-    "defaultMessage": "Aus dem Bereich"
+    "defaultMessage": "Vom Panel vergeben"
   },
   "admin.settings.ports.pool-hint": {
-    "defaultMessage": "Nutzer können weitere Ports hinzufügen, etwa für eine Karte oder einen Voice-Chat; das Panel nimmt den nächsten freien aus dem Bereich."
+    "defaultMessage": "Nutzer können weitere Ports hinzufügen, etwa für eine Karte oder einen Voice-Chat; das Panel nimmt den nächsten freien."
   },
   "admin.settings.ports.title": {
     "defaultMessage": "Ports und der Netzwerk-Tab"
@@ -1380,10 +1362,10 @@
     "defaultMessage": "Öffentliche Adresse"
   },
   "admin.settings.public-address.empty": {
-    "defaultMessage": "Es ist keine Adresse gesetzt, also hat die Netzwerkseite neben dem Port nichts zu zeigen."
+    "defaultMessage": "Keine Adresse eingetragen, Server zeigen also nur eine bei ihnen selbst eingetragene Adresse."
   },
   "admin.settings.public-address.hint": {
-    "defaultMessage": "Wird neben jedem Serverport angezeigt. Ein Name ist erlaubt. Das Panel rät sie nicht: Hinter NAT oder einem Reverse-Proxy wäre jede Vermutung falsch."
+    "defaultMessage": "Wird mit dem Port bei jedem Server angezeigt, der keine eigene Adresse hat. Leer lassen, dann zeigt ein Server nur, was bei ihm selbst eingetragen ist."
   },
   "admin.settings.public-address.placeholder": {
     "defaultMessage": "play.example.com"
@@ -2777,6 +2759,15 @@
   "craftpanel.settings.general.not-owner": {
     "defaultMessage": "Das kann nur der Besitzer des Servers."
   },
+  "craftpanel.settings.general.player-address": {
+    "defaultMessage": "Adresse für Spieler"
+  },
+  "craftpanel.settings.general.player-address.help": {
+    "defaultMessage": "Was Spieler eintippen, um diesen Server zu erreichen. Steht oben auf seinen Seiten. Leer lassen bei einem Server, den Spieler nur über einen Proxy erreichen."
+  },
+  "craftpanel.settings.general.player-address.placeholder": {
+    "defaultMessage": "play.example.com"
+  },
   "craftpanel.settings.general.remove": {
     "defaultMessage": "Server löschen"
   },
@@ -2853,7 +2844,7 @@
     "defaultMessage": "Portzuweisungen"
   },
   "craftpanel.settings.network.allocations-help": {
-    "defaultMessage": "Zusätzliche Ports für Dinge wie Kartenansichten oder Voice-Chat. Ein gelöschter Port geht zurück in den Pool."
+    "defaultMessage": "Weitere Ports, etwa für Kartenansichten oder Voice-Chat. Ein gelöschter Port kann wieder vergeben werden."
   },
   "craftpanel.settings.network.column-actions": {
     "defaultMessage": "Aktionen"
@@ -2877,7 +2868,7 @@
     "defaultMessage": "Portzuweisung erstellt"
   },
   "craftpanel.settings.network.delete-body": {
-    "defaultMessage": "Port {port} geht zurück in den Pool und kann neu vergeben werden."
+    "defaultMessage": "Port {port} wird frei und kann wieder vergeben werden."
   },
   "craftpanel.settings.network.delete-title": {
     "defaultMessage": "Portzuweisung löschen"
@@ -3335,14 +3326,14 @@
   "panel.server-new.error.network-unreachable": {
     "defaultMessage": "Das Panel konnte nicht erreicht werden."
   },
+  "panel.server-new.error.no-free-port": {
+    "defaultMessage": "Ab 25565 ist kein Port mehr frei."
+  },
   "panel.server-new.error.over-limit": {
     "defaultMessage": "Deine Server beanspruchen bereits mehr Arbeitsspeicher, als dein Budget erlaubt."
   },
   "panel.server-new.error.port-in-use": {
     "defaultMessage": "Der Port ist belegt. Versuch es erneut."
-  },
-  "panel.server-new.error.port-pool-exhausted": {
-    "defaultMessage": "Im Pool ist kein Port mehr frei. Ein Administrator muss ihn erweitern."
   },
   "panel.server-new.error.unknown-loader": {
     "defaultMessage": "Diesen Loader kennt das Panel nicht."

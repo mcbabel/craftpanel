@@ -228,6 +228,7 @@ import { type Allocation, api, type NetworkPolicy } from '@/api'
 import { shareAddress } from '@/api/playit'
 import { actionsColumnWidth, ICON_BUTTON_REM } from '@/components/table-widths'
 import { useServerTunnel } from '@/composables/playit'
+import { useServerPage } from '@/composables/server-page'
 import { useSession } from '@/composables/session'
 
 import PlayitPorts from './PlayitPorts.vue'
@@ -237,6 +238,7 @@ const { formatMessage } = useVIntl()
 const { isAdmin, user } = useSession()
 const { addNotification } = injectNotificationManager()
 const { server, serverId } = injectModrinthServerContext()
+const { server: panelServer } = useServerPage()
 const { canUseAdvancedSettings, permissionDeniedMessage } = useServerPermissions()
 const { tunnel, available: playitAvailable } = useServerTunnel(serverId)
 
@@ -279,7 +281,7 @@ const messages = defineMessages({
 	allocationsHelp: {
 		id: 'craftpanel.settings.network.allocations-help',
 		defaultMessage:
-			'Extra ports for things like map viewers or voice chat. A deleted port returns to the pool.',
+			'Extra ports for things like map viewers or voice chat. A deleted port can be handed out again.',
 	},
 	name: { id: 'craftpanel.settings.network.column-name', defaultMessage: 'Name' },
 	port: { id: 'craftpanel.settings.network.column-port', defaultMessage: 'Port' },
@@ -315,7 +317,7 @@ const messages = defineMessages({
 	deleteTitle: { id: 'craftpanel.settings.network.delete-title', defaultMessage: 'Delete allocation' },
 	deleteBody: {
 		id: 'craftpanel.settings.network.delete-body',
-		defaultMessage: 'Port {port} goes back into the pool and can be handed out again.',
+		defaultMessage: 'Port {port} is freed and can be handed out again.',
 	},
 	loadFailed: {
 		id: 'craftpanel.settings.network.load-failed',
@@ -370,8 +372,10 @@ watch(
 		if (port === promotedPort.value) promotedPort.value = null
 	},
 )
-const address = computed(() =>
-	host.value ? `${host.value}:${primaryPort.value}` : String(primaryPort.value),
+const address = computed(
+	() =>
+		panelServer.value.net.domain ||
+		(host.value ? `${host.value}:${primaryPort.value}` : String(primaryPort.value)),
 )
 
 const tunnelHolds = computed(() => tunnelHoldsPrimaryPort(tunnel.value, playitAvailable.value))

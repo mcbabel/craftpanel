@@ -344,6 +344,7 @@ export interface CreateServerResponse {
 export interface UpdateServerRequest {
 	name?: string
 	update_channel?: UpdateChannel
+	public_address?: string | null
 }
 
 export type PowerAction = 'start' | 'stop' | 'restart' | 'kill'
@@ -1376,7 +1377,6 @@ export interface HostCapacity {
 
 export interface PanelSettings {
 	public_address: string | null
-	port_pool: { from: number; to: number }
 	default_limits: UserLimits
 	max_upload_bytes: number
 	max_backups_per_server: number

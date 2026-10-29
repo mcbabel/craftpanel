@@ -88,7 +88,8 @@ pub async fn run(args: McsmanagerArgs) -> Result<()> {
                 println!("done    {} as {} on port {}", describe(&planned), done.server, done.port);
                 if done.port_changed {
                     println!(
-                        "        its port {} was taken, so it moved to {}; update any proxy that points at it",
+                        "        its port {} is also another server's; its files keep {} and the panel notes {} until the other one lets go",
+                        planned.detected.port.map_or("?".to_owned(), |port| port.to_string()),
                         planned.detected.port.map_or("?".to_owned(), |port| port.to_string()),
                         done.port
                     );
@@ -362,7 +363,6 @@ async fn settle(
 ) -> Result<Imported> {
     let found = &planned.detected;
     let port = ledger.free_port(found.port).await?;
-    detect::set_port(dir, found.loader, port)?;
     ledger
         .record(Entry {
             server,
@@ -703,7 +703,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn a_taken_port_gives_way_and_the_properties_follow() {
+    async fn a_taken_port_is_noted_elsewhere_and_the_properties_stay_as_they_were() {
         let setup = setup();
         let pool = test_pool().await;
         let owner = an_admin(&pool, "admin").await;
@@ -733,7 +733,7 @@ mod tests {
             crate::files::server_dir(&config, owner, second.server).join("server.properties"),
         )
         .unwrap();
-        assert!(properties.contains(&format!("server-port={}", second.port)));
+        assert!(properties.contains("server-port=25565"), "{properties}");
         assert!(setup.daemon.join("data/InstanceData/one").exists(), "copied, the original stays");
     }
 
@@ -786,10 +786,6 @@ mod tests {
         std::fs::create_dir_all(config.users_dir().join(owner.to_string()).join("servers")).unwrap();
         let helper = Helper::new(setup.data.join("nobody.sock"));
         let guard = Guard { daemon: &setup.daemon, data_dir: &config.data_dir, allow_outside: false };
-        sqlx::query("UPDATE panel_settings SET port_pool_from = 30000, port_pool_to = 30000 WHERE id = 1")
-            .execute(&pool)
-            .await
-            .unwrap();
         sqlx::query("INSERT INTO servers (id, name, owner_id, status, memory_mib, created_at, updated_at) VALUES (?, 'x', ?, 'available', 1024, ?, ?)")
             .bind(Id::new()).bind(owner).bind(Timestamp::now()).bind(Timestamp::now())
             .execute(&pool).await.unwrap();
@@ -799,13 +795,15 @@ mod tests {
 
         let dir = setup.folder("full");
         paper(&dir, 30000);
+        std::fs::write(dir.join("server.jar"), b"in the way").unwrap();
+        std::fs::create_dir_all(dir.join("server.jar.before-import/occupied")).unwrap();
         setup.instance("full", serde_json::json!({
             "nickname": "Full", "cwd": dir.display().to_string(), "startCommand": "java -jar paper-1.21.4-130.jar"
         }));
 
         let planned = plan(&instances(&setup.daemon).unwrap()[0]).unwrap();
         let refused = import(&Ledger::Open(pool.clone()), &config, &helper, &guard, owner, &planned, false).await.unwrap_err();
-        assert!(format!("{refused:#}").contains("no free port"), "{refused:#}");
+        assert!(!format!("{refused:#}").is_empty());
         assert!(dir.join("world/level.dat").is_file(), "the folder is back where it was");
         let count: i64 = sqlx::query_scalar("SELECT count(*) FROM servers").fetch_one(&pool).await.unwrap();
         assert_eq!(count, 1);

@@ -78,12 +78,6 @@ pub fn plan(patch: &ServerPropertiesPatch) -> Result<Vec<(Key, Option<String>)>>
     let mut wanted = Vec::new();
     for (name, value) in patch.entries() {
         let key = known::resolve(name)?;
-        if key.is_panel_owned() {
-            return Err(Failure::conflict(
-                "property_is_panel_owned",
-                format!("{} is written by the panel; change the port instead", key.file),
-            ));
-        }
         if let Some(value) = value {
             known::check_value(&key, value)?;
         }
@@ -171,8 +165,18 @@ pub fn set_ports(properties: &mut Properties, port: u16) {
     properties.set("query.port", &port.to_string());
 }
 
+pub fn fill_ports(properties: &mut Properties, port: u16) {
+    if !properties.contains("server-port") {
+        properties.set("server-port", &port.to_string());
+    }
+    if !properties.contains("query.port") {
+        let game = properties.get("server-port").map_or_else(|| port.to_string(), str::to_owned);
+        properties.set("query.port", &game);
+    }
+}
+
 pub fn port_overrides(port: u16) -> Vec<(Key, Option<String>)> {
-    known::PANEL_OWNED
+    known::PORT_KEYS
         .iter()
         .map(|file| {
             (
@@ -247,16 +251,22 @@ mod tests {
     }
 
     #[test]
-    fn the_two_panel_owned_keys_are_refused_from_either_bucket() {
-        for body in [
-            serde_json::json!({ "custom": { "server-port": "25577" } }),
-            serde_json::json!({ "custom": { "query.port": "25577" } }),
-            serde_json::json!({ "known": { "server-port": "25577" } }),
-        ] {
-            let refusal = plan(&patch(body.clone())).unwrap_err();
-            assert_eq!(refusal.code(), "property_is_panel_owned", "{body}");
-            assert_eq!(refusal.status(), axum::http::StatusCode::CONFLICT);
-        }
+    fn the_port_is_the_owners_to_write_like_any_other_line() {
+        let wanted = plan(&patch(serde_json::json!({ "custom": { "server-port": "25577" } }))).unwrap();
+        assert_eq!(wanted.len(), 1);
+        assert_eq!(wanted[0].0.file, "server-port");
+    }
+
+    #[test]
+    fn a_port_already_in_the_file_is_never_filled_over() {
+        let mut properties = Properties::parse("server-port=25570\n");
+        fill_ports(&mut properties, 25599);
+        assert_eq!(properties.get("server-port"), Some("25570"));
+        assert_eq!(properties.get("query.port"), Some("25570"));
+
+        let mut empty = Properties::parse("");
+        fill_ports(&mut empty, 25599);
+        assert_eq!(empty.get("server-port"), Some("25599"));
     }
 
     #[test]

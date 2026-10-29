@@ -424,7 +424,7 @@ export function provideServerContext(input: ServerContextInput): ServerContextHa
 			server_id: current.id,
 			name: current.name,
 			owner_id: current.owner_id,
-			net: current.net,
+			net: { ...current.net, domain: '' },
 			game: current.game,
 			backup_quota: current.backup_quota,
 			used_backup_quota: current.used_backup_quota,

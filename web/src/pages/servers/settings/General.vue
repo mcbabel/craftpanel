@@ -32,6 +32,25 @@
 					/>
 					<span>{{ formatMessage(CHANNEL_DESCRIPTIONS[channel]) }}</span>
 				</div>
+
+				<div class="flex flex-col gap-2.5">
+					<label for="server-address-field" class="text-lg font-semibold text-contrast">
+						{{ formatMessage(messages.playerAddress) }}
+					</label>
+					<Input
+						id="server-address-field"
+						v-model="address"
+						v-tooltip="renameTooltip"
+						wrapper-class="w-full"
+						:maxlength="253"
+						autocapitalize="none"
+						autocorrect="off"
+						:spellcheck="false"
+						:placeholder="formatMessage(messages.playerAddressPlaceholder)"
+						:disabled="!canUseAdvancedSettings"
+					/>
+					<span>{{ formatMessage(messages.playerAddressHelp) }}</span>
+				</div>
 			</div>
 
 			<EditServerIcon
@@ -172,6 +191,7 @@ import { computed, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 
 import { api, type LoaderId, type UpdateChannel } from '@/api'
+import { serverAddress } from '@/api/address'
 import { useServerPage } from '@/composables/server-page'
 import { useSession } from '@/composables/session'
 import { startDownload } from '@/providers/file-manager'
@@ -230,6 +250,19 @@ const messages = defineMessages({
 	info: { id: 'craftpanel.settings.general.info', defaultMessage: 'Info' },
 	serverId: { id: 'craftpanel.settings.general.server-id', defaultMessage: 'Server ID' },
 	address: { id: 'craftpanel.settings.general.address', defaultMessage: 'Address' },
+	playerAddress: {
+		id: 'craftpanel.settings.general.player-address',
+		defaultMessage: 'Address for players',
+	},
+	playerAddressPlaceholder: {
+		id: 'craftpanel.settings.general.player-address.placeholder',
+		defaultMessage: 'play.example.com',
+	},
+	playerAddressHelp: {
+		id: 'craftpanel.settings.general.player-address.help',
+		defaultMessage:
+			'What players type to reach this server, shown at the top of its pages. Leave it empty for a server players only reach through a proxy.',
+	},
 	version: { id: 'craftpanel.settings.general.version', defaultMessage: 'Version' },
 	backups: { id: 'craftpanel.settings.general.backups', defaultMessage: 'Backups' },
 	danger: { id: 'craftpanel.settings.general.danger', defaultMessage: 'Danger zone' },
@@ -327,8 +360,10 @@ const CHANNEL_DESCRIPTIONS: Record<UpdateChannel, (typeof messages)[keyof typeof
 
 const serverName = computed(() => server.value?.name ?? '')
 const savedChannel = computed(() => panelServer.value.update_channel)
+const savedAddress = computed(() => panelServer.value.net.domain)
 const name = ref(serverName.value)
 const channel = ref<UpdateChannel>(savedChannel.value)
+const address = ref(savedAddress.value)
 const saving = ref(false)
 const resetModal = ref<InstanceType<typeof ConfirmModal>>()
 const removeModal = ref<InstanceType<typeof ConfirmModal>>()
@@ -341,9 +376,16 @@ watch(savedChannel, (value) => {
 	if (!saving.value) channel.value = value
 })
 
+watch(savedAddress, (value) => {
+	if (!saving.value) address.value = value
+})
+
 const isValidName = computed(() => name.value.trim().length > 0)
 const hasChanges = computed(
-	() => name.value !== serverName.value || channel.value !== savedChannel.value,
+	() =>
+		name.value !== serverName.value ||
+		channel.value !== savedChannel.value ||
+		address.value.trim() !== savedAddress.value,
 )
 const renameTooltip = computed(() =>
 	canUseAdvancedSettings.value ? undefined : permissionDeniedMessage.value,
@@ -448,13 +490,13 @@ function checkPacking(): void {
 watch(operations, checkPacking)
 
 const info = computed(() => {
-	const net = server.value?.net
+	const net = panelServer.value.net
 	const version = [server.value?.loader, server.value?.mc_version].filter(Boolean).join(' ')
 	return [
 		{ label: formatMessage(messages.serverId), value: serverId, copy: true },
 		{
 			label: formatMessage(messages.address),
-			value: net?.ip ? `${net.ip}:${net.port}` : String(net?.port ?? ''),
+			value: serverAddress(net) ?? String(net?.port ?? ''),
 			copy: true,
 		},
 		{
@@ -485,6 +527,7 @@ async function save(): Promise<void> {
 		await api.servers.update(serverId, {
 			name: name.value.trim(),
 			update_channel: channel.value,
+			public_address: address.value.trim() || null,
 		})
 		addNotification({ type: 'success', title: formatMessage(messages.saved) })
 	} catch (error) {
@@ -497,6 +540,7 @@ async function save(): Promise<void> {
 function reset(): void {
 	name.value = serverName.value
 	channel.value = savedChannel.value
+	address.value = savedAddress.value
 }
 
 async function resetServer(): Promise<void> {

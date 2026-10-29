@@ -1174,38 +1174,6 @@ config_value() {
 	' "$CONFIG_DIR/config.toml" 2>/dev/null | tail -1 || true
 }
 
-# Two numbers, typed at a terminal, and the next thing that happens to them is a
-# download. What the panel refuses when it writes them (auth/settings.rs, check)
-# is refused here as well, while nothing has been fetched or made yet.
-sensible_port_range() {
-	local from="$1" to="$2"
-
-	case "$from" in "" | *[!0-9]*) die "\"$from\" is not a port number." ;; esac
-	case "$to" in "" | *[!0-9]*) die "\"$to\" is not a port number." ;; esac
-	if [ "$from" -lt 1024 ] || [ "$to" -gt 65535 ] || [ "$from" -gt "$to" ]; then
-		die "the port range runs upwards and stays between 1024 and 65535, and $from to $to does not."
-	fi
-}
-
-# The range the servers' own ports come out of is not in config.toml and never
-# was read from there: it is a setting of the panel, one row in panel.db
-# (panel_settings, migration 0002), and the panel takes it from there every time
-# it hands a port out (servers/manager.rs, next_free_port). So an installation
-# that is already here is asked, not told.
-read_port_pool() {
-	local db="$DATA_DIR/panel.db"
-	POOL_FROM=""
-	POOL_TO=""
-
-	[ -s "$db" ] || return 0
-	[ -n "$SQL_RUNNER" ] || pick_sql_runner
-	[ -n "$SQL_RUNNER" ] || return 0
-	has_table "$db" panel_settings || return 0
-
-	POOL_FROM="$(sql_value "$db" 'SELECT port_pool_from FROM panel_settings WHERE id = 1' 2>/dev/null || true)"
-	POOL_TO="$(sql_value "$db" 'SELECT port_pool_to FROM panel_settings WHERE id = 1' 2>/dev/null || true)"
-}
-
 # Migrations only ever run forwards. Data that a newer panel has already migrated
 # carries versions an older build does not know, and sqlx then refuses to open
 # the database at all rather than guess: the service would not come up, `admin
@@ -1249,8 +1217,6 @@ refuse_to_go_backwards() {
 # nothing is made and nothing is deleted.
 FOUND_USERS=""
 FOUND_ADMINS="0"
-POOL_FROM=""
-POOL_TO=""
 FOUND_ADMIN_NAMES=""
 FOUND_SERVERS=""
 FOUND_READY=""
@@ -1350,7 +1316,7 @@ do_install() {
 		say
 	fi
 
-	local port pool_start="" pool_end="" set_pool="" bind keeping_config=""
+	local port bind keeping_config=""
 	if [ -f "$CONFIG_DIR/config.toml" ]; then
 		keeping_config=yes
 		# Asked and applied, or not asked at all — and here it is the file that
@@ -1368,34 +1334,11 @@ do_install() {
 			warn "CRAFTPANEL_PORT does nothing while that file is there"
 		fi
 		if [ -n "$(config_value start ports)$(config_value end ports)" ]; then
-			warn "the [ports] table in $CONFIG_DIR/config.toml is read by nobody. An older installer wrote it and the panel never looked at it: the range below is the one the servers really get their ports from, and it is a setting of the panel. The table can go."
+			warn "the [ports] table in $CONFIG_DIR/config.toml is read by nobody. Each server takes its port from its own server.properties or velocity.toml. The table can go."
 		fi
 	else
 		port="$(ask 'Web interface port' '8080' CRAFTPANEL_PORT)"
 		bind="0.0.0.0:$port"
-	fi
-
-	# The panel keeps this one itself, in panel.db. Over a database that is
-	# already here it is therefore read and not asked: what the operator set in
-	# the panel is his, and an installer that overwrote it would move the range
-	# out from under servers that hold addresses in the old one. Where the
-	# database is new, the answer is applied below with `admin ports` — the same
-	# way the panel writes it, checks and all.
-	if [ -s "$DATA_DIR/panel.db" ]; then
-		read_port_pool
-		pool_start="$POOL_FROM"
-		pool_end="$POOL_TO"
-		if [ -n "$pool_start" ]; then
-			say "  Server ports   $pool_start to $pool_end${DIM}, as the panel has them set${OFF}"
-		fi
-		if [ -n "${CRAFTPANEL_POOL_START:-}${CRAFTPANEL_POOL_END:-}" ]; then
-			warn "CRAFTPANEL_POOL_START and CRAFTPANEL_POOL_END do nothing over a database that is already here — that range is set in the panel, under Administration → Settings"
-		fi
-	else
-		pool_start="$(ask 'First port for Minecraft servers' '25565' CRAFTPANEL_POOL_START)"
-		pool_end="$(ask 'Last port for Minecraft servers' '25700' CRAFTPANEL_POOL_END)"
-		sensible_port_range "$pool_start" "$pool_end"
-		set_pool=yes
 	fi
 
 	# Asked only where one is going to be made. On a database that was kept the
@@ -1418,14 +1361,6 @@ do_install() {
 	ensure_accounts
 	[ -n "$keeping_config" ] || write_config "$port"
 	write_units
-
-	if [ -n "$set_pool" ]; then
-		step "setting $pool_start to $pool_end aside for Minecraft servers"
-		CRAFTPANEL_CONFIG=$CONFIG_DIR/config.toml \
-			runuser -u "$SERVICE_USER" -- "$PREFIX/craftpanel" admin ports \
-			--from "$pool_start" --to "$pool_end" ||
-			die "could not set the port range. The panel would have handed its servers ports out of 25565 to 25700, which is not what you asked for."
-	fi
 
 	local password=""
 	if [ -n "$admin" ]; then
@@ -1484,9 +1419,6 @@ do_install() {
 	fi
 	say
 	say "  Address   http://$shown:$port"
-	if [ -n "$pool_start" ]; then
-		say "  Ports     $pool_start to $pool_end for Minecraft servers"
-	fi
 	if [ -n "$kept" ]; then
 		local taken=""
 		[ -n "$FOUND_SERVERS" ] && taken="$(plural "$FOUND_SERVERS" server)"

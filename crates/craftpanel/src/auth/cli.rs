@@ -8,7 +8,7 @@ use sqlx::SqlitePool;
 use super::{password, reset, session, settings, users};
 use crate::config::Config;
 use crate::helper::Helper;
-use crate::model::{AccountOrigin, Id, PanelRole, PortRange, SystemUserState, Timestamp};
+use crate::model::{AccountOrigin, Id, PanelRole, SystemUserState, Timestamp};
 
 #[derive(Debug, Subcommand)]
 pub enum AdminCommand {
@@ -27,10 +27,6 @@ pub enum AdminCommand {
     /// Print a reset link for somebody. The one way that works with no Resend key
     /// and no interface — the operator mails it to himself.
     ResetLink(ResetLink),
-    /// Set the range the panel hands server ports out from. The installer asks for
-    /// it on a fresh database; afterwards it is the panel's own setting, under
-    /// Administration → Panel settings → Port pool.
-    Ports(Ports),
 }
 
 #[derive(Debug, Args)]
@@ -73,14 +69,6 @@ pub struct Email {
 }
 
 #[derive(Debug, Args)]
-pub struct Ports {
-    #[arg(long)]
-    pub from: u16,
-    #[arg(long)]
-    pub to: u16,
-}
-
-#[derive(Debug, Args)]
 pub struct ResetLink {
     #[arg(long)]
     pub username: String,
@@ -98,7 +86,6 @@ pub async fn run(command: AdminCommand) -> Result<()> {
         AdminCommand::Passwd(args) => passwd(args).await,
         AdminCommand::Email(args) => email(args).await,
         AdminCommand::ResetLink(args) => reset_link(args).await,
-        AdminCommand::Ports(args) => ports(args).await,
     }
 }
 
@@ -288,32 +275,6 @@ async fn reset_link(args: ResetLink) -> Result<()> {
     Ok(())
 }
 
-async fn ports(args: Ports) -> Result<()> {
-    let config = Config::load(&config_path())?;
-    let pool = crate::db::connect(&config.database_path()).await?;
-
-    let wanted = PortRange { from: args.from, to: args.to };
-    let moved = set_ports(&pool, wanted).await?;
-
-    if moved {
-        eprintln!("servers take their ports from {} to {} now", wanted.from, wanted.to);
-    } else {
-        eprintln!("servers already took their ports from {} to {}", wanted.from, wanted.to);
-    }
-    Ok(())
-}
-
-pub async fn set_ports(pool: &SqlitePool, wanted: PortRange) -> Result<bool> {
-    let mut current = settings::load(pool).await?;
-    if current.port_pool == wanted {
-        return Ok(false);
-    }
-
-    current.port_pool = wanted;
-    settings::save(pool, &current).await.map_err(|refusal| anyhow::anyhow!("{refusal}"))?;
-    Ok(true)
-}
-
 pub fn config_path() -> PathBuf {
     std::env::var_os("CRAFTPANEL_CONFIG")
         .map(PathBuf::from)
@@ -388,50 +349,9 @@ fn read_password() -> Result<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::auth::harness::{a_server, a_user, test_pool, FakeHelper};
+    use crate::auth::harness::{test_pool, FakeHelper};
     use crate::auth::users;
     use crate::model::SystemUserState;
-
-    #[tokio::test]
-    async fn the_installer_moves_the_range_the_panel_hands_ports_out_from() {
-        let pool = test_pool().await;
-        assert_eq!(
-            settings::load(&pool).await.unwrap().port_pool,
-            PortRange { from: 25565, to: 25700 },
-            "0002 writes this one, and nothing in config.toml ever changed it"
-        );
-
-        let wanted = PortRange { from: 25800, to: 25850 };
-        assert!(set_ports(&pool, wanted).await.unwrap(), "the range moved");
-        assert_eq!(settings::load(&pool).await.unwrap().port_pool, wanted);
-
-        assert!(!set_ports(&pool, wanted).await.unwrap(), "asked for the range it already had");
-    }
-
-    #[tokio::test]
-    async fn a_range_that_would_strand_a_server_is_refused() {
-        let pool = test_pool().await;
-        let max = a_user(&pool, "max").await;
-        let server = a_server(&pool, max, "one", 2048).await;
-        sqlx::query(
-            "INSERT INTO allocations (port, server_id, name, is_primary, created_at) \
-             VALUES (25565, ?, 'game', 1, ?)",
-        )
-        .bind(server)
-        .bind(Timestamp::now())
-        .execute(&pool)
-        .await
-        .unwrap();
-
-        let refusal =
-            set_ports(&pool, PortRange { from: 25800, to: 25850 }).await.unwrap_err().to_string();
-        assert!(refusal.contains("25565"), "{refusal}");
-        assert_eq!(
-            settings::load(&pool).await.unwrap().port_pool,
-            PortRange { from: 25565, to: 25700 },
-            "the refusal left the setting alone"
-        );
-    }
 
     #[test]
     fn a_made_up_password_is_long_and_unmistakable() {

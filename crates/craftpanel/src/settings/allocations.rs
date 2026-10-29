@@ -1,11 +1,14 @@
+use std::path::Path;
+
 use serde::{Deserialize, Serialize};
 use sqlx::SqlitePool;
 
 use crate::auth::error::{Failure, Result};
-use crate::model::{Allocation, Id, PortRange, Timestamp};
+use crate::model::{Allocation, Id, LoaderId, Timestamp};
 
 pub const PER_SERVER: usize = 8;
 const MIN_PORT: u16 = 1024;
+pub const FIRST_PORT: u16 = 25565;
 const MAX_NAME: usize = 32;
 
 #[derive(Debug, Clone, Deserialize)]
@@ -45,12 +48,127 @@ pub async fn primary(pool: &SqlitePool, server: Id) -> sqlx::Result<Option<u16>>
         .await
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Followed {
+    Same,
+    Moved { from: u16 },
+    Taken { by: Option<Id> },
+    Published,
+    NoPrimary,
+}
+
+pub async fn follow(pool: &SqlitePool, server: Id, wanted: u16) -> sqlx::Result<Followed> {
+    let mut transaction = pool.begin().await?;
+    let Some(current) = sqlx::query_scalar::<_, u16>(
+        "SELECT port FROM allocations WHERE server_id = ? AND is_primary = 1",
+    )
+    .bind(server)
+    .fetch_optional(&mut *transaction)
+    .await?
+    else {
+        return Ok(Followed::NoPrimary);
+    };
+    if current == wanted {
+        return Ok(Followed::Same);
+    }
+
+    let published: bool = sqlx::query_scalar(
+        "SELECT EXISTS (SELECT 1 FROM playit_tunnels WHERE server_id = ? AND local_port = ?)",
+    )
+    .bind(server)
+    .bind(current)
+    .fetch_one(&mut *transaction)
+    .await?;
+    if published {
+        return Ok(Followed::Published);
+    }
+
+    let holder: Option<Option<Id>> = sqlx::query_scalar(
+        "SELECT server_id FROM allocations WHERE port = ?
+         UNION ALL SELECT NULL FROM playit_tunnels WHERE local_port = ? AND server_id <> ?
+         UNION ALL SELECT NULL FROM playit_released WHERE local_port = ?
+         LIMIT 1",
+    )
+    .bind(wanted)
+    .bind(wanted)
+    .bind(server)
+    .bind(wanted)
+    .fetch_optional(&mut *transaction)
+    .await?;
+    match holder {
+        Some(Some(owner)) if owner == server => {
+            sqlx::query("DELETE FROM allocations WHERE server_id = ? AND port = ?")
+                .bind(server)
+                .bind(wanted)
+                .execute(&mut *transaction)
+                .await?;
+        }
+        Some(by) => return Ok(Followed::Taken { by }),
+        None => {}
+    }
+
+    sqlx::query("UPDATE allocations SET port = ? WHERE server_id = ? AND is_primary = 1")
+        .bind(wanted)
+        .bind(server)
+        .execute(&mut *transaction)
+        .await?;
+    transaction.commit().await?;
+    Ok(Followed::Moved { from: current })
+}
+
+pub async fn follow_files(pool: &SqlitePool, users_dir: &Path, server: Id) -> sqlx::Result<()> {
+    let Some(wanted) = port_in_files(pool, users_dir, server).await? else { return Ok(()) };
+    let mut outcome = follow(pool, server, wanted).await?;
+    if let Followed::Taken { by: Some(other) } = outcome {
+        if let Some(theirs) = port_in_files(pool, users_dir, other).await? {
+            if theirs != wanted {
+                follow(pool, other, theirs).await?;
+                outcome = follow(pool, server, wanted).await?;
+            }
+        }
+    }
+    match outcome {
+        Followed::Taken { by } => tracing::warn!(
+            %server, port = wanted, other = ?by,
+            "the port in this server's files belongs to another server here; both cannot run at once"
+        ),
+        Followed::Published => tracing::warn!(
+            %server, port = wanted,
+            "this server's files name a new port, but playit.gg still publishes the old one"
+        ),
+        _ => {}
+    }
+    Ok(())
+}
+
+pub async fn follow_everyone(pool: &SqlitePool, users_dir: &Path) -> sqlx::Result<()> {
+    let servers: Vec<Id> = sqlx::query_scalar("SELECT id FROM servers").fetch_all(pool).await?;
+    for server in servers {
+        follow_files(pool, users_dir, server).await?;
+    }
+    Ok(())
+}
+
+async fn port_in_files(pool: &SqlitePool, users_dir: &Path, server: Id) -> sqlx::Result<Option<u16>> {
+    let row: Option<(Id, Option<LoaderId>)> =
+        sqlx::query_as("SELECT owner_id, loader FROM servers WHERE id = ?")
+            .bind(server)
+            .fetch_optional(pool)
+            .await?;
+    let Some((owner, loader)) = row else { return Ok(None) };
+    let dir = users_dir.join(owner.to_string()).join("servers").join(server.to_string());
+    let loader = loader.unwrap_or(LoaderId::Vanilla);
+    Ok(tokio::task::spawn_blocking(move || crate::import::detect::port_of(&dir, loader))
+        .await
+        .ok()
+        .flatten()
+        .filter(|port| *port >= MIN_PORT))
+}
+
 pub async fn create(
     pool: &SqlitePool,
     server: Id,
-    pool_range: PortRange,
     request: &CreateAllocationRequest,
-    caller_is_admin: bool,
 ) -> Result<Allocation> {
     let name = check_name(&request.name)?;
 
@@ -78,14 +196,6 @@ pub async fn create(
                         format!("{asked} is outside 1024-65535"),
                     )
                 })?;
-            let inside = (pool_range.from..=pool_range.to).contains(&wanted);
-            if !inside && !caller_is_admin {
-                return Err(Failure::new(
-                    axum::http::StatusCode::FORBIDDEN,
-                    "port_out_of_pool",
-                    format!("{wanted} is not one of the ports this panel hands out"),
-                ));
-            }
             if !free_on_the_machine(wanted) {
                 return Err(Failure::conflict(
                     "port_unavailable",
@@ -94,7 +204,16 @@ pub async fn create(
             }
             wanted
         }
-        None => next_free(&mut transaction, pool_range).await?,
+        None => {
+            let game: Option<u16> = sqlx::query_scalar(
+                "SELECT port FROM allocations WHERE server_id = ? AND is_primary = 1",
+            )
+            .bind(server)
+            .fetch_optional(&mut *transaction)
+            .await?;
+            next_free(&mut transaction, game.map_or(FIRST_PORT, |port| port.saturating_add(1)))
+                .await?
+        }
     };
 
     let inserted = sqlx::query(
@@ -217,25 +336,19 @@ pub async fn set_primary(pool: &SqlitePool, server: Id, port: u16) -> Result<()>
     Ok(())
 }
 
-async fn next_free(
-    transaction: &mut sqlx::SqliteConnection,
-    range: PortRange,
-) -> Result<u16> {
+pub async fn next_free(transaction: &mut sqlx::SqliteConnection, from: u16) -> Result<u16> {
     let taken: Vec<u16> =
-        sqlx::query_scalar("SELECT port FROM ports_in_use WHERE port BETWEEN ? AND ? ORDER BY port")
-            .bind(range.from)
-            .bind(range.to)
+        sqlx::query_scalar("SELECT port FROM ports_in_use WHERE port >= ? ORDER BY port")
+            .bind(from)
             .fetch_all(&mut *transaction)
             .await?;
 
-    (range.from..=range.to)
+    (from.max(MIN_PORT)..=u16::MAX)
         .find(|port| !taken.contains(port) && free_on_the_machine(*port))
-        .ok_or_else(|| {
-            Failure::conflict("port_pool_exhausted", "no port of the pool is free")
-        })
+        .ok_or_else(|| Failure::conflict("no_free_port", format!("no port from {from} up is free")))
 }
 
-fn free_on_the_machine(port: u16) -> bool {
+pub fn free_on_the_machine(port: u16) -> bool {
     match std::net::TcpListener::bind(("0.0.0.0", port)) {
         Ok(listener) => {
             drop(listener);
@@ -274,14 +387,9 @@ mod tests {
     use crate::settings::harness::{an_allocation, pool_with_server};
     use std::sync::atomic::{AtomicU16, Ordering};
 
-    fn a_pool(width: u16) -> PortRange {
+    fn a_base() -> u16 {
         static NEXT: AtomicU16 = AtomicU16::new(61000);
-        let from = NEXT.fetch_add(width + 1, Ordering::Relaxed);
-        PortRange { from, to: from + width }
-    }
-
-    fn range(from: u16, to: u16) -> PortRange {
-        PortRange { from, to }
+        NEXT.fetch_add(40, Ordering::Relaxed)
     }
 
     fn wanted(name: &str, port: Option<u16>) -> CreateAllocationRequest {
@@ -305,89 +413,92 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn the_pool_hands_out_the_next_free_number() {
+    async fn an_extra_port_is_the_next_free_number_after_the_game_port() {
         let (pool, server, _) = pool_with_server().await;
-        let mine = a_pool(5);
-        an_allocation(&pool, server, mine.from, "game", true).await;
+        let base = a_base();
+        an_allocation(&pool, server, base, "game", true).await;
 
-        let first = create(&pool, server, mine, &wanted("map", None), false).await.unwrap();
-        assert_eq!(first.port, mine.from + 1);
+        let first = create(&pool, server, &wanted("map", None)).await.unwrap();
+        assert_eq!(first.port, base + 1);
 
-        let second = create(&pool, server, mine, &wanted("voice", None), false).await.unwrap();
-        assert_eq!(second.port, mine.from + 2);
-    }
-
-    #[tokio::test]
-    async fn a_pool_with_nothing_left_says_so_rather_than_reaching_past_it() {
-        let (pool, server, _) = pool_with_server().await;
-        let mine = a_pool(0);
-        an_allocation(&pool, server, mine.from, "game", true).await;
-
-        let refusal =
-            create(&pool, server, mine, &wanted("map", None), false).await.unwrap_err();
-        assert_eq!(refusal.code(), "port_pool_exhausted");
+        let second = create(&pool, server, &wanted("voice", None)).await.unwrap();
+        assert_eq!(second.port, base + 2);
     }
 
     #[tokio::test]
     async fn a_port_of_another_server_is_in_use_and_not_merely_taken() {
         let (pool, mine, owner) = pool_with_server().await;
         let theirs = crate::auth::harness::a_server(&pool, owner, "Other", 2048).await;
-        let ours = a_pool(4);
-        an_allocation(&pool, theirs, ours.from, "game", true).await;
+        let base = a_base();
+        an_allocation(&pool, theirs, base, "game", true).await;
 
-        let refusal = create(&pool, mine, ours, &wanted("map", Some(ours.from)), true)
-            .await
-            .unwrap_err();
+        let refusal = create(&pool, mine, &wanted("map", Some(base))).await.unwrap_err();
         assert_eq!(refusal.code(), "port_in_use");
         assert_eq!(refusal.status(), axum::http::StatusCode::CONFLICT);
     }
 
     #[tokio::test]
-    async fn only_an_admin_reaches_outside_the_pool() {
-        let (pool, server, _) = pool_with_server().await;
-        let mine = a_pool(5);
-        let outside = a_pool(0).from;
-
-        let refusal = create(&pool, server, mine, &wanted("far", Some(outside)), false)
-            .await
-            .unwrap_err();
-        assert_eq!(refusal.code(), "port_out_of_pool");
-        assert_eq!(refusal.status(), axum::http::StatusCode::FORBIDDEN);
-
-        let allowed =
-            create(&pool, server, mine, &wanted("far", Some(outside)), true).await.unwrap();
-        assert_eq!(allowed.port, outside);
-
-        let ordinary = create(&pool, server, mine, &wanted("near", Some(mine.from)), false)
-            .await
-            .unwrap();
-        assert_eq!(ordinary.port, mine.from);
-    }
-
-    #[tokio::test]
     async fn the_bounds_of_9_7_each_refuse_on_their_own() {
         let (pool, server, _) = pool_with_server().await;
-        let full = a_pool(35);
+        an_allocation(&pool, server, a_base(), "game", true).await;
 
         for outside in [80, 0, -1, 70_000] {
             let refusal =
-                create(&pool, server, full, &asked_for("far out", outside), true).await.unwrap_err();
+                create(&pool, server, &asked_for("far out", outside)).await.unwrap_err();
             assert_eq!(refusal.code(), "invalid_port", "{outside}");
             assert_eq!(refusal.status(), axum::http::StatusCode::BAD_REQUEST);
         }
 
         for bad in ["", "   ", &"x".repeat(33)] {
-            let refusal = create(&pool, server, full, &wanted(bad, None), true).await.unwrap_err();
+            let refusal = create(&pool, server, &wanted(bad, None)).await.unwrap_err();
             assert_eq!(refusal.code(), "invalid_name", "{bad:?}");
         }
 
-        for index in 0..PER_SERVER {
-            create(&pool, server, full, &wanted(&format!("p{index}"), None), true).await.unwrap();
+        for index in 1..PER_SERVER {
+            create(&pool, server, &wanted(&format!("p{index}"), None)).await.unwrap();
         }
-        let refusal = create(&pool, server, full, &wanted("one too many", None), true)
+        let refusal = create(&pool, server, &wanted("one too many", None))
             .await
             .unwrap_err();
         assert_eq!(refusal.code(), "allocation_limit");
+    }
+
+    #[tokio::test]
+    async fn the_game_port_follows_what_the_server_file_says() {
+        let (pool, server, _) = pool_with_server().await;
+        let base = a_base();
+        an_allocation(&pool, server, base, "game", true).await;
+
+        assert_eq!(follow(&pool, server, base).await.unwrap(), Followed::Same);
+        assert_eq!(follow(&pool, server, base + 7).await.unwrap(), Followed::Moved { from: base });
+        assert_eq!(primary(&pool, server).await.unwrap(), Some(base + 7));
+    }
+
+    #[tokio::test]
+    async fn a_file_port_that_was_an_extra_port_of_the_same_server_becomes_the_game_port() {
+        let (pool, server, _) = pool_with_server().await;
+        let base = a_base();
+        an_allocation(&pool, server, base, "game", true).await;
+        an_allocation(&pool, server, base + 1, "voice", false).await;
+
+        assert_eq!(follow(&pool, server, base + 1).await.unwrap(), Followed::Moved { from: base });
+        assert_eq!(primary(&pool, server).await.unwrap(), Some(base + 1));
+        assert!(list(&pool, server).await.unwrap().is_empty());
+    }
+
+    #[tokio::test]
+    async fn a_file_port_another_server_holds_is_named_and_left_alone() {
+        let (pool, mine, owner) = pool_with_server().await;
+        let theirs = crate::auth::harness::a_server(&pool, owner, "Other", 2048).await;
+        let base = a_base();
+        an_allocation(&pool, mine, base, "game", true).await;
+        an_allocation(&pool, theirs, base + 1, "game", true).await;
+
+        assert_eq!(
+            follow(&pool, mine, base + 1).await.unwrap(),
+            Followed::Taken { by: Some(theirs) }
+        );
+        assert_eq!(primary(&pool, mine).await.unwrap(), Some(base));
     }
 
     #[tokio::test]
@@ -424,14 +535,13 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn a_deleted_port_goes_back_into_the_pool() {
+    async fn a_deleted_port_is_handed_out_again() {
         let (pool, server, _) = pool_with_server().await;
-        let mine = a_pool(5);
-        an_allocation(&pool, server, mine.from, "game", true).await;
-        let handed = create(&pool, server, mine, &wanted("map", None), false).await.unwrap();
+        an_allocation(&pool, server, a_base(), "game", true).await;
+        let handed = create(&pool, server, &wanted("map", None)).await.unwrap();
 
         remove(&pool, server, handed.port).await.unwrap();
-        let again = create(&pool, server, mine, &wanted("map", None), false).await.unwrap();
+        let again = create(&pool, server, &wanted("map", None)).await.unwrap();
         assert_eq!(again.port, handed.port, "9.9: the number comes back");
     }
 
@@ -441,15 +551,12 @@ mod tests {
         let stranger = std::net::TcpListener::bind(("0.0.0.0", 0)).unwrap();
         let held = stranger.local_addr().unwrap().port();
 
-        let refusal = create(&pool, server, range(held, held), &wanted("held", Some(held)), true)
-            .await
-            .unwrap_err();
+        let refusal = create(&pool, server, &wanted("held", Some(held))).await.unwrap_err();
         assert_eq!(refusal.code(), "port_unavailable");
 
-        let empty = create(&pool, server, range(held, held), &wanted("held", None), true)
-            .await
-            .unwrap_err();
-        assert_eq!(empty.code(), "port_pool_exhausted", "the pool skips it and then runs out");
+        an_allocation(&pool, server, held - 1, "game", true).await;
+        let next = create(&pool, server, &wanted("held", None)).await.unwrap();
+        assert_ne!(next.port, held, "the search steps over it");
 
         drop(stranger);
     }

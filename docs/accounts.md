@@ -10,9 +10,9 @@ whole panel, and the **server role** a user holds on a particular server.
 | `admin` | Everything: manage users and their limits, change panel settings, see and manage every server. Has every permission on every server. Has no resource budget. |
 | `user` | Create and run servers within their own budget, and work on servers they were invited to. |
 
-An administrator creating a server can choose its owner, give it any port (also outside the pool)
-and give it memory up to what the machine has. A user's servers always belong to that user, take
-their port from the pool, and must fit into the user's budget.
+An administrator creating a server can choose its owner, give it any port and give it memory up to
+what the machine has. A user's servers always belong to that user, get the first free port from
+25565 up, and must fit into the user's budget.
 
 The last administrator cannot be demoted or deleted.
 

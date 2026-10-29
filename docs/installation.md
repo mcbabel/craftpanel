@@ -114,7 +114,6 @@ All variables are optional.
 | `CRAFTPANEL_NO_CHECKSUM` | `yes` installs a bundle that has no checksum file. A checksum that does not match always stops the installer. Any value other than yes/no is rejected. |
 | `CRAFTPANEL_NONINTERACTIVE` | Any non-empty value: ask nothing, take answers from the variables below or their defaults. This also happens when no terminal is available. |
 | `CRAFTPANEL_PORT` | Web interface port on a fresh install. |
-| `CRAFTPANEL_POOL_START`, `CRAFTPANEL_POOL_END` | Port range for Minecraft servers on a fresh database (1024 to 65535). |
 | `CRAFTPANEL_ADMIN` | Administrator username, used only if the database has no administrator. |
 | `CRAFTPANEL_ACTION` | Answer to the menu shown when CraftPanel is already installed: `1` update, `2` uninstall, `3` do nothing. |
 | `CRAFTPANEL_UPGRADE` | `yes` migrates an old `mcpanel` installation; see [Upgrading](upgrading.md). |
@@ -128,7 +127,6 @@ An unattended install:
 ```bash
 curl -fsSL -o install.sh https://github.com/MCbabel/craftpanel/releases/latest/download/install.sh
 sudo CRAFTPANEL_NONINTERACTIVE=1 CRAFTPANEL_PORT=8080 \
-     CRAFTPANEL_POOL_START=25565 CRAFTPANEL_POOL_END=25600 \
      CRAFTPANEL_ADMIN=admin bash install.sh
 ```
 
@@ -168,8 +166,7 @@ database, playit.gg keys, connected Google accounts, downloaded Java runtimes, s
 your systemd drop-ins. It asks separately whether to delete all of that. Backups already uploaded
 to Google Drive stay in the users' Drive folders.
 
-If you keep the data, a later install picks it up as it is: it keeps `config.toml`, the port range
-and the accounts with their uids, does not create a second administrator, and names the
+If you keep the data, a later install picks it up as it is: it keeps `config.toml` and the accounts with their uids, does not create a second administrator, and names the
 administrator accounts you can sign in with.
 
 ## Managing accounts from the command line
@@ -189,7 +186,6 @@ They read `/etc/craftpanel/config.toml`, or the file named by `CRAFTPANEL_CONFIG
 | `passwd --username NAME (--print-password \| --password-stdin)` | Set a password. Ends all of the account's sessions and open reset links. |
 | `email --username NAME (--address ADDRESS \| --remove)` | Set, change or remove an account's e-mail address. |
 | `reset-link --username NAME [--base-url URL] [--minutes N]` | Print a one-time password reset link. Nothing is mailed. |
-| `ports --from PORT --to PORT` | Set the port range for Minecraft servers. |
 
 `--print-password` generates a 20-character password, prints only the password on standard output,
 and requires the account to choose a new one at the next sign-in. `--password-stdin` reads the

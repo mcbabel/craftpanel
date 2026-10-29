@@ -434,6 +434,7 @@ import {
 	type Ulid,
 	type UserRef,
 } from '@/api'
+import { serverAddress } from '@/api/address'
 import InvitationInbox from '@/components/InvitationInbox.vue'
 import PanelServerIcon from '@/components/PanelServerIcon.vue'
 import TransferInbox from '@/components/TransferInbox.vue'
@@ -957,7 +958,7 @@ const rows = computed<Row[]>(() =>
 		owner: owners.value[server.owner_id],
 		operation: operations.value.find((operation) => operation.server_id === server.id),
 		state: stateOf(server),
-		address: server.net.ip ? `${server.net.ip}:${server.net.port}` : '',
+		address: serverAddress(server.net) ?? '',
 		loaderName: server.loader ? (loaderNames.value[server.loader] ?? server.loader) : null,
 		power: powerOf(server.id),
 		uptime: powerOf(server.id) === 'running' ? since(power.value[server.id]?.running_since) : null,

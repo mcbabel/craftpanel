@@ -1396,16 +1396,9 @@ pub struct Me {
     pub session: SessionRef,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-pub struct PortRange {
-    pub from: u16,
-    pub to: u16,
-}
-
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct PanelSettings {
     pub public_address: Option<String>,
-    pub port_pool: PortRange,
     pub default_limits: UserLimits,
     pub max_upload_bytes: u64,
     pub max_backups_per_server: u32,
@@ -2210,7 +2203,6 @@ mod tests {
         });
         assert_round_trip(&PanelSettings {
             public_address: Some("mc.example.org".to_owned()),
-            port_pool: PortRange { from: 25565, to: 25700 },
             default_limits: limits(),
             max_upload_bytes: 4 * 1024 * 1024 * 1024,
             max_backups_per_server: 10,

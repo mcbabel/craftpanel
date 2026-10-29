@@ -331,7 +331,7 @@ impl Runner {
         let port = super::allocations::primary(&self.pool, server.id).await.ok().flatten();
         let mut properties = store::read(dir).unwrap_or_default();
         if let Some(port) = port {
-            store::set_ports(&mut properties, port);
+            store::fill_ports(&mut properties, port);
         }
         store::write(dir, &properties)
             .map_err(|err| std::io::Error::other(err.to_string()))

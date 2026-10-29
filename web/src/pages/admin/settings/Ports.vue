@@ -57,13 +57,13 @@ const messages = defineMessages({
 	needsPlayitHint: {
 		id: 'admin.settings.ports.needs-playit-hint',
 		defaultMessage:
-			'Hide the network tab from users whose servers have no playit.gg account behind them, for example when nobody outside your network can reach the port numbers anyway.',
+			'Hide the network tab, from administrators too, on every server whose owner has no playit.gg account connected, for example when the ports are forwarded by hand anyway.',
 	},
 })
 
 const labels: Record<UserPorts, MessageDescriptor> = defineMessages({
 	locked: { id: 'admin.settings.ports.locked', defaultMessage: 'Locked' },
-	pool: { id: 'admin.settings.ports.pool', defaultMessage: 'From the range' },
+	pool: { id: 'admin.settings.ports.pool', defaultMessage: 'Picked by the panel' },
 	choose: { id: 'admin.settings.ports.choose', defaultMessage: 'Pick a number' },
 })
 
@@ -74,11 +74,11 @@ const hints: Record<UserPorts, MessageDescriptor> = defineMessages({
 	},
 	pool: {
 		id: 'admin.settings.ports.pool-hint',
-		defaultMessage: 'Users can add more ports, for a map or a voice chat; the panel picks the next free one from the range.',
+		defaultMessage: 'Users can add more ports, for a map or a voice chat; the panel picks the next free one.',
 	},
 	choose: {
 		id: 'admin.settings.ports.choose-hint',
-		defaultMessage: 'Users can also type the port number they want, as long as it is free and inside the range.',
+		defaultMessage: 'Users can also type the port number they want, as long as it is free.',
 	},
 })
 </script>

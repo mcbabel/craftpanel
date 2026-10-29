@@ -245,12 +245,11 @@ For every instance the import:
    and no time. Use `--copy` to keep the original, which needs the space twice;
 4. renames the server jar to `server.jar`, keeps `-Xmx` as the server's memory and other JVM flags
    as extra startup flags;
-5. keeps the port when no other panel server has it, and otherwise takes the next free one from the
-   port pool and writes it into `server.properties` (or `velocity.toml`);
+5. keeps the port from `server.properties` (or `velocity.toml`) and never rewrites those files. If
+   another panel server already has that port, both keep it in their files and cannot run at the
+   same time;
 6. hands the files to the owner's system account.
 
-Bedrock, Quilt, BungeeCord and Waterfall instances are skipped with a reason. If a
-server's port had to change and a Velocity proxy points at it, update the proxy's `[servers]`
-section.
+Bedrock, Quilt, BungeeCord and Waterfall instances are skipped with a reason.
 
 Moved instances are gone from MCSManager's folders; remove the instances there afterwards.

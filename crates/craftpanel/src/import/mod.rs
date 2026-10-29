@@ -1,4 +1,4 @@
-mod detect;
+pub mod detect;
 mod ledger;
 mod mcsmanager;
 
