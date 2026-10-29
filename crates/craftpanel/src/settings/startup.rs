@@ -254,7 +254,11 @@ pub(crate) fn read_command(command: Option<&str>, launch: Launch) -> Result<(Vec
             match rest.get(at + 1).filter(|value| !value.starts_with('-')) {
                 Some(value) if token.starts_with("--") => kept.push(format!("{token}={value}")),
                 Some(value) => kept.extend([token.clone(), value.clone()]),
-                None => stripped.push(token.clone()),
+                None => {
+                    stripped.push(token.clone());
+                    at += 1;
+                    continue;
+                }
             }
             at += 2;
             continue;
