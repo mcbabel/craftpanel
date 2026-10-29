@@ -208,10 +208,10 @@
 									mc_version: row.server.game_version,
 									loader: row.loaderName,
 									loader_version: row.server.loader_version,
-									net: row.server.net,
+									net: { ...row.server.net, domain: '' },
 								}"
 								:server-id="row.server.id"
-								show-game-label
+								:show-game-label="row.server.loader !== 'velocity'"
 								:show-loader-label="!!row.loaderName"
 								:linked="false"
 								class="flex w-full flex-row flex-wrap items-center gap-2 text-primary"

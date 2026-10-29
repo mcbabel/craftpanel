@@ -19,7 +19,7 @@
 			<template #metadata>
 				<ServerInfoLabels
 					:server-data="vendorServer"
-					:show-game-label="server.game_version !== null"
+					:show-game-label="server.game_version !== null && server.loader !== 'velocity'"
 					:show-loader-label="server.loader !== null"
 					:uptime-seconds="uptimeSeconds"
 					class="flex w-full flex-row flex-wrap items-center gap-2 text-secondary"
