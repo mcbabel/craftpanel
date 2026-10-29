@@ -1230,6 +1230,10 @@ impl Manager {
         if let Some(link) = self.hub.link(&server.to_string()).await {
             return Ok(link.state().await);
         }
+        self.stored(server).await
+    }
+
+    async fn stored(&self, server: Id) -> Result<RunState> {
         let row: Option<(PowerState, bool)> =
             sqlx::query_as("SELECT power_state, oom_killed FROM servers WHERE id = ?")
                 .bind(server)
@@ -1413,7 +1417,7 @@ impl Manager {
     async fn attend(self: &Arc<Self>, server: Id) {
         let name = server.to_string();
         let waiting_since = Instant::now();
-        let mut last = self.current(server).await.unwrap_or(RunState::Stopped);
+        let mut last = self.stored(server).await.unwrap_or(RunState::Stopped);
         let mut held: Option<Arc<super::Link>> = None;
 
         loop {
@@ -3870,6 +3874,63 @@ mod tests {
             .unwrap();
         assert_eq!(state, PowerState::Running, "what runs keeps running");
 
+        listening.abort();
+    }
+
+    #[tokio::test]
+    async fn a_server_found_running_after_a_panel_restart_is_written_down_as_running() {
+        use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
+
+        let fixture = Fixture::new().await;
+        let max = a_user(&fixture.pool, "max").await;
+        let caller = fixture.caller(max).await;
+        let made =
+            fixture.manager.create(&caller, fixture.loader_wish("survival", max, 1024)).await.unwrap();
+        fixture.manager.run(made.operation.id).await;
+        sqlx::query(
+            "UPDATE servers SET power_state = 'starting', supervisor_token = 'the-token'
+              WHERE id = ?",
+        )
+        .bind(made.server.id)
+        .execute(&fixture.pool)
+        .await
+        .unwrap();
+
+        let listening = tokio::spawn(Arc::clone(&fixture.hub).listen());
+        fixture.manager.adopt_tokens().await.unwrap();
+
+        let stream = loop {
+            match tokio::net::UnixStream::connect(fixture.hub.socket()).await {
+                Ok(stream) => break stream,
+                Err(_) => tokio::time::sleep(Duration::from_millis(20)).await,
+            }
+        };
+        let (reader, mut writer) = stream.into_split();
+        let mut reader = BufReader::new(reader).lines();
+        let hello = craftpanel_proto::SupervisorMessage::Hello {
+            server_id: made.server.id.to_string(),
+            token: "the-token".to_owned(),
+            pid: std::process::id(),
+            protocol: craftpanel_proto::HELPER_PROTOCOL_VERSION,
+        };
+        let mut line = serde_json::to_vec(&hello).unwrap();
+        line.push(b'\n');
+        writer.write_all(&line).await.unwrap();
+        writer.flush().await.unwrap();
+        let greeting = reader.next_line().await.unwrap().expect("the hub answers");
+        assert!(greeting.contains("accepted"), "{greeting}");
+
+        fixture.manager.reconcile().await.unwrap();
+        let mut state = PowerState::Starting;
+        for _ in 0..100 {
+            state = power_of(&fixture, made.server.id).await;
+            if state == PowerState::Running {
+                break;
+            }
+            tokio::time::sleep(Duration::from_millis(50)).await;
+        }
+        assert_eq!(state, PowerState::Running, "the row no longer claims it is still starting");
+        drop(writer);
         listening.abort();
     }
 
