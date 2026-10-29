@@ -170,8 +170,6 @@ pub fn default_major(game_version: &str) -> Option<u32> {
     })
 }
 
-const NESTED_JAR_LIMIT: u64 = 256 * 1024 * 1024;
-
 pub fn required_by_jar(path: &Path) -> Option<u32> {
     use std::os::unix::fs::OpenOptionsExt;
     let file = std::fs::OpenOptions::new()
@@ -184,22 +182,7 @@ pub fn required_by_jar(path: &Path) -> Option<u32> {
     }
     let mut outer = zip::ZipArchive::new(file).ok()?;
 
-    let mut found = version_json(&mut outer);
-    if found.is_none() {
-        let listed = read_entry(&mut outer, "META-INF/versions.list", 64 * 1024)
-            .and_then(|bytes| String::from_utf8(bytes).ok());
-        for line in listed.iter().flat_map(|text| text.lines()) {
-            let Some(inner) = line.split('\t').nth(2) else { continue };
-            let Some(bytes) = read_entry(&mut outer, &format!("META-INF/versions/{inner}"), NESTED_JAR_LIMIT)
-            else {
-                continue;
-            };
-            if let Ok(mut nested) = zip::ZipArchive::new(std::io::Cursor::new(bytes)) {
-                found = found.max(version_json(&mut nested));
-            }
-        }
-    }
-    found.max(main_class_java(&mut outer))
+    version_json(&mut outer).max(main_class_java(&mut outer))
 }
 
 fn read_entry<R: std::io::Read + std::io::Seek>(
@@ -212,7 +195,7 @@ fn read_entry<R: std::io::Read + std::io::Seek>(
     if entry.size() > limit {
         return None;
     }
-    let mut bytes = Vec::with_capacity(entry.size() as usize);
+    let mut bytes = Vec::new();
     entry.take(limit).read_to_end(&mut bytes).ok()?;
     Some(bytes)
 }
@@ -371,13 +354,11 @@ mod tests {
     }
 
     #[test]
-    fn a_paperclip_jar_is_read_through_the_vanilla_jar_it_carries() {
-        let vanilla = a_jar(&[("version.json", br#"{"java_version":21}"#.to_vec())]);
+    fn a_paperclip_jar_answers_with_its_version_json_and_not_its_launcher() {
         let outer = a_jar(&[
             ("META-INF/MANIFEST.MF", b"Main-Class: io.papermc.paperclip.Main\n".to_vec()),
             ("io/papermc/paperclip/Main.class", a_class(17)),
-            ("META-INF/versions.list", b"abc\t1.21.4\t1.21.4/server-1.21.4.jar\n".to_vec()),
-            ("META-INF/versions/1.21.4/server-1.21.4.jar", vanilla),
+            ("version.json", br#"{"id":"1.21.11","java_version":21}"#.to_vec()),
         ]);
         let (_dir, path) = written(outer);
         assert_eq!(required_by_jar(&path), Some(21), "the launcher's own Java 17 is not the answer");
