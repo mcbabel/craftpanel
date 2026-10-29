@@ -6,7 +6,10 @@ use super::modrinth::MrVersion;
 
 const ALIAS_GROUPS: [&[&str]; 2] = [&["paper", "purpur", "spigot", "bukkit"], &["neoforge", "neo"]];
 
-const ONE_WAY: [(&str, &[&str]); 1] = [("craftbukkit", &["bukkit", "spigot"])];
+const ONE_WAY: [(&str, &[&str]); 2] = [
+    ("craftbukkit", &["bukkit", "spigot"]),
+    ("leaf", &["paper", "purpur", "spigot", "bukkit"]),
+];
 
 const LOADERLESS: [&str; 4] = ["shader", "shaderpack", "resourcepack", "datapack"];
 
@@ -86,6 +89,15 @@ mod tests {
         assert!(matches(&plugin, &Target::new("1.21.1", LoaderId::Purpur)));
         assert!(matches(&plugin, &Target::new("1.21.1", LoaderId::Paper)));
         assert!(!matches(&plugin, &Target::new("1.21.1", LoaderId::Fabric)));
+    }
+
+    #[test]
+    fn a_leaf_server_takes_paper_plugins_but_a_paper_server_does_not_take_leaf_ones() {
+        let plugin = version(&["paper", "spigot"], &["1.21.1"]);
+        assert!(matches(&plugin, &Target::new("1.21.1", LoaderId::Leaf)));
+        let leaf_only = version(&["leaf"], &["1.21.1"]);
+        assert!(!matches(&leaf_only, &Target::new("1.21.1", LoaderId::Paper)));
+        assert!(!matches(&version(&["fabric"], &["1.21.1"]), &Target::new("1.21.1", LoaderId::Leaf)));
     }
 
     #[test]

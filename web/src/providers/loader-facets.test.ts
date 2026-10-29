@@ -44,6 +44,12 @@ describe('loaderFacet', () => {
 		])
 	})
 
+	it('searches Paper plugins for a Leaf server, which Modrinth does not know', () => {
+		expect(loaderFacet('plugin', 'leaf', tags)).toEqual([
+			{ type: 'plugin_loader', option: 'paper' },
+		])
+	})
+
 	it('puts a proxy into the platform filter', () => {
 		expect(loaderFacet('plugin', 'velocity', tags)).toEqual([
 			{ type: 'plugin_platform', option: 'velocity' },
@@ -58,7 +64,7 @@ describe('loaderFacet', () => {
 	})
 
 	it('stays empty where Modrinth does not know the loader', () => {
-		expect(loaderFacet('plugin', 'leaf', tags)).toEqual([])
+		expect(loaderFacet('plugin', 'limbo', tags)).toEqual([])
 		expect(loaderFacet('mod', 'paper', tags)).toEqual([])
 	})
 

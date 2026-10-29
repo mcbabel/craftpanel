@@ -3,7 +3,7 @@ import { normalizeLoaderAlias } from '@modrinth/ui/src/utils/version-compatibili
 
 const PLUGIN_PLATFORMS = ['bungeecord', 'waterfall', 'velocity', 'geyser']
 
-const SEARCHED_AS: Record<string, string> = { craftbukkit: 'bukkit' }
+const SEARCHED_AS: Record<string, string> = { craftbukkit: 'bukkit', leaf: 'paper' }
 
 export function loaderFacet(projectType: string, loader: string | null, tags: Tags): FilterValue[] {
 	if (!loader || (projectType !== 'mod' && projectType !== 'plugin')) return []
