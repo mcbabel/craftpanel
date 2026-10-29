@@ -242,7 +242,12 @@ pub(crate) fn read_command(command: Option<&str>, launch: Launch) -> Result<(Vec
     while at < rest.len() {
         let token = &rest[at];
         if token == "-jar" {
-            at += if rest.get(at + 1).is_some_and(|jar| jar == launch.jar) { 2 } else { 1 };
+            let after = if rest.get(at + 1).is_some_and(|jar| jar == launch.jar) { at + 2 } else { at + 1 };
+            stripped.extend(rest[after..].iter().filter(|word| !is_nogui(word)).cloned());
+            break;
+        }
+        if is_nogui(token) {
+            at += 1;
             continue;
         }
         if is_panel_memory_flag(token) || !token.starts_with('-') {
@@ -254,6 +259,10 @@ pub(crate) fn read_command(command: Option<&str>, launch: Launch) -> Result<(Vec
     }
 
     Ok((kept, stripped))
+}
+
+fn is_nogui(token: &str) -> bool {
+    matches!(token, "nogui" | "-nogui" | "--nogui")
 }
 
 pub(crate) fn is_panel_memory_flag(token: &str) -> bool {
@@ -430,6 +439,20 @@ mod tests {
             ["mine.jar", "&&", "echo", "hi"],
             "another jar, a shell operator and its arguments are not flags"
         );
+    }
+
+    #[test]
+    fn what_comes_after_the_jar_never_turns_into_a_java_flag() {
+        let server = a_server(LoaderId::Leaf, &[]);
+        let change = plan(
+            &patched("java -XX:+UseG1GC --nogui -jar server.jar --nogui --port 25566"),
+            &server,
+            4096,
+        )
+        .unwrap();
+
+        assert_eq!(change.extra_flags, ["-XX:+UseG1GC"], "--nogui made Java refuse to start");
+        assert_eq!(change.stripped_flags, ["--port", "25566"]);
     }
 
     #[test]
