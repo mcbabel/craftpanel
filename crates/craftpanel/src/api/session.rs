@@ -1,7 +1,7 @@
-use std::net::{IpAddr, SocketAddr};
+use std::net::IpAddr;
 use std::time::Instant;
 
-use axum::extract::{ConnectInfo, State};
+use axum::extract::State;
 use axum::http::request::Parts;
 use axum::http::StatusCode;
 use axum::response::{IntoResponse, Response};
@@ -11,6 +11,7 @@ use axum_extra::extract::CookieJar;
 use serde::{Deserialize, Serialize};
 use sqlx::SqlitePool;
 
+use crate::auth::address;
 use crate::auth::error::{Failure, Result};
 use crate::auth::session::Session;
 use crate::auth::users::UserRow;
@@ -70,7 +71,7 @@ async fn login(
     JsonBody(body): JsonBody<LoginRequest>,
 ) -> Result<Response> {
     let username = body.username.trim().to_lowercase();
-    let address = caller_address(&parts);
+    let address = address::caller_address(&parts);
     brake::shared().check(&username, address, Instant::now())?;
 
     let found = users::by_name(&state.pool, &username).await?;
@@ -210,10 +211,6 @@ async fn whoami(
         capabilities,
         session: crate::model::SessionRef { id: session.id, expires_at: session.expires_at },
     })
-}
-
-fn caller_address(parts: &Parts) -> Option<IpAddr> {
-    parts.extensions.get::<ConnectInfo<SocketAddr>>().map(|info| info.0.ip())
 }
 
 #[cfg(test)]

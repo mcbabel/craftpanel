@@ -1,7 +1,8 @@
-use std::net::SocketAddr;
+use std::net::{IpAddr, SocketAddr};
 use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result};
+use ipnet::IpNet;
 use serde::{Deserialize, Serialize};
 
 use crate::settings::runtimes::Search;
@@ -14,8 +15,38 @@ pub struct Config {
     pub data_dir: PathBuf,
     #[serde(default = "default_helper_socket")]
     pub helper_socket: PathBuf,
+    #[serde(default)]
+    pub trusted_proxies: Vec<Proxy>,
     #[serde(skip)]
     pub java_search: Search,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(try_from = "String", into = "String")]
+pub struct Proxy(IpNet);
+
+impl Proxy {
+    pub fn covers(&self, address: IpAddr) -> bool {
+        self.0.contains(&address.to_canonical())
+    }
+}
+
+impl TryFrom<String> for Proxy {
+    type Error = String;
+
+    fn try_from(raw: String) -> std::result::Result<Self, Self::Error> {
+        let raw = raw.trim();
+        raw.parse::<IpNet>()
+            .or_else(|_| raw.parse::<IpAddr>().map(IpNet::from))
+            .map(Self)
+            .map_err(|_| format!("trusted_proxies: {raw} is neither an address nor a network"))
+    }
+}
+
+impl From<Proxy> for String {
+    fn from(proxy: Proxy) -> Self {
+        proxy.0.to_string()
+    }
 }
 
 fn default_bind() -> SocketAddr {
@@ -36,6 +67,7 @@ impl Default for Config {
             bind: default_bind(),
             data_dir: default_data_dir(),
             helper_socket: default_helper_socket(),
+            trusted_proxies: Vec::new(),
             java_search: Search::default(),
         }
     }
@@ -90,5 +122,31 @@ mod tests {
 
         assert_eq!(config.bind.port(), 9090);
         assert_eq!(config.data_dir, PathBuf::from("/var/lib/craftpanel"));
+        assert!(config.trusted_proxies.is_empty());
+    }
+
+    #[test]
+    fn trusted_proxies_take_single_addresses_and_whole_networks() {
+        let config: Config = toml::from_str(
+            "trusted_proxies = [\"192.168.178.180\", \"10.0.0.0/24\", \"::1\"]",
+        )
+        .unwrap();
+
+        let covered = |raw: &str| {
+            let address: IpAddr = raw.parse().unwrap();
+            config.trusted_proxies.iter().any(|proxy| proxy.covers(address))
+        };
+        assert!(covered("192.168.178.180"));
+        assert!(covered("::ffff:192.168.178.180"));
+        assert!(covered("10.0.0.1"));
+        assert!(covered("::1"));
+        assert!(!covered("192.168.178.181"));
+        assert!(!covered("10.0.1.1"));
+    }
+
+    #[test]
+    fn a_proxy_that_is_no_address_is_refused() {
+        let refused = toml::from_str::<Config>("trusted_proxies = [\"proxy.local\"]");
+        assert!(refused.unwrap_err().to_string().contains("proxy.local"));
     }
 }

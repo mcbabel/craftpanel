@@ -1,13 +1,13 @@
-use std::net::{IpAddr, SocketAddr};
 use std::sync::Arc;
 
-use axum::extract::{ConnectInfo, Path};
+use axum::extract::Path;
 use axum::http::request::Parts;
 use axum::http::StatusCode;
 use axum::routing::{get, post};
 use axum::{Extension, Json, Router};
 use serde::{Deserialize, Serialize};
 
+use crate::auth::address;
 use crate::auth::error::{Failure, Result};
 use crate::auth::{extract, Admin, Disks, JsonBody, LiveServers, Params};
 use crate::model::{AuthOptions, Id, PanelUser, RegistrationList, Timestamp};
@@ -92,7 +92,7 @@ async fn register(
             &body.username,
             &body.email,
             &body.password,
-            caller_address(&parts),
+            address::caller_address(&parts),
             Timestamp::now(),
         )
         .await?;
@@ -107,7 +107,7 @@ async fn verify_email(
     JsonBody(body): JsonBody<TokenRequest>,
 ) -> Result<Json<VerifiedResponse>> {
     let state = service
-        .verify(&body.token, caller_address(&parts), &live, &disks, Timestamp::now())
+        .verify(&body.token, address::caller_address(&parts), &live, &disks, Timestamp::now())
         .await?;
     Ok(Json(VerifiedResponse { state }))
 }
@@ -161,6 +161,3 @@ fn application(raw: &str) -> Result<Id> {
     })
 }
 
-fn caller_address(parts: &Parts) -> Option<IpAddr> {
-    parts.extensions.get::<ConnectInfo<SocketAddr>>().map(|info| info.0.ip())
-}

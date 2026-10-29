@@ -19,6 +19,7 @@ helper_socket = "/run/craftpanel/helper.sock"
 | `bind` | `127.0.0.1:8080` | Address and port of the web interface and API. The installer writes `0.0.0.0:<port>`. |
 | `data_dir` | `/var/lib/craftpanel` | Where the database, the servers and all other data live. |
 | `helper_socket` | `/run/craftpanel/helper.sock` | Unix socket of the privileged helper. The supervisor socket `supervise.sock` is created next to it. |
+| `trusted_proxies` | `[]` | Addresses or networks of reverse proxies whose `X-Forwarded-For` the panel believes. See [Reverse proxy and HTTPS](#reverse-proxy-and-https). |
 
 If the file does not exist, all defaults apply. Unknown keys and tables are ignored; a `[ports]`
 table written by older installers has no effect (each server takes its port from its own files, see below).
@@ -63,7 +64,9 @@ Logs go to the journal: `journalctl -u craftpanel -f`.
 | `installed-version` | The CraftPanel version that last used this directory. |
 
 Secrets (`playit/`, `drive/`, `mail/`) are files readable only by the `craftpanel` account. They
-are never stored in the database or returned by the API.
+are never stored in the database or returned by the API. `panel.db` and its journal files
+(`panel.db-wal`, `panel.db-shm`) are readable only by the `craftpanel` account as well; the panel
+sets their mode to `600` every time it opens the database.
 
 ## Ports
 
@@ -134,6 +137,7 @@ server {
         proxy_http_version 1.1;
         proxy_set_header Host $host;
         proxy_set_header X-Forwarded-Proto https;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         proxy_set_header Upgrade $http_upgrade;
         proxy_set_header Connection "upgrade";
         proxy_read_timeout 1h;
@@ -145,4 +149,15 @@ Set the panel address under **Administration → Mail** to the `https://` URL so
 there.
 
 Behind a proxy the panel sees the proxy's address as the client address. The per-address limits on
-sign-in attempts, sign-ups and password resets then count all clients together.
+sign-in attempts, sign-ups and password resets would then count all clients together, so ten wrong
+passwords from anyone lock everyone out for 15 minutes. Name every proxy in front of the panel:
+
+```toml
+trusted_proxies = ["192.168.1.10", "10.0.0.0/24"]
+```
+
+When a request comes from one of them, the panel reads `X-Forwarded-For` from the right and takes
+the first address that is not a trusted proxy as the client. Entries further left were written by
+the client itself and are never believed. Each proxy has to append to `X-Forwarded-For` (nginx:
+`proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;`); Nginx Proxy Manager does this by
+default. Requests from any other address keep their own address, whatever they claim.

@@ -260,6 +260,10 @@ async fn serve() -> Result<()> {
         .nest("/api/v1", api)
         .merge(api::backups::compat_router(backups).with_state(state))
         .merge(web::router())
+        .layer(axum::middleware::from_fn_with_state(
+            Arc::new(config.trusted_proxies.clone()),
+            auth::address::resolve,
+        ))
         .layer(TraceLayer::new_for_http());
 
     let listener = tokio::net::TcpListener::bind(config.bind)

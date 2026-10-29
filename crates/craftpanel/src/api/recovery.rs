@@ -1,13 +1,13 @@
-use std::net::{IpAddr, SocketAddr};
 use std::sync::Arc;
 
-use axum::extract::{ConnectInfo, Path, State};
+use axum::extract::{Path, State};
 use axum::http::request::Parts;
 use axum::http::StatusCode;
 use axum::routing::post;
 use axum::{Extension, Json, Router};
 use serde::{Deserialize, Serialize};
 
+use crate::auth::address;
 use crate::auth::error::{Failure, Result};
 use crate::auth::reset::Recovery;
 use crate::auth::{extract, users, Admin, JsonBody};
@@ -50,7 +50,7 @@ async fn request(
     parts: Parts,
     JsonBody(body): JsonBody<AddressRequest>,
 ) -> Result<StatusCode> {
-    let from = caller_address(&parts);
+    let from = address::caller_address(&parts);
     service.note_request(&body.email, from)?;
 
     let user_agent = extract::user_agent(&parts).map(str::to_owned);
@@ -67,7 +67,7 @@ async fn verify(
     JsonBody(body): JsonBody<TokenRequest>,
 ) -> Result<Json<WhoseResponse>> {
     let username =
-        service.whose(&body.token, caller_address(&parts), Timestamp::now()).await?;
+        service.whose(&body.token, address::caller_address(&parts), Timestamp::now()).await?;
     Ok(Json(WhoseResponse { username }))
 }
 
@@ -77,7 +77,7 @@ async fn confirm(
     JsonBody(body): JsonBody<ConfirmRequest>,
 ) -> Result<StatusCode> {
     service
-        .confirm(&body.token, &body.new_password, caller_address(&parts), Timestamp::now())
+        .confirm(&body.token, &body.new_password, address::caller_address(&parts), Timestamp::now())
         .await?;
     Ok(StatusCode::NO_CONTENT)
 }
@@ -95,10 +95,6 @@ async fn on_behalf_of(
 
     service.on_behalf_of(&row, Timestamp::now()).await?;
     Ok(StatusCode::ACCEPTED)
-}
-
-fn caller_address(parts: &Parts) -> Option<IpAddr> {
-    parts.extensions.get::<ConnectInfo<SocketAddr>>().map(|info| info.0.ip())
 }
 
 #[cfg(test)]

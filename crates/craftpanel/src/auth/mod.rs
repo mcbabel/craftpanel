@@ -5,6 +5,7 @@ pub mod brake;
 pub mod cli;
 pub mod disk;
 pub mod error;
+pub mod address;
 pub mod extract;
 pub mod limits;
 pub mod live;
