@@ -1,5 +1,5 @@
 import type { Labrinth } from '@modrinth/api-client'
-import { FolderCogIcon } from '@modrinth/assets'
+import { FolderCogIcon, LinkIcon } from '@modrinth/assets'
 import {
 	type BusyReason,
 	type ButtonMenuOption,
@@ -25,6 +25,7 @@ import {
 	type ApiContentItem,
 	type ContentListResponse,
 	type ContentModpack,
+	type ContentProjectType,
 	type ContentUpdateRequest,
 	hasErrorCode,
 	type Operation,
@@ -125,6 +126,10 @@ const messages = defineMessages({
 	configOwn: {
 		id: 'craftpanel.content.config-own',
 		defaultMessage: 'Open configuration',
+	},
+	linkProject: {
+		id: 'craftpanel.content.link-project',
+		defaultMessage: 'Link to a Modrinth project',
 	},
 	configShared: {
 		id: 'craftpanel.content.config-shared',
@@ -381,6 +386,12 @@ async function sha1Hex(file: File): Promise<string> {
 	return [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, '0')).join('')
 }
 
+export interface LinkTarget {
+	id: Ulid
+	fileName: string
+	projectType: ContentProjectType
+}
+
 export interface ContentManagerOptions {
 	serverId: Ulid
 	socket: ServerEventSource
@@ -394,6 +405,7 @@ export interface ContentManagerOptions {
 	modpackContentModal?: Ref<ModpackContentModalHandle | null | undefined>
 	skipNonEssentialWarnings?: Ref<boolean>
 	confirmUnknownFile?: (fileName: string) => Promise<boolean>
+	linkProject?: (target: LinkTarget) => void
 	pickFiles?: (request: FilePickerRequest) => Promise<File[]>
 	client?: PanelApi
 }
@@ -504,6 +516,25 @@ export function useContentManager(options: ContentManagerOptions) {
 		configListings.value = new Map(
 			read.filter((pair): pair is readonly [string, ConfigEntry[]] => pair[1] !== null),
 		)
+	}
+
+	function itemOptions(itemId: string): ButtonMenuOption[] {
+		const config = configOptions(itemId)
+		const link = linkOption(itemId)
+		return link ? [link, ...config] : config
+	}
+
+	function linkOption(itemId: string): ButtonMenuOption | null {
+		const row = list.value?.items.find((entry) => entry.id === itemId)
+		const open = options.linkProject
+		if (!row || !open || !canWrite.value || row.locked || row.project_id) return null
+		if (row.source_kind === 'modrinth_modpack') return null
+		return {
+			id: 'link-project',
+			label: formatMessage(messages.linkProject),
+			icon: LinkIcon,
+			action: () => open({ id: row.id, fileName: row.file_name, projectType: row.project_type }),
+		}
 	}
 
 	function configOptions(itemId: string): ButtonMenuOption[] {
@@ -950,7 +981,7 @@ export function useContentManager(options: ContentManagerOptions) {
 		unlinkModpack: () => void unlinkModpack(),
 		openManagedContentSettings: options.openSettings,
 		switchVersion: (item) => void openUpdater(item.id, true),
-		getOverflowOptions: (item) => configOptions(item.id),
+		getOverflowOptions: (item) => itemOptions(item.id),
 		isBulkOperating,
 		deletionContext: 'server',
 		getItemId: (item) => item.id,

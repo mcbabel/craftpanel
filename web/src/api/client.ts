@@ -25,6 +25,8 @@ import type {
 	ChangePasswordRequest,
 	ContentDependentsResponse,
 	ContentIdsRequest,
+	ContentLinkRequest,
+	ContentLinkResponse,
 	ContentInstallRequest,
 	ContentInstallResponse,
 	ContentListResponse,
@@ -847,6 +849,13 @@ const content = {
 			signal: options.signal,
 		})
 	},
+
+	link: (serverId: Ulid, body: ContentLinkRequest, options: Cancellable = {}) =>
+		requestJson<ContentLinkResponse>(serverPath(serverId, '/content/link'), {
+			method: 'POST',
+			json: body,
+			signal: options.signal,
+		}),
 
 	dependents: (serverId: Ulid, body: ContentIdsRequest, options: Cancellable = {}) =>
 		requestJson<ContentDependentsResponse>(serverPath(serverId, '/content/dependents'), {

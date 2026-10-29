@@ -52,6 +52,8 @@
 					:source-icon-url="managedContent?.card.manager.iconUrl"
 				/>
 
+				<LinkProjectModal ref="linkModal" :server-id="page.serverId" />
+
 				<UnknownFileWarningModal
 					ref="unknownFileModal"
 					mode="mod"
@@ -82,6 +84,7 @@ import { computed, nextTick, onScopeDispose, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 
 import type { UploadProgress } from '@/api'
+import LinkProjectModal from '@/components/LinkProjectModal.vue'
 import { useServerPage } from '@/composables/server-page'
 import { useContentManager } from '@/providers/content-manager'
 
@@ -134,6 +137,7 @@ const { addNotification } = injectNotificationManager()
 const updaterModal = ref<InstanceType<typeof ContentUpdaterModal> | null>(null)
 const modpackContentModal = ref<InstanceType<typeof ManagedContentModal> | null>(null)
 const unknownFileModal = ref<InstanceType<typeof UnknownFileWarningModal> | null>(null)
+const linkModal = ref<InstanceType<typeof LinkProjectModal> | null>(null)
 
 const content = useContentManager({
 	serverId: page.serverId,
@@ -155,6 +159,7 @@ const content = useContentManager({
 	updaterModal,
 	modpackContentModal,
 	confirmUnknownFile,
+	linkProject: (target) => linkModal.value?.open(target),
 })
 
 const updater = content.updater

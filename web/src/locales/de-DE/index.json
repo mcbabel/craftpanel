@@ -2366,6 +2366,30 @@
   "craftpanel.content.limbo-header": {
     "defaultMessage": "Limbo hat eigene Plugins"
   },
+  "craftpanel.content.link-project": {
+    "defaultMessage": "Mit Modrinth-Projekt verknüpfen"
+  },
+  "craftpanel.content.link.body": {
+    "defaultMessage": "Modrinth hat {file} nicht erkannt. Wähle das Projekt aus, zu dem die Datei gehört."
+  },
+  "craftpanel.content.link.confirm": {
+    "defaultMessage": "Verknüpfen"
+  },
+  "craftpanel.content.link.failed": {
+    "defaultMessage": "Die Datei konnte nicht verknüpft werden"
+  },
+  "craftpanel.content.link.hint": {
+    "defaultMessage": "Die Datei bleibt, wie sie ist. Das Panel sucht die Version, die zu ihrem Namen passt, und prüft ab dann auf Updates."
+  },
+  "craftpanel.content.link.linked": {
+    "defaultMessage": "Mit Modrinth verknüpft"
+  },
+  "craftpanel.content.link.linked-no-version": {
+    "defaultMessage": "Mit Modrinth verknüpft. Keine Version passte zum Dateinamen; wähle unter Aktualisieren eine aus, um die Datei zu ersetzen."
+  },
+  "craftpanel.content.link.title": {
+    "defaultMessage": "Mit Modrinth-Projekt verknüpfen"
+  },
   "craftpanel.content.load-failed": {
     "defaultMessage": "Die Inhalte konnten nicht geladen werden"
   },

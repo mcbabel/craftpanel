@@ -31,6 +31,18 @@ pub struct ModpackContentsResponse {
 }
 
 #[derive(Debug, Clone, Deserialize)]
+pub struct ContentLinkRequest {
+    pub id: crate::model::Id,
+    pub project_id: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize)]
+pub struct ContentLinkResponse {
+    pub project_id: String,
+    pub version_id: Option<String>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
 pub struct ContentIdsRequest {
     pub ids: Vec<crate::model::Id>,
 }

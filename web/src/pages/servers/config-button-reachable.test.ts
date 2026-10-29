@@ -25,7 +25,8 @@ const CHAIN: { link: string; file: string; needs: string[] }[] = [
 			'label: formatMessage(messages.configNone)',
 			'disabled: true',
 			'to: options.fileLink(spot.path, spot.kind === "own" ? spot.editing : undefined)',
-			'getOverflowOptions: (item) => configOptions(item.id)',
+			'const config = configOptions(itemId)',
+			'getOverflowOptions: (item) => itemOptions(item.id)',
 		],
 	},
 	{

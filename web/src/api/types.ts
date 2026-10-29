@@ -640,6 +640,16 @@ export interface ModpackContentsResponse {
 	items: ApiContentItem[]
 }
 
+export interface ContentLinkRequest {
+	id: Ulid
+	project_id: string
+}
+
+export interface ContentLinkResponse {
+	project_id: string
+	version_id: string | null
+}
+
 export interface ContentIdsRequest {
 	ids: Ulid[]
 }

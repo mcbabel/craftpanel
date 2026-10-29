@@ -63,6 +63,34 @@ pub fn matches(version: &MrVersion, target: &Target) -> bool {
     loaders.iter().any(|loader| wanted.contains(loader))
 }
 
+pub fn version_for_file<'a>(
+    versions: &'a [MrVersion],
+    file_name: &str,
+    loader: LoaderId,
+) -> Option<&'a MrVersion> {
+    let file_name = file_name.strip_suffix(".disabled").unwrap_or(file_name).to_lowercase();
+    if let Some(exact) = versions
+        .iter()
+        .find(|version| version.files.iter().any(|file| file.filename.to_lowercase() == file_name))
+    {
+        return Some(exact);
+    }
+
+    let wanted = aliases(loader.as_str());
+    versions
+        .iter()
+        .filter(|version| {
+            version.loaders.iter().any(|name| wanted.contains(&normalise_loader(name)))
+                || version.loaders.is_empty()
+        })
+        .filter_map(|version| {
+            let number = version.version_number.trim().trim_start_matches(['v', 'V']).to_lowercase();
+            (number.len() >= 2 && file_name.contains(&number)).then_some((number.len(), version))
+        })
+        .max_by(|(left, a), (right, b)| left.cmp(right).then_with(|| a.published().cmp(&b.published())))
+        .map(|(_, version)| version)
+}
+
 pub fn matches_modpack(version: &MrVersion, game_version: &str) -> bool {
     if !version.game_versions.iter().any(|known| known == game_version) {
         return false;
@@ -81,6 +109,41 @@ mod tests {
         version.loaders = loaders.iter().map(|name| (*name).to_owned()).collect();
         version.game_versions = games.iter().map(|name| (*name).to_owned()).collect();
         version
+    }
+
+    #[test]
+    fn a_file_is_matched_by_its_exact_name_before_any_version_number() {
+        let mut exact = version(&["paper"], &["1.21.4"]);
+        exact.id = "exact".to_owned();
+        exact.version_number = "9.9".to_owned();
+        exact.files[0].filename = "GSit-2.4.3.jar".to_owned();
+        let mut numbered = version(&["paper"], &["1.21.4"]);
+        numbered.id = "numbered".to_owned();
+        numbered.version_number = "2.4.3".to_owned();
+        let versions = [numbered, exact];
+
+        let found = version_for_file(&versions, "GSit-2.4.3.jar", LoaderId::Paper).unwrap();
+        assert_eq!(found.id, "exact");
+    }
+
+    #[test]
+    fn otherwise_the_longest_version_number_in_the_file_name_wins_for_this_loader() {
+        let pick = |id: &str, number: &str, loaders: &[&str]| {
+            let mut found = version(loaders, &["1.21.4"]);
+            found.id = id.to_owned();
+            found.version_number = number.to_owned();
+            found.files[0].filename = format!("{id}.jar");
+            found
+        };
+        let versions = [
+            pick("short", "4.21", &["paper"]),
+            pick("long", "4.21.2", &["paper"]),
+            pick("fabric", "4.21.2-fabric", &["fabric"]),
+        ];
+
+        let found = version_for_file(&versions, "HeadDatabase-4.21.2.jar.disabled", LoaderId::Leaf).unwrap();
+        assert_eq!(found.id, "long");
+        assert!(version_for_file(&versions, "Something-1.0.jar", LoaderId::Paper).is_none());
     }
 
     #[test]

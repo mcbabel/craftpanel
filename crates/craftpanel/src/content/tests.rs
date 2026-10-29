@@ -2085,3 +2085,36 @@ async fn a_replaced_file_loses_the_link_and_is_looked_up_again() {
     panel.content.check_updates(panel.server).await.expect("a check");
     assert_eq!(panel.listed().await.items[0].project_id.as_deref(), Some("OTHER"));
 }
+
+#[tokio::test]
+async fn a_file_modrinth_did_not_recognise_is_linked_to_the_project_its_owner_picks() {
+    let panel = Panel::new("paper", "1.21.1").await;
+    panel.write("plugins/HeadDatabase-4.21.2.jar", b"from somewhere else");
+    let local = panel.listed().await.items.into_iter().next().expect("the file is listed");
+    assert!(local.project.is_none());
+
+    panel.upstream.set_project(
+        "HDB",
+        serde_json::json!({ "id": "HDB", "slug": "headdatabase", "title": "HeadDatabase", "project_type": "plugin" }),
+    );
+    let mut older = a_version("old", "HDB", "release", "2026-01-01T00:00:00Z");
+    older.version_number = "4.21.1".to_owned();
+    let mut matching = a_version("match", "HDB", "release", "2026-02-01T00:00:00Z");
+    matching.version_number = "4.21.2".to_owned();
+    for version in [&mut older, &mut matching] {
+        version.loaders = vec!["paper".to_owned()];
+        version.game_versions = vec!["1.21.1".to_owned()];
+    }
+    panel.upstream.set_versions("HDB", vec![older, matching]);
+
+    let linked = panel.content.link(panel.server, local.id, "HDB").await.expect("a link");
+    assert_eq!(linked.project_id, "HDB");
+    assert_eq!(linked.version_id.as_deref(), Some("match"));
+
+    let row = panel.row(local.id).await.expect("the row stays");
+    assert_eq!(row.project_id.as_deref(), Some("HDB"));
+    assert!(panel.exists("plugins/HeadDatabase-4.21.2.jar"), "the file itself is not touched");
+
+    let missing = panel.content.link(panel.server, Id::new(), "HDB").await.unwrap_err();
+    assert_eq!(missing.code(), "content_not_found");
+}

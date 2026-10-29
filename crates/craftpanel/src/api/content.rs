@@ -48,6 +48,7 @@ pub fn router(content: Arc<Content>, live: LiveServers) -> Router<AppState> {
         .route("/servers/{server}/content/install", post(install))
         .route("/servers/{server}/content/upload", post(upload))
         .route("/servers/{server}/content/dependents", post(dependents))
+        .route("/servers/{server}/content/link", post(link))
         .route("/servers/{server}/content/modpack/install", post(modpack_install))
         .route("/servers/{server}/content/modpack/update", post(modpack_update))
         .route("/servers/{server}/content/modpack/unlink", post(modpack_unlink))
@@ -141,6 +142,26 @@ async fn delete(
     let ids = at_least_one(body.ids)?;
     guard(&content, server).await?;
     all_or_some(content.delete(server, &ids).await?)
+}
+
+async fn link(
+    State(state): State<AppState>,
+    Extension(content): Extension<Arc<Content>>,
+    caller: Caller,
+    OfServer(server): OfServer,
+    JsonBody(body): JsonBody<ContentLinkRequest>,
+) -> Result<Json<ContentLinkResponse>> {
+    access::require(&state.pool, &caller, server, Permission::Setup).await?;
+    let project = body.project_id.trim();
+    if project.is_empty()
+        || project.len() > 64
+        || !project.chars().all(|letter| letter.is_ascii_alphanumeric() || "-_".contains(letter))
+    {
+        return Err(Failure::invalid_request("project_id is a Modrinth project id or slug"));
+    }
+    guard(&content, server).await?;
+    outgoing(&content).await?;
+    Ok(Json(content.link(server, body.id, project).await?))
 }
 
 async fn update(
