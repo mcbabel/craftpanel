@@ -1255,7 +1255,14 @@ impl Manager {
     }
 
     async fn java(self: &Arc<Self>, actor: Option<Id>, row: &PowerRow) -> Result<PathBuf> {
-        let Some(major) = row.wants_java() else {
+        let jar = self
+            .dir(row.owner_id, row.id)
+            .join(crate::settings::startup::launch_of(row.loader).jar);
+        let needed = tokio::task::spawn_blocking(move || crate::settings::runtimes::required_by_jar(&jar))
+            .await
+            .ok()
+            .flatten();
+        let Some(major) = row.wants_java().max(needed) else {
             return Ok(system_java());
         };
 

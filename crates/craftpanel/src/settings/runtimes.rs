@@ -170,6 +170,75 @@ pub fn default_major(game_version: &str) -> Option<u32> {
     })
 }
 
+const NESTED_JAR_LIMIT: u64 = 256 * 1024 * 1024;
+
+pub fn required_by_jar(path: &Path) -> Option<u32> {
+    use std::os::unix::fs::OpenOptionsExt;
+    let file = std::fs::OpenOptions::new()
+        .read(true)
+        .custom_flags(libc::O_NOFOLLOW | libc::O_NONBLOCK)
+        .open(path)
+        .ok()?;
+    if !file.metadata().ok()?.is_file() {
+        return None;
+    }
+    let mut outer = zip::ZipArchive::new(file).ok()?;
+
+    let mut found = version_json(&mut outer);
+    if found.is_none() {
+        let listed = read_entry(&mut outer, "META-INF/versions.list", 64 * 1024)
+            .and_then(|bytes| String::from_utf8(bytes).ok());
+        for line in listed.iter().flat_map(|text| text.lines()) {
+            let Some(inner) = line.split('\t').nth(2) else { continue };
+            let Some(bytes) = read_entry(&mut outer, &format!("META-INF/versions/{inner}"), NESTED_JAR_LIMIT)
+            else {
+                continue;
+            };
+            if let Ok(mut nested) = zip::ZipArchive::new(std::io::Cursor::new(bytes)) {
+                found = found.max(version_json(&mut nested));
+            }
+        }
+    }
+    found.max(main_class_java(&mut outer))
+}
+
+fn read_entry<R: std::io::Read + std::io::Seek>(
+    archive: &mut zip::ZipArchive<R>,
+    name: &str,
+    limit: u64,
+) -> Option<Vec<u8>> {
+    use std::io::Read;
+    let entry = archive.by_name(name).ok()?;
+    if entry.size() > limit {
+        return None;
+    }
+    let mut bytes = Vec::with_capacity(entry.size() as usize);
+    entry.take(limit).read_to_end(&mut bytes).ok()?;
+    Some(bytes)
+}
+
+fn version_json<R: std::io::Read + std::io::Seek>(archive: &mut zip::ZipArchive<R>) -> Option<u32> {
+    let bytes = read_entry(archive, "version.json", 64 * 1024)?;
+    let value: serde_json::Value = serde_json::from_slice(&bytes).ok()?;
+    value.get("java_version")?.as_u64().and_then(|major| u32::try_from(major).ok())
+}
+
+fn main_class_java<R: std::io::Read + std::io::Seek>(archive: &mut zip::ZipArchive<R>) -> Option<u32> {
+    let manifest = read_entry(archive, "META-INF/MANIFEST.MF", 64 * 1024)?;
+    let manifest = String::from_utf8(manifest).ok()?;
+    let main = manifest
+        .lines()
+        .find_map(|line| line.strip_prefix("Main-Class:"))?
+        .trim()
+        .replace('.', "/");
+    let class = read_entry(archive, &format!("{main}.class"), 4 * 1024 * 1024)?;
+    if class.len() < 8 || class[..4] != [0xCA, 0xFE, 0xBA, 0xBE] {
+        return None;
+    }
+    let major = u32::from(u16::from_be_bytes([class[6], class[7]]));
+    major.checked_sub(44).filter(|java| *java >= 8)
+}
+
 pub fn stands_in_for(found: u32, wanted: u32) -> bool {
     found >= wanted && found <= at_most(wanted)
 }
@@ -266,6 +335,65 @@ fn vendor_of(implementor: Option<&str>) -> JreVendor {
 
 #[cfg(test)]
 mod tests {
+    fn a_jar(entries: &[(&str, Vec<u8>)]) -> Vec<u8> {
+        use std::io::Write;
+        let mut cursor = std::io::Cursor::new(Vec::new());
+        let mut writer = zip::ZipWriter::new(&mut cursor);
+        for (name, body) in entries {
+            writer.start_file(*name, zip::write::SimpleFileOptions::default()).unwrap();
+            writer.write_all(body).unwrap();
+        }
+        writer.finish().unwrap();
+        cursor.into_inner()
+    }
+
+    fn a_class(java: u16) -> Vec<u8> {
+        let mut class = vec![0xCA, 0xFE, 0xBA, 0xBE, 0, 0];
+        class.extend((java + 44).to_be_bytes());
+        class
+    }
+
+    fn written(bytes: Vec<u8>) -> ((), PathBuf) {
+        use std::sync::atomic::{AtomicUsize, Ordering};
+        static NEXT: AtomicUsize = AtomicUsize::new(0);
+        let dir = std::env::temp_dir()
+            .join(format!("craftpanel-jar-{}-{}", std::process::id(), NEXT.fetch_add(1, Ordering::Relaxed)));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("server.jar");
+        std::fs::write(&path, bytes).unwrap();
+        ((), path)
+    }
+
+    #[test]
+    fn a_vanilla_jar_names_its_java_in_version_json() {
+        let (_dir, path) = written(a_jar(&[("version.json", br#"{"id":"26.3","java_version":25}"#.to_vec())]));
+        assert_eq!(required_by_jar(&path), Some(25));
+    }
+
+    #[test]
+    fn a_paperclip_jar_is_read_through_the_vanilla_jar_it_carries() {
+        let vanilla = a_jar(&[("version.json", br#"{"java_version":21}"#.to_vec())]);
+        let outer = a_jar(&[
+            ("META-INF/MANIFEST.MF", b"Main-Class: io.papermc.paperclip.Main\n".to_vec()),
+            ("io/papermc/paperclip/Main.class", a_class(17)),
+            ("META-INF/versions.list", b"abc\t1.21.4\t1.21.4/server-1.21.4.jar\n".to_vec()),
+            ("META-INF/versions/1.21.4/server-1.21.4.jar", vanilla),
+        ]);
+        let (_dir, path) = written(outer);
+        assert_eq!(required_by_jar(&path), Some(21), "the launcher's own Java 17 is not the answer");
+    }
+
+    #[test]
+    fn a_proxy_jar_is_read_from_its_main_class() {
+        let jar = a_jar(&[
+            ("META-INF/MANIFEST.MF", b"Manifest-Version: 1.0\nMain-Class: com.velocitypowered.proxy.Velocity\n".to_vec()),
+            ("com/velocitypowered/proxy/Velocity.class", a_class(21)),
+        ]);
+        let (_dir, path) = written(jar);
+        assert_eq!(required_by_jar(&path), Some(21));
+        assert_eq!(required_by_jar(Path::new("/nowhere/server.jar")), None);
+    }
+
     use super::*;
     use crate::settings::harness::a_dir;
 
