@@ -253,7 +253,7 @@ pub(crate) fn read_command(command: Option<&str>, launch: Launch) -> Result<(Vec
         if VALUE_FLAGS.contains(&token.as_str()) {
             match rest.get(at + 1).filter(|value| !value.starts_with('-')) {
                 Some(value) if token.starts_with("--") => kept.push(format!("{token}={value}")),
-                Some(value) => kept.extend([token.clone(), value.clone()]),
+                Some(value) => stripped.extend([token.clone(), value.clone()]),
                 None => {
                     stripped.push(token.clone());
                     at += 1;
@@ -484,6 +484,10 @@ mod tests {
             ["-XX:+UseZGC", "--add-modules=jdk.incubator.vector", "--add-opens=java.base/java.lang=ALL-UNNAMED"]
         );
         assert!(change.stripped_flags.is_empty(), "{change:?}");
+
+        let classpath = plan(&patched("java -cp @extra.txt -jar server.jar"), &server, 4096).unwrap();
+        assert!(classpath.extra_flags.is_empty(), "-cp means nothing next to -jar and may carry an @file");
+        assert_eq!(classpath.stripped_flags, ["-cp", "@extra.txt"]);
 
         let dangling = plan(&patched("java --add-modules -jar server.jar"), &server, 4096).unwrap();
         assert!(dangling.extra_flags.is_empty(), "a flag without its value would stop Java");
