@@ -2369,17 +2369,26 @@
   "craftpanel.content.link-project": {
     "defaultMessage": "Link to a Modrinth project"
   },
+  "craftpanel.content.link.automatic": {
+    "defaultMessage": "Automatic, from the file name"
+  },
   "craftpanel.content.link.body": {
     "defaultMessage": "Modrinth did not recognise {file}. Pick the project it belongs to."
   },
   "craftpanel.content.link.confirm": {
     "defaultMessage": "Link"
   },
+  "craftpanel.content.link.every-game-version": {
+    "defaultMessage": "All game versions"
+  },
   "craftpanel.content.link.failed": {
     "defaultMessage": "The file could not be linked"
   },
+  "craftpanel.content.link.game-version": {
+    "defaultMessage": "Game version"
+  },
   "craftpanel.content.link.hint": {
-    "defaultMessage": "The file stays as it is. The panel looks for the version that matches its name and checks for updates from then on."
+    "defaultMessage": "The file stays as it is. Left on automatic, the panel takes the version that matches its name. Updates are checked from then on."
   },
   "craftpanel.content.link.linked": {
     "defaultMessage": "Linked to Modrinth"
@@ -2387,8 +2396,17 @@
   "craftpanel.content.link.linked-no-version": {
     "defaultMessage": "Linked to Modrinth. No version matched the file name, so pick one under Update to replace the file."
   },
+  "craftpanel.content.link.no-versions": {
+    "defaultMessage": "No version for this game version"
+  },
   "craftpanel.content.link.title": {
     "defaultMessage": "Link to a Modrinth project"
+  },
+  "craftpanel.content.link.version": {
+    "defaultMessage": "Version of the file"
+  },
+  "craftpanel.content.link.versions-failed": {
+    "defaultMessage": "The versions of this project could not be loaded"
   },
   "craftpanel.content.load-failed": {
     "defaultMessage": "Failed to load content"

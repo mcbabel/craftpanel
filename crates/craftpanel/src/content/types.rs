@@ -34,6 +34,8 @@ pub struct ModpackContentsResponse {
 pub struct ContentLinkRequest {
     pub id: crate::model::Id,
     pub project_id: String,
+    #[serde(default)]
+    pub version_id: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize)]

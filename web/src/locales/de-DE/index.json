@@ -2369,17 +2369,26 @@
   "craftpanel.content.link-project": {
     "defaultMessage": "Mit Modrinth-Projekt verknüpfen"
   },
+  "craftpanel.content.link.automatic": {
+    "defaultMessage": "Automatisch, nach Dateiname"
+  },
   "craftpanel.content.link.body": {
     "defaultMessage": "Modrinth hat {file} nicht erkannt. Wähle das Projekt aus, zu dem die Datei gehört."
   },
   "craftpanel.content.link.confirm": {
     "defaultMessage": "Verknüpfen"
   },
+  "craftpanel.content.link.every-game-version": {
+    "defaultMessage": "Alle Spielversionen"
+  },
   "craftpanel.content.link.failed": {
     "defaultMessage": "Die Datei konnte nicht verknüpft werden"
   },
+  "craftpanel.content.link.game-version": {
+    "defaultMessage": "Spielversion"
+  },
   "craftpanel.content.link.hint": {
-    "defaultMessage": "Die Datei bleibt, wie sie ist. Das Panel sucht die Version, die zu ihrem Namen passt, und prüft ab dann auf Updates."
+    "defaultMessage": "Die Datei bleibt, wie sie ist. Steht die Version auf Automatisch, nimmt das Panel die, die zum Dateinamen passt. Ab dann prüft es auf Updates."
   },
   "craftpanel.content.link.linked": {
     "defaultMessage": "Mit Modrinth verknüpft"
@@ -2387,8 +2396,17 @@
   "craftpanel.content.link.linked-no-version": {
     "defaultMessage": "Mit Modrinth verknüpft. Keine Version passte zum Dateinamen; wähle unter Aktualisieren eine aus, um die Datei zu ersetzen."
   },
+  "craftpanel.content.link.no-versions": {
+    "defaultMessage": "Keine Version für diese Spielversion"
+  },
   "craftpanel.content.link.title": {
     "defaultMessage": "Mit Modrinth-Projekt verknüpfen"
+  },
+  "craftpanel.content.link.version": {
+    "defaultMessage": "Version der Datei"
+  },
+  "craftpanel.content.link.versions-failed": {
+    "defaultMessage": "Die Versionen dieses Projekts konnten nicht geladen werden"
   },
   "craftpanel.content.load-failed": {
     "defaultMessage": "Die Inhalte konnten nicht geladen werden"

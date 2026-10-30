@@ -152,16 +152,22 @@ async fn link(
     JsonBody(body): JsonBody<ContentLinkRequest>,
 ) -> Result<Json<ContentLinkResponse>> {
     access::require(&state.pool, &caller, server, Permission::Setup).await?;
+    let modrinth_id = |raw: &str| {
+        !raw.is_empty()
+            && raw.len() <= 64
+            && raw.chars().all(|letter| letter.is_ascii_alphanumeric() || "-_".contains(letter))
+    };
     let project = body.project_id.trim();
-    if project.is_empty()
-        || project.len() > 64
-        || !project.chars().all(|letter| letter.is_ascii_alphanumeric() || "-_".contains(letter))
-    {
+    if !modrinth_id(project) {
         return Err(Failure::invalid_request("project_id is a Modrinth project id or slug"));
+    }
+    let version = body.version_id.as_deref().map(str::trim);
+    if version.is_some_and(|version| !modrinth_id(version)) {
+        return Err(Failure::invalid_request("version_id is a Modrinth version id"));
     }
     guard(&content, server).await?;
     outgoing(&content).await?;
-    Ok(Json(content.link(server, body.id, project).await?))
+    Ok(Json(content.link(server, body.id, project, version).await?))
 }
 
 async fn update(

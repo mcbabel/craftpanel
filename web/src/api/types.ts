@@ -643,6 +643,7 @@ export interface ModpackContentsResponse {
 export interface ContentLinkRequest {
 	id: Ulid
 	project_id: string
+	version_id?: string
 }
 
 export interface ContentLinkResponse {

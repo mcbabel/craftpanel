@@ -297,7 +297,13 @@ impl Content {
         Ok(ContentMutationResponse { results })
     }
 
-    pub async fn link(&self, server: Id, id: Id, project: &str) -> Result<ContentLinkResponse> {
+    pub async fn link(
+        &self,
+        server: Id,
+        id: Id,
+        project: &str,
+        chosen: Option<&str>,
+    ) -> Result<ContentLinkResponse> {
         let facts = self.facts(server).await?;
         let Some(mut row) = store::one(&self.pool, server, id).await? else {
             return Err(Failure::not_found("content_not_found", "no such item"));
@@ -314,7 +320,14 @@ impl Content {
 
         let project = self.modrinth.project(project).await.map_err(upstream)?;
         let versions = self.modrinth.versions(&project.id).await.map_err(upstream)?;
-        let version = compat::version_for_file(&versions, &row.file_name, facts.loader).cloned();
+        let version = match chosen {
+            Some(chosen) => Some(
+                versions.iter().find(|version| version.id == chosen).cloned().ok_or_else(|| {
+                    Failure::invalid_request("that version does not belong to this project")
+                })?,
+            ),
+            None => compat::version_for_file(&versions, &row.file_name, facts.loader).cloned(),
+        };
         if let Some(version) = &version {
             let _ = self.modrinth.remember_version(version).await;
         }

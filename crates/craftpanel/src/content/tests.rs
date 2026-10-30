@@ -2192,7 +2192,7 @@ async fn a_file_modrinth_did_not_recognise_is_linked_to_the_project_its_owner_pi
     }
     panel.upstream.set_versions("HDB", vec![older, matching]);
 
-    let linked = panel.content.link(panel.server, local.id, "HDB").await.expect("a link");
+    let linked = panel.content.link(panel.server, local.id, "HDB", None).await.expect("a link");
     assert_eq!(linked.project_id, "HDB");
     assert_eq!(linked.version_id.as_deref(), Some("match"));
 
@@ -2200,6 +2200,12 @@ async fn a_file_modrinth_did_not_recognise_is_linked_to_the_project_its_owner_pi
     assert_eq!(row.project_id.as_deref(), Some("HDB"));
     assert!(panel.exists("plugins/HeadDatabase-4.21.2.jar"), "the file itself is not touched");
 
-    let missing = panel.content.link(panel.server, Id::new(), "HDB").await.unwrap_err();
+    let missing = panel.content.link(panel.server, Id::new(), "HDB", None).await.unwrap_err();
     assert_eq!(missing.code(), "content_not_found");
+
+    let picked = panel.content.link(panel.server, local.id, "HDB", Some("old")).await.expect("a link");
+    assert_eq!(picked.version_id.as_deref(), Some("old"), "the owner's pick wins over the name");
+
+    let foreign = panel.content.link(panel.server, local.id, "HDB", Some("elsewhere")).await;
+    assert_eq!(foreign.unwrap_err().code(), "invalid_request");
 }

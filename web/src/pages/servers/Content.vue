@@ -52,7 +52,12 @@
 					:source-icon-url="managedContent?.card.manager.iconUrl"
 				/>
 
-				<LinkProjectModal ref="linkModal" :server-id="page.serverId" />
+				<LinkProjectModal
+					ref="linkModal"
+					:server-id="page.serverId"
+					:server-game-version="content.currentGameVersion.value"
+					:server-loader="content.currentLoader.value"
+				/>
 
 				<UnknownFileWarningModal
 					ref="unknownFileModal"
