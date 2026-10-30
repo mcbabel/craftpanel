@@ -265,7 +265,9 @@ impl Manager {
         {
             return;
         }
-        let written = sqlx::query("UPDATE servers SET game_version = ?, updated_at = ? WHERE id = ?")
+        let written = sqlx::query(
+            "UPDATE servers SET game_version = ?, loader_version = NULL, updated_at = ? WHERE id = ?",
+        )
             .bind(&found)
             .bind(Timestamp::now())
             .bind(row.id)
@@ -3271,6 +3273,7 @@ mod tests {
 
         let after = fixture.manager.read(server, Permissions::NONE).await.unwrap();
         assert_eq!(after.game_version.as_deref(), Some("1.12.1"));
+        assert_eq!(after.loader_version, None, "the build written down was one for 1.12.2");
     }
 
     #[tokio::test]
