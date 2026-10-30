@@ -122,7 +122,9 @@ const searchResultsCache = ref<Map<string, SearchHit>>(new Map())
 const { labrinth } = injectModrinthClient()
 
 function isAllowedProjectType(projectType: string): boolean {
-	return !props.projectTypes || props.projectTypes.includes(projectType as ProjectType)
+	if (!props.projectTypes) return true
+	if (props.projectTypes.includes(projectType as ProjectType)) return true
+	return projectType === 'mod' && props.projectTypes.includes('plugin')
 }
 
 const userProjectHits = ref<SearchHit[]>([])
