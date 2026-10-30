@@ -3,7 +3,7 @@ resolver = "2"
 members = ["crates/craftpanel", "crates/craftpanel-helper", "crates/craftpanel-proto"]
 
 [workspace.package]
-version = "0.1.0-dev.12"
+version = "0.1.0-dev.13"
 edition = "2021"
 license = "AGPL-3.0-only"
 rust-version = "1.85"
