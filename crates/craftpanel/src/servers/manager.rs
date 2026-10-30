@@ -19,7 +19,7 @@ use crate::helper::Helper;
 use crate::java;
 use crate::loaders::{Build, Channel, Checksum, Loader, LoaderError, Sources, Wanted};
 use crate::model::{
-    AuditAction, Id, LoaderId, Minecraft, Operation, OperationError, OperationErrorStep,
+    AuditAction, Id, LoaderFamily, LoaderId, Minecraft, Operation, OperationError, OperationErrorStep,
     OperationKind, OperationPhase, OperationState, Permission, Permissions, PowerAction,
     PowerState, PowerTarget,
     PropertiesFields, Server, ServerFlows, ServerNet, ServerRole, ServerStatus, ServerUpstream,
@@ -255,6 +255,35 @@ impl Manager {
             crate::settings::allocations::follow_files(&self.pool, &self.config.users_dir(), server).await
         {
             tracing::warn!(%server, "the port in the server's files could not be read: {err}");
+        }
+    }
+
+    async fn follow_jar_version(&self, row: &PowerRow, found: Option<String>) {
+        let Some(found) = found else { return };
+        if row.loader.is_some_and(|loader| loader.family() == LoaderFamily::Proxy)
+            || row.game_version.as_deref() == Some(found.as_str())
+        {
+            return;
+        }
+        let written = sqlx::query("UPDATE servers SET game_version = ?, updated_at = ? WHERE id = ?")
+            .bind(&found)
+            .bind(Timestamp::now())
+            .bind(row.id)
+            .execute(&self.pool)
+            .await;
+        match written {
+            Ok(_) => {
+                tracing::info!(
+                    server = %row.id,
+                    was = row.game_version.as_deref().unwrap_or("nothing"),
+                    now = %found,
+                    "the server jar runs another Minecraft version than the panel had written down"
+                );
+                if let Ok(object) = self.read(row.id, Permissions::NONE).await {
+                    self.announce(&object);
+                }
+            }
+            Err(err) => tracing::warn!(server = %row.id, "the jar's Minecraft version could not be written down: {err}"),
         }
     }
 
@@ -1262,11 +1291,11 @@ impl Manager {
         let jar = self
             .dir(row.owner_id, row.id)
             .join(crate::settings::startup::launch_of(row.loader).jar);
-        let needed = tokio::task::spawn_blocking(move || crate::settings::runtimes::required_by_jar(&jar))
+        let facts = tokio::task::spawn_blocking(move || crate::settings::runtimes::read_jar(&jar))
             .await
-            .ok()
-            .flatten();
-        let Some(major) = row.wants_java().max(needed) else {
+            .unwrap_or_default();
+        self.follow_jar_version(row, facts.game_version).await;
+        let Some(major) = row.wants_java().max(facts.java) else {
             return Ok(system_java());
         };
 
@@ -3214,6 +3243,34 @@ mod tests {
         let spawned = fixture.spawned();
         assert_eq!(spawned.len(), 1);
         assert_eq!(spawned[0].program, laid_down(&fixture, 8), "on the Java it fetched");
+    }
+
+    #[tokio::test]
+    async fn a_start_writes_down_the_minecraft_version_the_jar_really_runs() {
+        use std::io::Write;
+        let upstream = an_upstream_with(8, "1.8.0_502").await;
+        let fixture = a_panel_against(&upstream).await;
+        let max = a_user(&fixture.pool, "max").await;
+        let caller = fixture.caller(max).await;
+        let made = fixture
+            .manager
+            .create(&caller, fixture.wish_for("folia", max, 2048, "1.12.2"))
+            .await
+            .unwrap();
+        assert!(fixture.manager.run(made.operation.id).await);
+        let server = made.server.id;
+
+        let jar = fixture.manager.dir(max, server).join(JAR);
+        let mut writer = zip::ZipWriter::new(std::fs::File::create(&jar).expect("a jar"));
+        let options: zip::write::FileOptions<'_, ()> = zip::write::FileOptions::default();
+        writer.start_file("version.json", options).expect("an entry");
+        writer.write_all(br#"{"id":"1.12.1","java_version":8}"#).expect("the version");
+        writer.finish().expect("a finished jar");
+
+        let _ = fixture.manager.power(&caller, server, PowerAction::Start).await;
+
+        let after = fixture.manager.read(server, Permissions::NONE).await.unwrap();
+        assert_eq!(after.game_version.as_deref(), Some("1.12.1"));
     }
 
     #[tokio::test]

@@ -170,19 +170,45 @@ pub fn default_major(game_version: &str) -> Option<u32> {
     })
 }
 
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct JarFacts {
+    pub java: Option<u32>,
+    pub game_version: Option<String>,
+}
+
 pub fn required_by_jar(path: &Path) -> Option<u32> {
+    read_jar(path).java
+}
+
+pub fn read_jar(path: &Path) -> JarFacts {
     use std::os::unix::fs::OpenOptionsExt;
-    let file = std::fs::OpenOptions::new()
+    let Some(mut outer) = std::fs::OpenOptions::new()
         .read(true)
         .custom_flags(libc::O_NOFOLLOW | libc::O_NONBLOCK)
         .open(path)
-        .ok()?;
-    if !file.metadata().ok()?.is_file() {
-        return None;
-    }
-    let mut outer = zip::ZipArchive::new(file).ok()?;
+        .ok()
+        .filter(|file| file.metadata().is_ok_and(|meta| meta.is_file()))
+        .and_then(|file| zip::ZipArchive::new(file).ok())
+    else {
+        return JarFacts::default();
+    };
 
-    version_json(&mut outer).max(main_class_java(&mut outer))
+    let version = version_json(&mut outer);
+    let java = version.as_ref().and_then(|value| value.get("java_version")?.as_u64());
+    let java = java.and_then(|major| u32::try_from(major).ok()).max(main_class_java(&mut outer));
+    let game_version = version
+        .as_ref()
+        .and_then(|value| value.get("id")?.as_str())
+        .filter(|id| plausible_game_version(id))
+        .map(str::to_owned);
+    JarFacts { java, game_version }
+}
+
+fn plausible_game_version(id: &str) -> bool {
+    !id.is_empty()
+        && id.len() <= 64
+        && id.starts_with(|c: char| c.is_ascii_digit())
+        && id.chars().all(|c| c.is_ascii_alphanumeric() || matches!(c, '.' | '-' | '_' | '+'))
 }
 
 fn read_entry<R: std::io::Read + std::io::Seek>(
@@ -200,10 +226,11 @@ fn read_entry<R: std::io::Read + std::io::Seek>(
     Some(bytes)
 }
 
-fn version_json<R: std::io::Read + std::io::Seek>(archive: &mut zip::ZipArchive<R>) -> Option<u32> {
+fn version_json<R: std::io::Read + std::io::Seek>(
+    archive: &mut zip::ZipArchive<R>,
+) -> Option<serde_json::Value> {
     let bytes = read_entry(archive, "version.json", 64 * 1024)?;
-    let value: serde_json::Value = serde_json::from_slice(&bytes).ok()?;
-    value.get("java_version")?.as_u64().and_then(|major| u32::try_from(major).ok())
+    serde_json::from_slice(&bytes).ok()
 }
 
 fn main_class_java<R: std::io::Read + std::io::Seek>(archive: &mut zip::ZipArchive<R>) -> Option<u32> {
@@ -372,7 +399,30 @@ mod tests {
         ]);
         let (_dir, path) = written(jar);
         assert_eq!(required_by_jar(&path), Some(21));
+        assert_eq!(read_jar(&path).game_version, None, "a proxy names no Minecraft version");
         assert_eq!(required_by_jar(Path::new("/nowhere/server.jar")), None);
+    }
+
+    #[test]
+    fn a_server_jar_says_which_minecraft_version_it_runs() {
+        let outer = a_jar(&[
+            ("META-INF/MANIFEST.MF", b"Main-Class: io.papermc.paperclip.Main\n".to_vec()),
+            ("io/papermc/paperclip/Main.class", a_class(17)),
+            ("version.json", br#"{"id":"26.1.2","java_version":25}"#.to_vec()),
+        ]);
+        let (_dir, path) = written(outer);
+        assert_eq!(
+            read_jar(&path),
+            JarFacts { java: Some(25), game_version: Some("26.1.2".to_owned()) }
+        );
+    }
+
+    #[test]
+    fn a_version_id_that_is_no_version_is_not_believed() {
+        let (_dir, path) =
+            written(a_jar(&[("version.json", br#"{"id":"<script>","java_version":21}"#.to_vec())]));
+        assert_eq!(read_jar(&path).game_version, None);
+        assert_eq!(read_jar(&path).java, Some(21));
     }
 
     use super::*;
