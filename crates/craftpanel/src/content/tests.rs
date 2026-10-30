@@ -1229,6 +1229,7 @@ async fn a_game_version_that_is_not_a_minecraft_version_is_refused_by_both_endpo
 #[tokio::test]
 async fn changing_the_game_version_updates_what_it_can_and_switches_off_the_rest() {
     let panel = Panel::new("fabric", "1.20.1").await;
+    let shelf = shelf_for(&panel);
     let mut stuck = panel.publish("STUCK", "s1", "stuck.jar", b"stuck");
     stuck.game_versions = vec!["1.20.1".to_owned()];
     let mut old = panel.publish("MOVER", "m1", "mover-1.jar", b"one");
@@ -1285,6 +1286,90 @@ async fn changing_the_game_version_updates_what_it_can_and_switches_off_the_rest
             .await
             .expect("the server");
     assert_eq!(game_version.as_deref(), Some("1.21.1"));
+    assert_eq!(shelf.fetched(), 1);
+}
+
+#[tokio::test]
+async fn changing_the_game_version_puts_the_server_jar_for_it_in_place() {
+    let panel = Panel::new("paper", "1.20.1").await;
+    let shelf = shelf_for(&panel);
+    panel.write("server.jar", b"the jar for 1.20.1");
+
+    let operation = panel
+        .content
+        .change_game_version(
+            panel.server,
+            GameVersionChangeRequest {
+                game_version: "1.21.1".to_owned(),
+                loader: None,
+                loader_version: None,
+                incompatible_content: IncompatiblePolicy::Keep,
+            },
+            Some(panel.owner),
+            false,
+        )
+        .await
+        .expect("an accepted change");
+
+    let run = panel.settled(operation.id).await;
+    assert_eq!(run.state, OperationState::Done, "{:?}", run.error);
+    assert_eq!(shelf.fetched(), 1);
+    assert_eq!(std::fs::read(panel.root.join("server.jar")).expect("the jar"), b"not a jar");
+    let (loader, build, game_version, _) = loader_of(&panel).await;
+    assert_eq!(loader, "paper");
+    assert_eq!(build.as_deref(), Some("45"));
+    assert_eq!(game_version, "1.21.1");
+}
+
+#[tokio::test]
+async fn a_game_version_whose_jar_cannot_be_fetched_changes_nothing() {
+    let panel = Panel::new("fabric", "1.20.1").await;
+    panel.content.use_builds(crate::servers::manager::fake::Shelf::refusing(
+        crate::loaders::LoaderError::Unreachable { service: "test", reason: "down".to_owned() },
+    ) as Arc<dyn crate::servers::manager::Builds>);
+    panel.write("server.jar", b"the jar for 1.20.1");
+    let mut stuck = panel.publish("STUCK", "s1", "stuck.jar", b"stuck");
+    stuck.game_versions = vec!["1.20.1".to_owned()];
+    panel.upstream.set_versions("STUCK", vec![stuck]);
+    let install = panel
+        .content
+        .install(
+            panel.server,
+            &ContentInstallRequest {
+                items: vec![ContentInstallTarget { project_id: "STUCK".to_owned(), version_id: None }],
+                resolve_dependencies: false,
+            },
+            None,
+        )
+        .await
+        .expect("an install");
+    panel.settled(install.operation.id).await;
+
+    let operation = panel
+        .content
+        .change_game_version(
+            panel.server,
+            GameVersionChangeRequest {
+                game_version: "1.21.1".to_owned(),
+                loader: None,
+                loader_version: None,
+                incompatible_content: IncompatiblePolicy::UpdateThenDisable,
+            },
+            Some(panel.owner),
+            false,
+        )
+        .await
+        .expect("an accepted change");
+
+    let run = panel.settled(operation.id).await;
+    assert_eq!(run.state, OperationState::Failed);
+    assert!(panel.exists("mods/stuck.jar"), "nothing was switched off");
+    assert_eq!(
+        std::fs::read(panel.root.join("server.jar")).expect("the jar"),
+        b"the jar for 1.20.1"
+    );
+    let (_, _, game_version, _) = loader_of(&panel).await;
+    assert_eq!(game_version, "1.20.1");
 }
 
 #[tokio::test]

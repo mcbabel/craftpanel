@@ -1737,7 +1737,35 @@ impl Content {
         operation: Id,
         request: GameVersionChangeRequest,
     ) -> std::result::Result<(), OperationError> {
-        let loader = request.loader.unwrap_or(facts.loader);
+        let jar_target = PackTarget {
+            loader: request.loader.unwrap_or(facts.loader),
+            loader_version: request.loader_version.clone(),
+            game_version: request.game_version.clone(),
+        };
+        let work = self.work_dir(operation).await?;
+        let shelf = work.with_file_name(format!("{operation}-server-jar"));
+        std::fs::create_dir_all(&shelf).map_err(filesystem)?;
+        let outcome = match self.fetch_loader(operation, &jar_target, &shelf).await {
+            Ok((build, staged)) => {
+                self.follow_game_version(facts, operation, &request, &jar_target, &build, &staged)
+                    .await
+            }
+            Err(err) => Err(err),
+        };
+        let _ = std::fs::remove_dir_all(&shelf);
+        outcome
+    }
+
+    async fn follow_game_version(
+        &self,
+        facts: &ServerFacts,
+        operation: Id,
+        request: &GameVersionChangeRequest,
+        jar_target: &PackTarget,
+        build: &crate::loaders::Build,
+        staged: &Path,
+    ) -> std::result::Result<(), OperationError> {
+        let loader = jar_target.loader;
         let target = Target::new(request.game_version.clone(), loader);
         let root = self.server_dir(facts);
         let rows = store::list(&self.pool, facts.id).await.map_err(internal)?;
@@ -1798,7 +1826,6 @@ impl Content {
             self.lay_out(facts, operation, wanted, ContentSourceKind::ServerProject).await?;
         }
 
-        let mut switched = false;
         for row in &disable {
             if !row.enabled {
                 continue;
@@ -1806,26 +1833,24 @@ impl Content {
             let off = store::toggled(&row.file_path, false);
             if rename_within(&root, &row.file_path, &off).is_ok() {
                 store::move_to(&self.pool, row.id, &off, false).await.map_err(internal)?;
-                switched = true;
             }
         }
-        if switched {
-            self.hand_back(facts).await?;
+
+        let installing = crate::servers::installer::needed(loader)
+            .then(|| crate::settings::runtimes::default_major(&request.game_version));
+        let facts = self.put_loader(facts, &root, jar_target, build, staged).await?;
+        self.hand_back(&facts).await?;
+        if let Some(major) = installing {
+            let manager = self.installer.get().and_then(std::sync::Weak::upgrade).ok_or_else(|| {
+                OperationError {
+                    code: "loader_install_failed".to_owned(),
+                    message: "the installer cannot run from here".to_owned(),
+                    step: OperationErrorStep::Modloader,
+                }
+            })?;
+            manager.provide_java(operation, major).await;
+            manager.run_installer(facts.owner_id, facts.id, facts.loader, major).await?;
         }
-
-        sqlx::query(
-            "UPDATE servers SET game_version = ?, loader = ?, loader_version = ?,
-                    restart_required = 1, updated_at = ? WHERE id = ?",
-        )
-        .bind(&request.game_version)
-        .bind(loader)
-        .bind(request.loader_version.as_deref().or(facts.loader_version.as_deref()))
-        .bind(Timestamp::now())
-        .bind(facts.id)
-        .execute(&self.pool)
-        .await
-        .map_err(internal)?;
-
         Ok(())
     }
 
