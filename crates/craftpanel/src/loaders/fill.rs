@@ -10,6 +10,7 @@ use super::{Build, Channel, Loader, Version};
 const SERVICE: &str = "PaperMC";
 const BASE: &str = "https://fill.papermc.io/v3/projects";
 const SERVER_DOWNLOAD: &str = "server:default";
+const NEWEST_CHECKED: usize = 3;
 
 #[derive(Deserialize)]
 struct Project {
@@ -24,6 +25,11 @@ struct FillBuild {
 }
 
 #[derive(Deserialize)]
+struct Latest {
+    channel: String,
+}
+
+#[derive(Deserialize)]
 struct Download {
     name: String,
     url: String,
@@ -34,7 +40,32 @@ struct Download {
 
 pub async fn versions(http: &Http, loader: Loader) -> Result<Vec<Version>> {
     let url = format!("{BASE}/{}", loader.id());
-    parse_versions(&http.fetch(SERVICE, &url).await?)
+    let mut versions = parse_versions(&http.fetch(SERVICE, &url).await?)?;
+    if loader != Loader::Velocity {
+        settle_the_newest(http, loader, &mut versions).await;
+    }
+    Ok(versions)
+}
+
+async fn settle_the_newest(http: &Http, loader: Loader, versions: &mut [Version]) {
+    for version in versions
+        .iter_mut()
+        .filter(|version| version.channel == Channel::Stable)
+        .take(NEWEST_CHECKED)
+    {
+        let url = format!("{BASE}/{}/versions/{}/builds/latest", loader.id(), version.id);
+        let Ok(Some(body)) = http.maybe_fetch(SERVICE, &url).await else { return };
+        match latest_channel(&body) {
+            Some(Channel::Stable) => return,
+            Some(Channel::Experimental) => version.channel = Channel::Experimental,
+            None => return,
+        }
+    }
+}
+
+fn latest_channel(body: &[u8]) -> Option<Channel> {
+    let latest: Latest = serde_json::from_slice(body).ok()?;
+    Some(build_channel(&latest.channel))
 }
 
 pub async fn builds(http: &Http, loader: Loader, version: &str) -> Result<Vec<Build>> {
@@ -199,6 +230,13 @@ mod tests {
             channels,
             [Channel::Stable, Channel::Experimental, Channel::Experimental]
         );
+    }
+
+    #[test]
+    fn a_version_whose_newest_build_is_an_alpha_is_experimental() {
+        assert_eq!(latest_channel(br#"{"id":6,"channel":"ALPHA"}"#), Some(Channel::Experimental));
+        assert_eq!(latest_channel(br#"{"id":8,"channel":"STABLE"}"#), Some(Channel::Stable));
+        assert_eq!(latest_channel(b"not json"), None);
     }
 
     #[test]
